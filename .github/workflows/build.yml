@@ -4,16 +4,18 @@ on:
   push:
     tags:
       - "*.*.*"
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build_linux:
-    runs-on: ubuntu-latest
+    # Keep the glibc baseline compatible with Ubuntu 22.04 / Debian 12.
+    runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v7
     - uses: actions/setup-node@v7
@@ -22,46 +24,62 @@ jobs:
 
     - name: Install system dependencies
       run: |
-        sudo apt update
-        sudo apt install -y libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libssl-dev \
-            libgtk-3-dev \
-            libxdo-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev \
+            build-essential curl wget file libssl-dev libgtk-3-dev \
+            libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf libfuse2 rpm cpio desktop-file-utils
 
     - name: Install NPM dependencies
       run: npm install --global npm@12.0.2 && npm ci
 
-    - name: Build
+    - name: Build Linux packages
       run: npm run tauri build -- -v -- --locked
+      env:
+        APPIMAGE_EXTRACT_AND_RUN: "1"
 
-    - name: Prepare ZIP
+    - name: Verify packaged libraries and launchers
+      shell: bash
       run: |
-        cd src-tauri/target/release
+        set -euo pipefail
+        bundle="$GITHUB_WORKSPACE/src-tauri/target/release/bundle"
+        debs=("$bundle"/deb/*.deb)
+        rpms=("$bundle"/rpm/*.rpm)
+        appimages=("$bundle"/appimage/*.AppImage)
+        test "${#debs[@]}" -eq 1
+        test -f "${debs[0]}"
+        test "${#rpms[@]}" -eq 1
+        test -f "${rpms[0]}"
+        test "${#appimages[@]}" -eq 1
+        test -f "${appimages[0]}"
 
-        for lib in libwebkit2gtk-* libjavascriptcoregtk-*; do
-          for path in $(ldd nwmpublisher | awk '{print $3}' | grep "$lib"); do
-            cp -v "$path" .
-          done
+        dpkg-deb --info "${debs[0]}"
+        dpkg-deb --extract "${debs[0]}" "$RUNNER_TEMP/deb"
+        rpm --query --package --requires "${rpms[0]}"
+        mkdir "$RUNNER_TEMP/rpm"
+        cd "$RUNNER_TEMP/rpm"
+        rpm2cpio "${rpms[0]}" | cpio -idm
+
+        # Launch away from the build tree without a library-path override.
+        cd "$RUNNER_TEMP"
+        for package in deb rpm; do
+          test -f "$package/usr/lib/nwmpublisher/libsteam_api.so"
+          desktop-file-validate "$package/usr/share/applications/nwmpublisher.desktop"
+          env -u LD_LIBRARY_PATH "$RUNNER_TEMP/$package/usr/bin/nwmpublisher" --help
         done
+        "${appimages[0]}" --appimage-extract > /dev/null
+        test -f squashfs-root/usr/lib/nwmpublisher/libsteam_api.so
+        env -u LD_LIBRARY_PATH "$RUNNER_TEMP/squashfs-root/AppRun" --help
 
-        patchelf --set-rpath '$ORIGIN' nwmpublisher
-
-        zip -r nwmpublisher_linux64.zip nwmpublisher libsteam_api.so libwebkit2gtk-* libjavascriptcoregtk-*
-
-    - name: Release
-      uses: softprops/action-gh-release@v3
+    - name: Upload Linux packages
+      uses: actions/upload-artifact@v4
       with:
-        body: |
-          See the [changelog for ${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for release notes.
-        files: src-tauri/target/release/nwmpublisher_linux64.zip
-        fail_on_unmatched_files: true
+        name: packages-linux
+        if-no-files-found: error
+        path: |
+          src-tauri/target/release/bundle/appimage/*.AppImage
+          src-tauri/target/release/bundle/deb/*.deb
+          src-tauri/target/release/bundle/rpm/*.rpm
 
   build_windows:
     runs-on: windows-latest
@@ -79,16 +97,15 @@ jobs:
       env:
         RUSTFLAGS: -Ctarget-feature=+crt-static
 
-    - name: Release
-      uses: softprops/action-gh-release@v3
+    - name: Upload Windows installer
+      uses: actions/upload-artifact@v4
       with:
-        body: |
-          See the [changelog for ${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for release notes.
-        files: src-tauri/target/release/bundle/msi/nwmpublisher_*.msi
-        fail_on_unmatched_files: true
+        name: packages-windows
+        if-no-files-found: error
+        path: src-tauri/target/release/bundle/msi/nwmpublisher_*.msi
 
   build_macos:
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
     - uses: actions/checkout@v7
 
@@ -103,21 +120,133 @@ jobs:
     - name: Install NPM dependencies
       run: npm install --global npm@12.0.2 && npm ci
 
-    - name: Build
-      run: npm run tauri build -- --target universal-apple-darwin -v -- --locked
-
-    - name: Copy Steamworks SDK to bundle
-      run: cp src-tauri/lib/steam_api/redistributable_bin/osx/libsteam_api.dylib src-tauri/target/universal-apple-darwin/release/bundle/macos/nwmpublisher.app/Contents/MacOS/libsteam_api.dylib
-
-    - name: Prepare ZIP
+    - name: Build universal macOS disk image
+      shell: bash
+      # Leave all six secrets unset for ad-hoc signing (no Apple account needed).
+      # To sign and notarize, supply all six: a base64 Developer ID Application
+      # .p12, its password, certificate identity, Apple ID, app-specific password,
+      # and team ID. Partial configuration must not produce an unsigned release.
+      env:
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       run: |
-        cd src-tauri/target/universal-apple-darwin/release/bundle/macos
-        zip -r nwmpublisher_macOS.app.zip nwmpublisher.app
+        set -euo pipefail
+        if [[ -n "$APPLE_CERTIFICATE$APPLE_CERTIFICATE_PASSWORD$APPLE_SIGNING_IDENTITY$APPLE_ID$APPLE_PASSWORD$APPLE_TEAM_ID" ]]; then
+          for key in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!key}" ]]; then
+              echo "::error::Optional macOS signing is incomplete: set $key or remove all six signing secrets."
+              exit 1
+            fi
+          done
+          if [[ "$APPLE_SIGNING_IDENTITY" != "Developer ID Application:"* ]]; then
+            echo "::error::APPLE_SIGNING_IDENTITY must be a Developer ID Application certificate identity."
+            exit 1
+          fi
+          keychain="$RUNNER_TEMP/nwmpublisher-signing.keychain-db"
+          keychain_password=$(openssl rand -hex 32)
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$keychain" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          # The pre-build hook signs the Steam dylib using this same identity.
+          # Tauri uses the imported identity without importing the .p12 again.
+          unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
+        else
+          unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+        fi
 
-    - name: Release
+        npm run tauri build -- --target universal-apple-darwin -v -- --locked
+
+        dmgs=("$GITHUB_WORKSPACE"/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+        test "${#dmgs[@]}" -eq 1
+        test -f "${dmgs[0]}"
+        hdiutil verify "${dmgs[0]}"
+        mount="$RUNNER_TEMP/nwmpublisher-dmg"
+        hdiutil attach "${dmgs[0]}" -readonly -nobrowse -mountpoint "$mount"
+        trap 'hdiutil detach "$mount"' EXIT
+        app="$RUNNER_TEMP/nwmpublisher.app"
+        ditto "$mount/nwmpublisher.app" "$app"
+        for binary in "$app/Contents/MacOS/nwmpublisher" "$app/Contents/MacOS/libsteam_api.dylib"; do
+          lipo -verify_arch x86_64 arm64 "$binary"
+          dependencies=$(otool -L "$binary" | awk '/^\t/ {print $1}')
+          while IFS= read -r dependency; do
+            case "$dependency" in
+              /System/Library/*|/usr/lib/*|@loader_path/libsteam_api.dylib) ;;
+              *) echo "::error::Unbundled macOS dependency: $dependency"; exit 1 ;;
+            esac
+          done <<< "$dependencies"
+        done
+        codesign --verify --deep --strict --verbose=2 "$app"
+        cd "$RUNNER_TEMP"
+        env -u DYLD_LIBRARY_PATH "$app/Contents/MacOS/nwmpublisher" --help
+        if [[ -n "${APPLE_ID:-}" ]]; then
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+        fi
+
+    - name: Remove temporary signing credentials
+      if: always()
+      shell: bash
+      run: |
+        if [[ -f "$RUNNER_TEMP/nwmpublisher-signing.keychain-db" ]]; then
+          security delete-keychain "$RUNNER_TEMP/nwmpublisher-signing.keychain-db"
+        fi
+        rm -f "$RUNNER_TEMP/certificate.p12"
+
+    - name: Upload macOS disk image
+      uses: actions/upload-artifact@v4
+      with:
+        name: packages-macos
+        if-no-files-found: error
+        path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+  release:
+    # Manual runs build downloadable artifacts without publishing a release.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: [build_linux, build_windows, build_macos]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+    - uses: actions/download-artifact@v5
+      with:
+        pattern: packages-*
+        path: artifacts
+        merge-multiple: true
+
+    - name: Collect installers and checksums
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir release
+        find artifacts -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.dmg' -o -name '*.msi' \) -exec cp -t release -- {} +
+        cd release
+        for extension in AppImage deb rpm dmg msi; do
+          packages=(*."$extension")
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+        done
+        sha256sum * > SHA256SUMS
+
+    - name: Release all platforms
       uses: softprops/action-gh-release@v3
       with:
         body: |
           See the [changelog for ${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for release notes.
-        files: src-tauri/target/universal-apple-darwin/release/bundle/macos/nwmpublisher_macOS.app.zip
+
+          - **Windows:** download and run the `.msi` installer.
+          - **macOS (Intel and Apple Silicon):** open the universal `.dmg`, drag nwmpublisher into Applications, then open it from Applications. Builds without Developer ID signing require approval in System Settings → Privacy & Security → Open Anyway after the first launch attempt.
+          - **Ubuntu / Debian:** download the `.deb` and install it with `sudo apt install ./nwmpublisher_*.deb`.
+          - **Fedora:** download the `.rpm` and install it with `sudo dnf install ./nwmpublisher-*.rpm`.
+          - **Other Linux distributions / Steam Deck:** download the `.AppImage`, mark it executable in its file properties, and open it. Linux packages are x86_64 and built on Ubuntu 22.04.
+
+          Keep Steam running and signed in when using Workshop features. See the [installation instructions](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/README.md#-installation) for details. `SHA256SUMS` contains checksums for every installer.
+        files: release/*
         fail_on_unmatched_files: true

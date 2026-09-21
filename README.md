@@ -29,6 +29,30 @@ app itself goes to [William Venner](https://github.com/WilliamVenner) and the
 
 Download the latest release from the [releases page](https://github.com/DeisDev/nwmpublisher/releases).
 
+| Platform | Download | Install |
+| --- | --- | --- |
+| Windows | `.msi` | Open the installer. |
+| macOS, Intel or Apple Silicon | Universal `.dmg` | Open the disk image, drag nwmpublisher into Applications, then launch it from Applications. |
+| Ubuntu / Debian | `amd64.deb` | Open a terminal in your download folder and run `sudo apt install ./nwmpublisher_*.deb`. This also installs required system libraries. |
+| Fedora | `x86_64.rpm` | Run `sudo dnf install ./nwmpublisher-*.rpm` in your download folder. |
+| Other Linux distributions / Steam Deck | `amd64.AppImage` | In the file's properties, allow it to run as a program, then open it. On Steam Deck, use Desktop Mode. |
+
+Keep Steam running and signed in when using Workshop features. The Steam API library is included;
+you do not need to download an SDK or copy libraries yourself.
+
+Mac builds currently have no Apple Developer ID signature or notarization. After the first launch
+is blocked, open **System Settings → Privacy & Security → Open Anyway**, then confirm Open.
+See [Apple's instructions](https://support.apple.com/en-us/102445).
+
+Linux downloads support **x86_64** and are built on **Ubuntu 22.04**; older distributions are not
+supported. Prefer DEB or RPM where available for application-menu integration and managed dependencies.
+For an AppImage, the terminal equivalent is `chmod +x nwmpublisher_*.AppImage`, then
+`./nwmpublisher_*.AppImage`. If it reports a missing FUSE library, use
+`./nwmpublisher_*.AppImage --appimage-extract-and-run` to run without FUSE.
+
+To update, download the new package and install it the same way; for AppImage, replace the old file.
+Your settings are stored separately. Each release includes `SHA256SUMS` for verifying downloads.
+
 ### Upgrading from gmpublisher
 
 On Windows, installing nwmpublisher **replaces** an existing gmpublisher installation. The installer
@@ -93,10 +117,12 @@ To move them yourself instead, copy `settings.json` from the old `gmpublisher` f
 ## Supported Platforms
 
 * Windows
-* MacOS (untested)
-* Linux (untested)
+* macOS (universal Intel / Apple Silicon package; interactive testing pending)
+* Linux (x86_64 AppImage, DEB and RPM; interactive testing pending)
 
-Windows is what I develop and test this program on. Linux and MacOS may work, or it may not. I know upstream has several issues with linux. I am working on making nwmpublisher work great on all platforms, not just windows. 
+Windows is the primary development and testing platform. The release workflow checks Linux package
+contents and command-line startup, plus macOS architectures, signatures and command-line startup.
+These checks do not replace testing the GUI and Steam Workshop operations on each platform.
 
 ## Media
 

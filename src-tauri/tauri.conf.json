@@ -47,8 +47,7 @@
 	"bundle": {
 		"active": true,
 		"targets": [
-			"msi",
-			"app"
+			"msi"
 		],
 		"publisher": "DeisDev",
 		"icon": [
@@ -71,11 +70,6 @@
 			},
 			"wix": {
 				"template": "msi/msi.wxs"
-			}
-		},
-		"linux": {
-			"deb": {
-				"depends": []
 			}
 		}
 	}

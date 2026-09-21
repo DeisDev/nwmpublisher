@@ -1,0 +1,16 @@
+{
+	"$schema": "https://schema.tauri.app/config/2",
+	"build": {
+		"features": ["xz2/static"]
+	},
+	"bundle": {
+		"targets": ["dmg"],
+		"macOS": {
+			"signingIdentity": "-",
+			"entitlements": "Entitlements.plist",
+			"files": {
+				"MacOS/libsteam_api.dylib": "target/release/libsteam_api.dylib"
+			}
+		}
+	}
+}

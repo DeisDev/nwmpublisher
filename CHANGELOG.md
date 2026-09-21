@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Replace the Linux ZIP with AppImage, DEB and RPM packages, and the macOS ZIP with a universal drag-to-Applications DMG. Bundle Steam's library with working launch paths, support optional Mac signing and notarization, and publish all platforms together with checksums after package checks pass.
 - Upgrade to Tauri 2, Svelte 5, Vite 8, Rust 1.98.1, Node.js 26.9.0, and npm 12.0.2. Linux builds now use WebKitGTK 4.1.
 - Replace the interface icons with Lucide icons.
 - Use one main upload button with a dropdown for description-only updates or packaging and updating an addon. Remember the selected mode, and show exactly what the button will send.

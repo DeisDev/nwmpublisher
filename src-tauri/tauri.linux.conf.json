@@ -1,0 +1,33 @@
+{
+	"$schema": "https://schema.tauri.app/config/2",
+	"bundle": {
+		"targets": ["appimage", "deb", "rpm"],
+		"linux": {
+			"appimage": {
+				"files": {
+					"/usr/lib/nwmpublisher/libsteam_api.so": "lib/steam_api/redistributable_bin/linux64/libsteam_api.so"
+				}
+			},
+			"deb": {
+				"depends": ["libc6 (>= 2.35)", "libssl3", "libxdo3", "liblzma5"],
+				"files": {
+					"/usr/lib/nwmpublisher/libsteam_api.so": "lib/steam_api/redistributable_bin/linux64/libsteam_api.so",
+					"/usr/share/doc/nwmpublisher/copyright": "../LICENSE"
+				}
+			},
+			"rpm": {
+				"depends": [
+					"libc.so.6(GLIBC_2.35)(64bit)",
+					"libssl.so.3()(64bit)",
+					"libcrypto.so.3()(64bit)",
+					"libxdo.so.3()(64bit)",
+					"liblzma.so.5()(64bit)"
+				],
+				"files": {
+					"/usr/lib/nwmpublisher/libsteam_api.so": "lib/steam_api/redistributable_bin/linux64/libsteam_api.so",
+					"/usr/share/licenses/nwmpublisher/LICENSE": "../LICENSE"
+				}
+			}
+		}
+	}
+}

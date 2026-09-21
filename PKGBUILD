@@ -8,56 +8,16 @@ pkgdesc="Workshop Publishing Utility for Garry's Mod, written in Rust & Svelte a
 arch=('x86_64')
 url="https://github.com/DeisDev/nwmpublisher"
 license=('GPL-3.0')
-depends=('webkit2gtk-4.1' 'libsoup3' 'xdotool' 'hicolor-icon-theme' 'libappindicator-gtk3' 'gst-plugins-good' 'gst-plugins-bad' 'gst-libav')
-makedepends=('unzip')
+
+depends=('webkit2gtk-4.1' 'gtk3' 'openssl' 'xdotool' 'hicolor-icon-theme')
 provides=("${_realname}")
 conflicts=("${_realname}")
-source=("${_realname}_linux64.zip::https://github.com/DeisDev/nwmpublisher/releases/download/${pkgver}/${_realname}_linux64.zip"
-        "LICENSE::https://raw.githubusercontent.com/DeisDev/nwmpublisher/${pkgver}/LICENSE"
-        "${_realname}.png::https://raw.githubusercontent.com/DeisDev/nwmpublisher/${pkgver}/src-tauri/icons/128x128.png")
-sha256sums=('SKIP'
-            'SKIP'
-            'SKIP')
+source=("${url}/releases/download/${pkgver}/${_realname}_${pkgver}_amd64.deb")
+sha256sums=('SKIP')
 
 package() {
-  install -Dm755 "${srcdir}/${_realname}" "$pkgdir/usr/lib/${_realname}/${_realname}"
-  install -Dm644 "${srcdir}/libsteam_api.so" "$pkgdir/usr/lib/${_realname}/libsteam_api.so"
-  install -Dm644 "${srcdir}/libwebkit2gtk-4.1.so.0" "$pkgdir/usr/lib/${_realname}/libwebkit2gtk-4.1.so.0"
-  install -Dm644 "${srcdir}/libjavascriptcoregtk-4.1.so.0" "$pkgdir/usr/lib/${_realname}/libjavascriptcoregtk-4.1.so.0"
-
-  install -d "$pkgdir/usr/bin"
-  cat << EOF > "$pkgdir/usr/bin/${_realname}"
-#!/bin/sh
-export LD_LIBRARY_PATH=/usr/lib/${_realname}
-exec /usr/lib/${_realname}/${_realname} "\$@"
-EOF
-
-  chmod 755 "$pkgdir/usr/bin/${_realname}"
-
-  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
-
-  install -Dm644 "${srcdir}/${_realname}.png" "$pkgdir/usr/share/icons/hicolor/128x128/apps/${_realname}.png"
-
-  install -d "$pkgdir/usr/share/applications"
-  cat << EOF > "$pkgdir/usr/share/applications/${_realname}.desktop"
-[Desktop Entry]
-Name=nwmpublisher
-Comment=${pkgdesc}
-Exec=${_realname}
-Icon=${_realname}
-Type=Application
-Categories=Utility;Game;
-EOF
-}
-
-post_install() {
-  /usr/bin/gtk-update-icon-cache -q -t applications -f /usr/share/icons/hicolor
-}
-
-post_upgrade() {
-  post_install
-}
-
-post_remove() {
-  /usr/bin/gtk-update-icon-cache -q -t applications -f /usr/share/icons/hicolor
+  # Reuse the native package's executable, private Steam library, icons and launcher.
+  bsdtar -xf data.tar.gz -C "$pkgdir"
+  install -Dm644 "$pkgdir/usr/share/doc/${_realname}/copyright" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
