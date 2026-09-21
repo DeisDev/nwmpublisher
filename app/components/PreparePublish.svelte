@@ -147,7 +147,7 @@
 	function browseAddon() {
 		dialog.open({ directory: true }).then(path => {
 			if (path && path.length > 0) {
-				checkPath(path);
+				onPathChanged(path);
 			}
 		});
 	}
@@ -662,7 +662,7 @@
 			{/each}
 		</div>
 		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
-			<FileBrowser fileSelect={path => onPathChanged(path)} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} {openEntry} open={openAddon}/>
+			<FileBrowser fileSelect={path => onPathChanged(path)} dropActive={$preparePublish && activeTab === 'files' && !$isPublishing} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} {openEntry} open={openAddon}/>
 			<details id="ignore" bind:open={ignoreOpen}>
 				<summary><span class="ignore-chevron"><ChevronRight class="icon" size=".85rem"/></span>{$_('ignored_file_patterns')}</summary>
 				<div class="ignore-content">

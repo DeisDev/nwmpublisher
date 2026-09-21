@@ -1,34 +1,4 @@
 window.__NWMPUBLISHER__ = async appDataCallback => {
-	// TODO
-	/*{
-		__TAURI__.event.listen('tauri://file-drop', ({ payload: path }) => {
-			document.body.classList.remove('file-drop');
-			console.log('File Drop', path);
-		});
-
-		__TAURI__.event.listen('tauri://file-drop-hover', ({ payload: path }) => {
-			document.body.classList.add('file-drop');
-			console.log('File Drop Hover', path);
-		});
-
-		__TAURI__.event.listen('tauri://file-drop-cancelled', ({ payload: path }) => {
-			document.body.classList.remove('file-drop');
-			console.log('File Drop Cancelled', path);
-		});
-
-		window.addEventListener('drop', e => {
-			console.log('JS File Drop (drop)', e);
-		});
-
-		window.addEventListener('dragstart', e => {
-			console.log('JS File Drop Hover (dragstart)', e);
-		});
-
-		window.addEventListener('dragend', e => {
-			console.log('JS File Drop Cancelled (dragend)', e);
-		});
-	}*/
-
 	{
 		const AppDataPtr = {};
 		window.AppData = new Proxy(AppDataPtr, {

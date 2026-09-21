@@ -10,6 +10,8 @@
 	import { afterUpdate, onDestroy } from 'svelte';
 	import Dead from './Dead.svelte';
 	import * as dialog from '@tauri-apps/plugin-dialog';
+	import { TauriEvent } from '@tauri-apps/api/event';
+	import { getCurrentWebview } from '@tauri-apps/api/webview';
 
 	export let browsePath;
 	export let entriesList = null;
@@ -17,6 +19,7 @@
 	export let open;
 	export let background = false;
 	export let fileSelect = null;
+	export let dropActive = false;
 
 	let browsing = {
 		dirs: Object.create(null),
@@ -126,6 +129,45 @@
 		});
 	}
 
+	function folderDrop(node, enabled) {
+		let stopListening = () => {};
+
+		function update(enabled) {
+			stopListening();
+			if (!enabled) return;
+
+			let closed = false;
+			let unlisten;
+			getCurrentWebview().listen(TauriEvent.DRAG_DROP, ({ payload: { paths, position } }) => {
+				if (closed || !dropActive || !fileSelect) return;
+				// Native drop positions are physical pixels; DOM hit testing uses CSS pixels.
+				const target = document.elementFromPoint(position.x / window.devicePixelRatio, position.y / window.devicePixelRatio);
+				if (!node.contains(target)) return;
+				if (paths.length !== 1) {
+					dialog.message($_('file_browser_drop_one_folder'), { kind: 'error' });
+					return;
+				}
+				fileSelect(paths[0]);
+			}).then(stop => {
+				// Closing can precede completion of the native listener registration.
+				if (closed) stop();
+				else unlisten = stop;
+			}, error => {
+				console.error('Failed to listen for folder drops:', error);
+				if (!closed) dialog.message($_('file_browser_drop_error', { values: { error: String(error) } }), { kind: 'error' });
+			});
+
+			stopListening = () => {
+				if (closed) return;
+				closed = true;
+				unlisten?.();
+			};
+		}
+
+		update(enabled);
+		return { update, destroy: () => stopListening() };
+	}
+
 	function copy() {
 		let path = pathContainer.innerText.trim();
 		if (path.length > 0) {
@@ -151,7 +193,7 @@
 	}
 </script>
 
-<main id="file-browser">
+<main id="file-browser" use:folderDrop={dropActive && !!fileSelect}>
 	<div id="nav">
 		{#if browsePath}
 			<div id="up" class="control" on:click={goUp}><ChevronUp class="icon" size="1rem"/></div>
