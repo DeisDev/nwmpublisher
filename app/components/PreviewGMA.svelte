@@ -6,7 +6,7 @@
 	import SteamID from 'steamid';
 	import LinkOut from '@lucide/svelte/icons/external-link';
 	import { invoke } from '@tauri-apps/api/core';
-	import Timestamp from './Timestamp.svelte';
+	import WorkshopStats from './WorkshopStats.svelte';
 	import { onDestroy } from 'svelte';
 	import { Transaction } from '../transactions.js';
 	import Loading from './Loading.svelte';
@@ -149,10 +149,10 @@
 										<th>{$_('size')}</th>
 										<td>{formatSize(gma.size, $locale)}</td>
 									</tr>
-								{:else if workshop && workshop.size > 0}
+								{:else if workshop && workshop.fileSize > 0}
 									<tr>
 										<th>{$_('size')}</th>
-										<td>{formatSize(workshop.size, $locale)}</td>
+										<td>{formatSize(workshop.fileSize, $locale)}</td>
 									</tr>
 								{/if}
 								{#if workshop}
@@ -194,21 +194,10 @@
 											</td>
 										</tr>
 									{/if}
-									{#if workshop.timeCreated}
-										<tr>
-											<th>{$_('created')}</th>
-											<td><Timestamp unix={workshop.timeCreated}/></td>
-										</tr>
-									{/if}
-									{#if workshop.timeUpdated && workshop.timeUpdated != workshop.timeCreated}
-										<tr>
-											<th>{$_('updated')}</th>
-											<td><Timestamp unix={workshop.timeUpdated}/></td>
-										</tr>
-									{/if}
 								{/if}
 							</tbody>
 						</table>
+						{#if workshop}<WorkshopStats item={workshop}/>{/if}
 						{#if (gma && gma.id) || workshop}
 							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut class="icon" size=".8rem"/></a></div>
 						{/if}

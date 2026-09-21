@@ -31,6 +31,7 @@ pub fn browse_subscribed_addons(page: u32) -> Option<(u32, Vec<Addon>)> {
 						.map(|(i, x)| {
 							let mut item: WorkshopItem = x.unwrap().into();
 							item.preview_url = data.preview_url(i as u32);
+							item.read_statistics(&data, i as u32);
 							item.subscriptions = data.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions).unwrap_or(0);
 							item.into()
 						})

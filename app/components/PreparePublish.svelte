@@ -23,6 +23,8 @@
 	import { Transaction } from '../transactions';
 	import { formatSize } from '../format.js';
 	import Loading from './Loading.svelte';
+	import WorkshopStats from './WorkshopStats.svelte';
+	import WorkshopSettings from './WorkshopSettings.svelte';
 	import { translateError } from '../i18n';
 	import { Steam } from '../steam';
 	import { onMount } from 'svelte';
@@ -30,8 +32,20 @@
 	export let updatingAddon = null;
 	export let preparePublish;
 
-	function togglePreparePublish() {
+	let settingsBusy = false;
+	let settingsDirty = false;
+	let workshopInfo = null;
+	let workshopSettings;
+
+	async function togglePreparePublish() {
+		if (settingsBusy) return;
+		if ($preparePublish && settingsDirty && !await dialog.confirm($_('workshop_discard_confirm'), { title: $_('workshop_settings'), kind: 'warning' })) return;
 		$preparePublish = !$preparePublish;
+	}
+
+	function workshopSettingsSaved() {
+		Steam.MyWorkshop = [];
+		$remountAddonScroller = true;
 	}
 
 	let gmaIcon;
@@ -62,7 +76,7 @@
 	let changesFormattingOpen = false;
 	let editorHistoryKey = 0;
 	let ignoreOpen = false;
-	const tabs = ['files', 'description', 'changelog'];
+	$: tabs = $updatingAddon ? ['files', 'description', 'changelog', 'workshop'] : ['files', 'description', 'changelog'];
 	$: descriptionBytes = descriptionEncoder.encode(description).length;
 	$: canUpdateDescription = !!$updatingAddon && descriptionTouched && descriptionError === null
 		&& description !== ($updatingAddon.description ?? '');
@@ -298,7 +312,7 @@
 	}
 
 	async function publish() {
-		if (savingPublishMode) return;
+		if (savingPublishMode || settingsBusy) return;
 		if (descriptionOnly) return publishDescription();
 		if (!readyForPublish || $isPublishing) return;
 		const publishingAddon = $updatingAddon;
@@ -336,6 +350,7 @@
 					}
 					$remountAddonScroller = true;
 					Steam.MyWorkshop = [];
+					if (publishingAddon && $updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
 				}
 
 				if (event.finished || event.error || event.cancelled) {
@@ -349,7 +364,7 @@
 	}
 
 	async function publishDescription() {
-		if (!canUpdateDescription || $isPublishing) return;
+		if (!canUpdateDescription || $isPublishing || settingsBusy) return;
 		const publishingAddon = $updatingAddon;
 		const descriptionUpdate = description;
 		const historyKey = editorHistoryKey;
@@ -368,6 +383,7 @@
 					$remountAddonScroller = true;
 					Steam.MyWorkshop = [];
 					playSound('success');
+					if ($updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
 				}
 				if (event.finished || event.error || event.cancelled) $isPublishing = false;
 			});
@@ -421,6 +437,7 @@
 
 	const tagSearchMax = Math.max(addonTypes.length, addonTags.length);
 	onMount(() => updatingAddon.subscribe(async updatingAddon => {
+		workshopInfo = updatingAddon;
 		editorHistoryKey += 1;
 		changes = '';
 		activeTab = 'files';
@@ -497,7 +514,8 @@
 	}));
 
 	async function publishIcon() {
-		if ($isPublishing || !gmaIconPath || !$updatingAddon) return;
+		if ($isPublishing || settingsBusy || !gmaIconPath || !$updatingAddon) return;
+		const publishingAddon = $updatingAddon;
 		$isPublishing = true;
 		playSound('success');
 
@@ -505,7 +523,7 @@
 
 			iconPath: gmaIconPath,
 			upscale: canUpscale && upscale.checked,
-			addonId: (await $updatingAddon).id,
+			addonId: publishingAddon.id,
 
 		}).then(transactionId => {
 			const transaction = new Transaction(transactionId, transaction => {
@@ -520,6 +538,7 @@
 				if (event.finished) {
 					$remountAddonScroller = true;
 					Steam.MyWorkshop = [];
+					if ($updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
 				}
 
 				if (event.finished || event.error || event.cancelled) {
@@ -634,7 +653,7 @@
 		</div>
 
 		<div id="publish-actions" bind:this={publishActions}>
-			<button type="button" id="publish-btn" on:click={publish} disabled={!canSubmit || $isPublishing} aria-describedby="publish-help">
+			<button type="button" id="publish-btn" on:click={publish} disabled={!canSubmit || $isPublishing || settingsBusy} aria-describedby="publish-help">
 				{#if $isPublishing}
 					<Loading size="1.1rem"/>
 				{:else}
@@ -656,9 +675,10 @@
 	</div>
 
 	<div id="publish-workspace">
+		{#if $updatingAddon}<WorkshopStats item={workshopInfo} estimatedSize={pathValue ? gmaSize : null}/>{/if}
 		<div class="workspace-tabs" role="tablist" aria-label={$_('publish_tabs.label')}>
 			{#each tabs as tab, index}
-				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={tab === 'description' && descriptionError !== null} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}</button>
+				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={tab === 'description' && descriptionError !== null} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'workshop' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
 			{/each}
 		</div>
 		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
@@ -689,6 +709,11 @@
 				</div>
 			{/if}
 		</div>
+		{#if $updatingAddon}
+			<div id="publish-panel-workshop" class="workspace-panel workshop-panel" role="tabpanel" aria-labelledby="publish-tab-workshop" tabindex="0" hidden={activeTab !== 'workshop'}>
+				<WorkshopSettings bind:this={workshopSettings} item={$updatingAddon} active={$preparePublish} disabled={$isPublishing} bind:busy={settingsBusy} bind:dirty={settingsDirty} on:details={event => workshopInfo = event.detail} on:saved={workshopSettingsSaved}/>
+			</div>
+		{/if}
 	</div>
 </Modal>
 
@@ -1068,6 +1093,8 @@
 		display: flex;
 		position: relative;
 	}
+	.pending-dot { color: var(--neutral); }
+	.workspace-panel.workshop-panel { overflow: hidden; }
 	#publish-actions button {
 		font: inherit;
 		color: #fff;

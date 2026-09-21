@@ -1,6 +1,6 @@
 [package]
 name = "nwmpublisher"
-version = "3.1.0"
+version = "3.1.1"
 description = "nwmpublisher"
 authors = ["DeisDev \"CatSniffer\"", "William Venner <william@venner.io>"]
 license = "GPL-3.0"
@@ -58,7 +58,7 @@ clap = "4.5.4"
 trash = "2.0.1"
 ureq = { version = "2.9.4", features = ["native-tls"] }
 regex = "1"
-steamworks = { version = "0.11.0", features = ["serde"] }
+steamworks = { version = "0.11.0", features = ["serde", "raw-bindings"] }
 tempfile = "3.10.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]

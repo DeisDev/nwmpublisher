@@ -23,6 +23,7 @@ pub mod publishing;
 pub mod subscriptions;
 pub mod users;
 pub mod workshop;
+pub mod workshop_management;
 
 pub use downloads::DOWNLOADS;
 
@@ -72,6 +73,7 @@ impl From<(Client, SingleClient)> for Interface {
 
 pub struct Steam {
 	connected: AtomicBool,
+	callback_dispatch: parking_lot::Mutex<()>,
 
 	interface: AtomicRefCell<Option<Interface>>,
 
@@ -89,6 +91,7 @@ impl Steam {
 		std::thread::spawn(Steam::connect);
 		Steam {
 			connected: AtomicBool::new(false),
+			callback_dispatch: parking_lot::Mutex::new(()),
 			interface: AtomicRefCell::new(None),
 			users: PromiseCache::new(HashMap::new()),
 
@@ -278,7 +281,9 @@ impl Steam {
 	}
 
 	pub fn run_callbacks(&self) {
-		self.client().single.run_callbacks();
+		if let Some(_dispatch) = self.callback_dispatch.try_lock() {
+			self.client().single.run_callbacks();
+		}
 		sleep_ms!(50);
 	}
 }

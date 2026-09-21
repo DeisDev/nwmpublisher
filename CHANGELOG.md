@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Manage required addons by searching Garry's Mod Workshop items or pasting an item link or ID. Review additions and removals, then save separately from uploads, with conflict detection and partial-save feedback.
+- Change published addons between Public, Friends only, Private, and Unlisted visibility from Workshop settings.
+- Show creation and update dates, ban status, published and estimated archive sizes, subscribers, favourites, unique page views, comments, and vote counts in expandable Workshop details.
+
 ### Fixed
 
 - Fix macOS release verification failing after disk image creation because the architecture check passed arguments in the wrong order.
+- Match Workshop details and settings to the publisher's existing controls, neutral colours, and configured action colours.
 
 ## [3.1.0] - 2026-09-21
 

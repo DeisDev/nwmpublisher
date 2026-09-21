@@ -52,6 +52,13 @@ pub struct WorkshopItem {
 	pub tags: Vec<String>,
 	pub preview_url: Option<String>,
 	pub subscriptions: u64,
+	pub banned: Option<bool>,
+	pub file_size: Option<u64>,
+	pub upvotes: Option<u32>,
+	pub downvotes: Option<u32>,
+	pub favorites: Option<u64>,
+	pub views: Option<u64>,
+	pub comments: Option<u64>,
 	pub local_file: Option<PathBuf>,
 	//pub search_title: String,
 	#[serde(serialize_with = "super::serialize_opt_steamid", rename = "steamid64")]
@@ -74,6 +81,13 @@ impl From<QueryResult> for WorkshopItem {
 			tags: result.tags,
 			preview_url: None,
 			subscriptions: 0,
+			banned: Some(result.banned),
+			file_size: (result.file_size > 0).then_some(u64::from(result.file_size)),
+			upvotes: Some(result.num_upvotes),
+			downvotes: Some(result.num_downvotes),
+			favorites: None,
+			views: None,
+			comments: None,
 			local_file: None,
 			//search_title: result.title.to_lowercase(),
 			dead: false,
@@ -95,12 +109,28 @@ impl From<PublishedFileId> for WorkshopItem {
 			tags: Vec::with_capacity(0),
 			preview_url: None,
 			subscriptions: 0,
+			banned: None,
+			file_size: None,
+			upvotes: None,
+			downvotes: None,
+			favorites: None,
+			views: None,
+			comments: None,
 			local_file: None,
 			//search_title: id.0.to_string(),
 			dead: true,
 		}
 	}
 }
+impl WorkshopItem {
+	pub fn read_statistics(&mut self, results: &QueryResults<'_>, index: u32) {
+		use steamworks::UGCStatisticType::*;
+		self.favorites = results.statistic(index, Favorites);
+		self.views = results.statistic(index, UniqueWebsiteViews);
+		self.comments = results.statistic(index, Comments);
+	}
+}
+
 impl PartialEq for WorkshopItem {
 	fn eq(&self, other: &Self) -> bool {
 		if self.time_created == 0 {
@@ -192,6 +222,7 @@ impl Steam {
 									let item = Addon::from(if let Some(item) = item {
 										let mut item: WorkshopItem = item.into();
 										item.preview_url = results.preview_url(i as u32);
+										item.read_statistics(&results, i as u32);
 										item.subscriptions = results.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions).unwrap_or(0);
 
 										if let Ok(pos) = search_installed_addons.binary_search_by(|x| match &x.source {
@@ -322,6 +353,7 @@ impl Steam {
 								.map(|(i, result)| {
 									let mut item: WorkshopItem = result.ok_or_else(|| format!("Missing Workshop item {i} on page {page}"))?.into();
 									item.preview_url = data.preview_url(i as u32);
+									item.read_statistics(&data, i as u32);
 									item.subscriptions = data
 										.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions)
 										.ok_or_else(|| format!("Missing subscriber count for Workshop item {}", item.id.0))?;
