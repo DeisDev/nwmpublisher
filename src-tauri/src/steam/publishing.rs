@@ -19,6 +19,7 @@ use std::collections::HashSet;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PublishError {
+	Cancelled,
 	NotWhitelisted(Vec<String>),
 	NoEntries,
 	DuplicateEntry(String),
@@ -41,6 +42,7 @@ pub enum PublishError {
 impl std::fmt::Display for PublishError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
+			PublishError::Cancelled => write!(f, "ERR_CANCELLED"),
 			PublishError::NotWhitelisted(whitelisted) => write!(f, "ERR_WHITELIST:{}", whitelisted.join("\n")),
 			PublishError::NoEntries => write!(f, "ERR_NO_ENTRIES"),
 			PublishError::DuplicateEntry(path) => write!(f, "ERR_DUPLICATE_ENTRIES:{}", path),
@@ -306,18 +308,21 @@ pub enum WorkshopUpdateType {
 impl Steam {
 	pub fn update(&self, id: PublishedFileId, details: WorkshopUpdateType, transaction: &Transaction) -> Result<bool, PublishError> {
 		use WorkshopUpdateType::*;
+		if transaction.aborted() {
+			return Err(PublishError::Cancelled);
+		}
 
 		let result = Arc::new(Mutex::new(None));
 		let result_ref = result.clone();
 		let update_handle = match details {
 			Description { description } => {
-				self.client()
-					.ugc()
-					.start_item_update(GMOD_APP_ID, id)
-					.description(&description)
-					.submit(None, move |result| {
-						*result_ref.lock() = Some(result);
-					})
+				let update = self.client().ugc().start_item_update(GMOD_APP_ID, id).description(&description);
+				if !transaction.begin_submission() {
+					return Err(PublishError::Cancelled);
+				}
+				update.submit(None, move |result| {
+					*result_ref.lock() = Some(result);
+				})
 			}
 			Creation {
 				title,
@@ -344,6 +349,9 @@ impl Steam {
 					Some(description) => update.description(&description),
 					None => update,
 				};
+				if !transaction.begin_submission() {
+					return Err(PublishError::Cancelled);
+				}
 				update.submit(changes.as_deref(), move |result| {
 					*result_ref.lock() = Some(result);
 				})
@@ -369,13 +377,16 @@ impl Steam {
 					Some(description) => update.description(&description),
 					None => update,
 				};
-				match preview_path {
+				let update = match preview_path {
 					Some(preview_path) => update.preview_path(&preview_path),
 					None => update,
 				}
 				.content_path(&path)
-				.tags(tags, false)
-				.submit(changes.as_deref(), move |result| {
+				.tags(tags, false);
+				if !transaction.begin_submission() {
+					return Err(PublishError::Cancelled);
+				}
+				update.submit(changes.as_deref(), move |result| {
 					*result_ref.lock() = Some(result);
 				})
 			}
@@ -420,6 +431,9 @@ impl Steam {
 
 	pub fn publish(&self, details: WorkshopUpdateType, transaction: &Transaction) -> (Option<PublishedFileId>, Result<bool, PublishError>) {
 		debug_assert!(matches!(details, WorkshopUpdateType::Creation { .. }));
+		if transaction.aborted() {
+			return (None, Err(PublishError::Cancelled));
+		}
 
 		let published = Arc::new(Mutex::new(None));
 		let published_ref = published.clone();
@@ -447,16 +461,18 @@ impl Steam {
 	}
 
 	pub fn update_icon(&self, addon_id: PublishedFileId, icon: PathBuf, transaction: &Transaction) -> Result<bool, PublishError> {
+		if transaction.aborted() {
+			return Err(PublishError::Cancelled);
+		}
 		let result = Arc::new(Mutex::new(None));
 		let result_ref = result.clone();
-		let update_handle = self
-			.client()
-			.ugc()
-			.start_item_update(GMOD_APP_ID, addon_id)
-			.preview_path(&icon)
-			.submit(None, move |result| {
-				*result_ref.lock() = Some(result);
-			});
+		let update = self.client().ugc().start_item_update(GMOD_APP_ID, addon_id).preview_path(&icon);
+		if !transaction.begin_submission() {
+			return Err(PublishError::Cancelled);
+		}
+		let update_handle = update.submit(None, move |result| {
+			*result_ref.lock() = Some(result);
+		});
 
 		let mut last_processed;
 		let result = loop {
@@ -587,22 +603,28 @@ pub fn verify_whitelist(path: PathBuf) -> Result<(Vec<GMAEntry>, u64), PublishEr
 
 #[tauri::command]
 pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId) -> u32 {
-	let transaction = transaction!();
+	let transaction = crate::transactions::new_publish();
 	let id = transaction.id;
 
 	rayon::spawn(move || {
 		let temp_dir = app_data!().temp_dir().to_owned();
 		let result = with_publish_staging(&temp_dir, |root, _| {
-			let preview = WorkshopIcon::new(icon_path, upscale)
-				.and_then(|icon| icon.into_path(root))
-				.map_err(|error| error.to_string())?;
 			if transaction.aborted() {
 				return Ok(None);
 			}
-			steam!()
-				.update_icon(addon_id, preview, &transaction)
-				.map(Some)
-				.map_err(|error| error.to_string())
+			let icon = WorkshopIcon::new(icon_path, upscale).map_err(|error| error.to_string())?;
+			if transaction.aborted() {
+				return Ok(None);
+			}
+			let preview = icon.into_path(root).map_err(|error| error.to_string())?;
+			if transaction.aborted() {
+				return Ok(None);
+			}
+			match steam!().update_icon(addon_id, preview, &transaction) {
+				Ok(legal_agreement) => Ok(Some(legal_agreement)),
+				Err(PublishError::Cancelled) => Ok(None),
+				Err(error) => Err(error.to_string()),
+			}
 		});
 
 		match result {
@@ -612,7 +634,7 @@ pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId
 				}
 				transaction.finished(turbonone!());
 			}
-			Ok(_) => {}
+			Ok(_) => transaction.cancelled(),
 			Err(error) => {
 				transaction.error(error, turbonone!());
 			}
@@ -625,7 +647,7 @@ pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId
 #[tauri::command]
 pub fn publish_description(addon_id: PublishedFileId, description: String) -> Result<u32, PublishError> {
 	validate_description(Some(&description))?;
-	let transaction = transaction!();
+	let transaction = crate::transactions::new_publish();
 	let id = transaction.id;
 
 	rayon::spawn(move || {
@@ -637,6 +659,7 @@ pub fn publish_description(addon_id: PublishedFileId, description: String) -> Re
 				}
 				transaction.finished(turbonone!());
 			}
+			Err(PublishError::Cancelled) => transaction.cancelled(),
 			Err(error) => transaction.error(error.to_string(), turbonone!()),
 		}
 	});
@@ -723,7 +746,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 		changes,
 		gma_name,
 	} = request;
-	let transaction = transaction!();
+	let transaction = crate::transactions::new_publish();
 	let id = transaction.id;
 
 	let is_updating = update_id.is_some();
@@ -744,8 +767,14 @@ pub fn publish(request: PublishRequest) -> u32 {
 				None if !is_updating => Some(WorkshopIcon::Default),
 				None => None,
 			};
+			if transaction.aborted() {
+				return Ok(None);
+			}
 			let preview = preview.map(|icon| icon.into_path(root)).transpose().map_err(|error| error.to_string())?;
 
+			if !transaction.begin_packing() {
+				return Ok(None);
+			}
 			transaction.status("PUBLISH_PACKING");
 
 			let gma = GMAFile {
@@ -768,7 +797,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 			};
 
 			if let Err(error) = gma.create(&content_path_src, transaction.clone()) {
-				if transaction.aborted() {
+				if matches!(error, crate::gma::GMAError::Cancelled) {
 					return Ok(None);
 				}
 				return Err(error.to_string());
@@ -818,7 +847,11 @@ pub fn publish(request: PublishRequest) -> u32 {
 							steam!().client().ugc().delete_item(id, |_| {});
 						}
 					}
-					Err(error.to_string())
+					if matches!(error, PublishError::Cancelled) {
+						Ok(None)
+					} else {
+						Err(error.to_string())
+					}
 				}
 			}
 		});
@@ -837,7 +870,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 				ignore! { app_data!().settings.read().save() };
 				app_data!().send();
 			}
-			Ok(None) => {}
+			Ok(None) => transaction.cancelled(),
 			Err(error) => transaction.error(error, turbonone!()),
 		};
 	});

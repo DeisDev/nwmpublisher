@@ -4,7 +4,6 @@
 	import Cross from '@lucide/svelte/icons/x';
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
-	import { tippyFollow } from '../tippy.js';
 	import { _ } from 'svelte-i18n';
 	import { translateError } from '../i18n';
 	import { taskHeight, tasksMax, tasks, tasksNum } from '../transactions.js';
@@ -23,6 +22,7 @@
 	let error = null;
 	let finished = false;
 	let cancelled = false;
+	let cancelError = null;
 
 	let taskElem;
 
@@ -65,9 +65,14 @@
 
 	function cancel() {
 		if (finished || cancelled || destroyed || expired || !transaction.cancellable) return;
-		cancelled = true;
 		transaction.cancel();
-		finish();
+	}
+
+	function currentStatus() {
+		if (cancelError) return translateError(cancelError);
+		if (transaction.state === 'cancelling') return $_('cancelling');
+		if (transaction.cancelPending) return $_('cancel_pending');
+		return statusTextFn(transaction);
 	}
 
 	let statusText;
@@ -87,6 +92,9 @@
 				expire();
 			}
 			transaction?.listen(event => {
+				transaction = transaction;
+				if (event.cancelPending) cancelError = null;
+				if (event.cancelError) cancelError = event.cancelError;
 				if ('progress' in event) {
 					progress = event.progress;
 				} else if (event.finished) {
@@ -100,7 +108,7 @@
 				}
 
 				if (!finished && !cancelled && statusText) {
-					statusText.textContent = statusTextFn(transaction);
+					statusText.textContent = currentStatus();
 				}
 			});
 		}
@@ -130,7 +138,7 @@
 					{statusTextFn}
 				{/if}
 			{:else if transaction}
-				<span bind:this={statusText}>{statusTextFn({ progress: 0 })}</span>
+				<span bind:this={statusText} role={cancelError ? 'alert' : undefined}>{currentStatus()}</span>
 			{/if}
 		</div>
 		{#if error}
@@ -139,8 +147,8 @@
 				<button type="button" on:click={expire} aria-label={$_('close')}><Cross class="icon" stroke-width="3"/></button>
 			</div>
 		{/if}
-		{#if transaction && transaction.cancellable && !finished && !cancelled && !expired}
-			<div id="cancel" use:tippyFollow={$_('cancel')} on:click={cancel}><Cross class="icon" id="cancel" stroke-width="3"/></div>
+		{#if transaction && !finished && !cancelled && !expired}
+			<button type="button" id="cancel" disabled={!transaction.cancellable || transaction.cancelPending} aria-label={$_('cancel')} title={transaction.state === 'submitting' ? $_('publish_cannot_cancel') : $_('cancel')} on:click={cancel}><Cross class="icon" stroke-width="3"/></button>
 		{/if}
 	</div>
 </div>
@@ -216,11 +224,18 @@
 		text-shadow: 0px 1px 0px rgba(0, 0, 0, 0.6);
 	}
 	.task #cancel {
+		color: inherit;
+		background: transparent;
+		border: 0;
 		padding: 1rem;
 		cursor: pointer;
 		display: flex;
 		position: absolute;
 		right: 0;
+	}
+	.task #cancel:disabled {
+		cursor: not-allowed;
+		opacity: .4;
 	}
 	.task.pending #cancel {
 		pointer-events: all;

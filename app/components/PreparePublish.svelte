@@ -338,10 +338,13 @@
 					Steam.MyWorkshop = [];
 				}
 
-				if (event.finished || event.error) {
+				if (event.finished || event.error || event.cancelled) {
 					$isPublishing = false;
 				}
 			});
+		}).catch(async error => {
+			$isPublishing = false;
+			await dialog.message(translateError(String(error)), { kind: 'error' });
 		});
 	}
 
@@ -357,8 +360,7 @@
 				addonId: publishingAddon.id,
 				description: descriptionUpdate,
 			});
-			// Steam submissions cannot be cancelled once started.
-			const transaction = new Transaction(transactionId, () => $_('PUBLISH_UPDATING_DESCRIPTION'), false);
+			const transaction = new Transaction(transactionId, () => $_('PUBLISH_UPDATING_DESCRIPTION'));
 			transaction.listen(event => {
 				if (event.finished) {
 					publishingAddon.description = descriptionUpdate;
@@ -367,7 +369,7 @@
 					Steam.MyWorkshop = [];
 					playSound('success');
 				}
-				if (event.finished || event.error) $isPublishing = false;
+				if (event.finished || event.error || event.cancelled) $isPublishing = false;
 			});
 		} catch (error) {
 			$isPublishing = false;
@@ -520,10 +522,13 @@
 					Steam.MyWorkshop = [];
 				}
 
-				if (event.finished || event.error) {
+				if (event.finished || event.error || event.cancelled) {
 					$isPublishing = false;
 				}
 			});
+		}).catch(async error => {
+			$isPublishing = false;
+			await dialog.message(translateError(String(error)), { kind: 'error' });
 		});
 	}
 </script>

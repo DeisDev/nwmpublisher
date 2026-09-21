@@ -217,9 +217,8 @@
 	}
 
 	function removeAll(jobs) {
-		while (jobs.length > 0) {
-			const job = jobs[0];
-			if (job.transaction.finished) {
+		for (const job of [...jobs]) {
+			if (job.transaction.finished || job.transaction.error) {
 				job.transaction.emit({ cancelled: true });
 			} else {
 				job.transaction.cancel();

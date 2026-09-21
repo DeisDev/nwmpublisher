@@ -31,6 +31,8 @@ pub enum TransactionMessage {
 	Progress(u32, u16),
 	IncrProgress(u32, u16),
 	ResetProgress(u32),
+	State(u32, super::JobState),
+	Cancelled(u32),
 }
 impl TransactionMessage {
 	fn write_json(bytes: &mut Vec<u8>, json: &serde_json::Value) {
@@ -81,6 +83,15 @@ impl TransactionMessage {
 				bytes.write_u8(6).unwrap();
 				bytes.write_u32::<BigEndian>(*id).unwrap();
 			}
+			TransactionMessage::State(id, state) => {
+				bytes.write_u8(7).unwrap();
+				bytes.write_u32::<BigEndian>(*id).unwrap();
+				TransactionMessage::write_json(&mut bytes, &json!(state));
+			}
+			TransactionMessage::Cancelled(id) => {
+				bytes.write_u8(8).unwrap();
+				bytes.write_u32::<BigEndian>(*id).unwrap();
+			}
 		}
 
 		bytes
@@ -89,6 +100,27 @@ impl TransactionMessage {
 impl From<TransactionMessage> for OwnedMessage {
 	fn from(val: TransactionMessage) -> Self {
 		OwnedMessage::Binary(val.as_bytes())
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn cancellation_and_submission_messages_match_the_frontend_protocol() {
+		assert_eq!(TransactionMessage::Cancelled(0x01020304).as_bytes(), [8, 1, 2, 3, 4]);
+		for (state, name) in [
+			(super::super::JobState::Preparing, "preparing"),
+			(super::super::JobState::Packing, "packing"),
+			(super::super::JobState::Cancelling, "cancelling"),
+			(super::super::JobState::Submitting, "submitting"),
+		] {
+			let bytes = TransactionMessage::State(0x01020304, state).as_bytes();
+			assert_eq!(&bytes[..6], &[7, 1, 2, 3, 4, 1]);
+			assert_eq!(bytes.last(), Some(&0));
+			assert_eq!(serde_json::from_slice::<String>(&bytes[6..bytes.len() - 1]).unwrap(), name);
+		}
 	}
 }
 
@@ -134,8 +166,7 @@ impl TransactionServer {
 				Err(err) => {
 					match &err {
 						websocket::WebSocketError::NoDataAvailable => continue,
-						websocket::WebSocketError::IoError(error)
-							if error.kind() == std::io::ErrorKind::ConnectionReset => {
+						websocket::WebSocketError::IoError(error) if error.kind() == std::io::ErrorKind::ConnectionReset => {
 							break;
 						}
 						_ => {}
@@ -161,7 +192,7 @@ impl TransactionServer {
 					if bytes.len() >= 5 && bytes.first() == CANCEL_TRANSACTION.first() {
 						match <[u8; 4]>::try_from(&bytes[1..5]) {
 							Ok(id_bytes) => {
-								super::cancel_transaction(u32::from_be_bytes(id_bytes));
+								let _ = super::cancel_transaction(u32::from_be_bytes(id_bytes));
 							}
 							Err(_) => {
 								dprintln!("WebSocket Invalid Cancel Message: {:?}", bytes);
@@ -231,7 +262,13 @@ impl TransactionServer {
 				webview_emit!("TransactionIncrProgress", (id, incr));
 			}
 			TransactionMessage::ResetProgress(id) => {
-				webview_emit!("TransactionResetProgress", id);
+				webview_emit!("TransactionResetProgress", (id,));
+			}
+			TransactionMessage::State(id, state) => {
+				webview_emit!("TransactionState", (id, state));
+			}
+			TransactionMessage::Cancelled(id) => {
+				webview_emit!("TransactionCancelled", (id,));
 			}
 		}
 	}

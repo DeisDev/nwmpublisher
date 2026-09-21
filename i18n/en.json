@@ -39,6 +39,10 @@
 	"cancel": "Cancel",
 	"done": "Done",
 	"cancelled": "Cancelled",
+	"cancelling": "Cancelling…",
+	"cancel_pending": "Requesting cancellation…",
+	"publish_cannot_cancel": "Submission to Steam has started and can no longer be cancelled.",
+	"ERR_TRANSACTION_NOT_FOUND": "This job is no longer available for cancellation.",
 	"size": "Size",
 	"addon_type": "Type",
 	"file_types": {

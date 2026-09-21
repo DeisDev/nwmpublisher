@@ -1,11 +1,11 @@
 mod websocket;
 
 use lazy_static::lazy_static;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use rayon::ThreadPool;
 use serde::Serialize;
 use std::sync::{
-	atomic::{AtomicBool, AtomicU32, Ordering},
+	atomic::{AtomicU32, Ordering},
 	Arc, Weak,
 };
 
@@ -39,13 +39,8 @@ impl Transactions {
 	pub fn find(&self, transaction_id: u32) -> Option<Transaction> {
 		let transactions = self.inner.read();
 		if let Ok(pos) = transactions.binary_search_by_key(&transaction_id, |transaction| transaction.id) {
-			let transaction = transactions.get(pos).unwrap().upgrade();
-			if transaction.is_some() {
-				return transaction;
-			} else {
-				#[cfg(debug_assertions)]
-				panic!("Stale transaction found in transactions list");
-			}
+			// A completed job can be dropped before its queued registry removal runs.
+			return transactions[pos].upgrade();
 		}
 
 		None
@@ -85,10 +80,28 @@ fn progress_as_int(progress: f64) -> u16 {
 }
 
 pub type Transaction = Arc<TransactionInner>;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum JobState {
+	Running,
+	Preparing,
+	Packing,
+	Cancelling,
+	Submitting,
+	Finished,
+	Failed,
+	Cancelled,
+}
+impl JobState {
+	fn terminal(self) -> bool {
+		matches!(self, Self::Finished | Self::Failed | Self::Cancelled)
+	}
+}
+
 #[derive(Debug)]
 pub struct TransactionInner {
 	pub id: u32,
-	aborted: AtomicBool,
+	state: Mutex<JobState>,
 }
 impl TransactionInner {
 	fn emit(&self, message: TransactionMessage) {
@@ -103,9 +116,7 @@ impl TransactionInner {
 		}
 	}
 
-	fn abort(&self) {
-		self.aborted.store(true, Ordering::Release);
-
+	fn remove(&self) {
 		let id = self.id;
 		TRANSACTIONS_SLAVE.spawn(move || {
 			let mut transactions = TRANSACTIONS.write();
@@ -148,29 +159,81 @@ impl TransactionInner {
 	}
 
 	pub fn error<S: Into<String>, D: Serialize + Send + 'static>(&self, msg: S, data: D) {
-		self.abort();
+		let mut state = self.state.lock();
+		if state.terminal() {
+			return;
+		}
+		*state = JobState::Failed;
+		self.remove();
 		self.emit(TransactionMessage::Error(self.id, msg.into(), json!(data)));
 	}
 
 	pub fn finished<D: Serialize + Send + 'static>(&self, data: D) {
-		debug_assert!(!self.aborted(), "Tried to finish an aborted transaction!");
-		self.abort();
+		let mut state = self.state.lock();
+		if state.terminal() || *state == JobState::Cancelling {
+			return;
+		}
+		*state = JobState::Finished;
+		self.remove();
 		self.emit(TransactionMessage::Finished(self.id, json!(data)));
 	}
 
-	pub fn cancel(&self) {
-		self.abort();
+	pub fn cancel(&self) -> JobState {
+		let mut state = self.state.lock();
+		match *state {
+			JobState::Running => {
+				*state = JobState::Cancelled;
+				self.remove();
+				self.emit(TransactionMessage::Cancelled(self.id));
+			}
+			JobState::Preparing | JobState::Packing => {
+				*state = JobState::Cancelling;
+				self.emit(TransactionMessage::State(self.id, *state));
+			}
+			_ => {}
+		}
+		*state
+	}
+
+	pub fn cancelled(&self) {
+		let mut state = self.state.lock();
+		if *state == JobState::Cancelling {
+			*state = JobState::Cancelled;
+			self.remove();
+			self.emit(TransactionMessage::Cancelled(self.id));
+		}
+	}
+
+	pub fn begin_packing(&self) -> bool {
+		let mut state = self.state.lock();
+		if *state != JobState::Preparing {
+			return false;
+		}
+		*state = JobState::Packing;
+		self.emit(TransactionMessage::State(self.id, *state));
+		true
+	}
+
+	/// The same lock arbitrates cancellation and the irreversible Steam submission.
+	pub fn begin_submission(&self) -> bool {
+		let mut state = self.state.lock();
+		if !matches!(*state, JobState::Preparing | JobState::Packing) {
+			return false;
+		}
+		*state = JobState::Submitting;
+		self.emit(TransactionMessage::State(self.id, *state));
+		true
 	}
 
 	pub fn aborted(&self) -> bool {
-		self.aborted.load(Ordering::Acquire)
+		let state = *self.state.lock();
+		state.terminal() || state == JobState::Cancelling
 	}
 }
 impl Drop for TransactionInner {
 	fn drop(&mut self) {
-		if !self.aborted() {
+		if !self.state.get_mut().terminal() {
 			self.error("ERR_UNKNOWN", turbonone!());
-			self.abort();
 
 			#[cfg(debug_assertions)]
 			println!("{:#?}", backtrace::Backtrace::new());
@@ -191,19 +254,27 @@ pub fn init() {
 }
 
 pub fn new() -> Transaction {
+	new_with_state(JobState::Running)
+}
+
+pub fn new_publish() -> Transaction {
+	let transaction = new_with_state(JobState::Preparing);
+	transaction.emit(TransactionMessage::State(transaction.id, JobState::Preparing));
+	transaction
+}
+
+fn new_with_state(state: JobState) -> Transaction {
+	let mut transactions = TRANSACTIONS.write();
 	let transaction = Arc::new(TransactionInner {
 		id: TRANSACTIONS.id.fetch_add(1, Ordering::SeqCst),
-		aborted: AtomicBool::new(false),
+		state: Mutex::new(state),
 	});
 
-	{
-		let mut transactions = TRANSACTIONS.write();
-		transactions.push(TransactionRef {
-			id: transaction.id,
-			ptr: Arc::downgrade(&transaction),
-		});
-		transactions.reserve(1);
-	}
+	transactions.push(TransactionRef {
+		id: transaction.id,
+		ptr: Arc::downgrade(&transaction),
+	});
+	transactions.reserve(1);
 
 	transaction
 }
@@ -216,13 +287,99 @@ macro_rules! transaction {
 }
 
 #[tauri::command]
-pub fn cancel_transaction(id: u32) {
-	if let Some(transaction) = TRANSACTIONS.find(id) {
-		transaction.cancel();
-	}
+pub fn cancel_transaction(id: u32) -> Result<JobState, String> {
+	TRANSACTIONS
+		.find(id)
+		.map(|transaction| transaction.cancel())
+		.ok_or_else(|| "ERR_TRANSACTION_NOT_FOUND".to_owned())
 }
 
 #[tauri::command]
 pub fn websocket() -> Option<u16> {
 	TRANSACTIONS.websocket.as_ref().map(|socket| socket.port)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::sync::Barrier;
+
+	#[test]
+	fn cancellation_prevents_submission_and_waits_for_cleanup() {
+		for packing in [false, true] {
+			let transaction = new_publish();
+			if packing {
+				assert!(transaction.begin_packing());
+			}
+			assert_eq!(cancel_transaction(transaction.id).unwrap(), JobState::Cancelling);
+			assert!(transaction.aborted());
+			assert!(!transaction.begin_packing());
+			assert!(!transaction.begin_submission());
+			transaction.finished(());
+			assert_eq!(*transaction.state.lock(), JobState::Cancelling);
+			assert_eq!(transaction.cancel(), JobState::Cancelling);
+			transaction.cancelled();
+			transaction.cancelled();
+			transaction.error("late error", ());
+			assert_eq!(*transaction.state.lock(), JobState::Cancelled);
+		}
+	}
+
+	#[test]
+	fn submission_rejects_cancellation_and_preserves_the_steam_result() {
+		for failure in [false, true] {
+			let transaction = new_publish();
+			assert!(transaction.begin_submission());
+			assert_eq!(cancel_transaction(transaction.id).unwrap(), JobState::Submitting);
+			assert!(!transaction.aborted());
+			assert!(!transaction.begin_submission());
+			transaction.cancelled();
+			assert_eq!(*transaction.state.lock(), JobState::Submitting);
+			if failure {
+				transaction.error("Steam failure", ());
+			} else {
+				transaction.finished(());
+			}
+			let expected = if failure { JobState::Failed } else { JobState::Finished };
+			assert_eq!(transaction.cancel(), expected);
+			transaction.finished(());
+			transaction.error("late error", ());
+			assert_eq!(*transaction.state.lock(), expected);
+		}
+	}
+
+	#[test]
+	fn cancellation_and_submission_have_exactly_one_winner() {
+		for _ in 0..100 {
+			let transaction = new_publish();
+			assert!(transaction.begin_packing());
+			let barrier = Arc::new(Barrier::new(2));
+			let submit = transaction.clone();
+			let start = barrier.clone();
+			let thread = std::thread::spawn(move || {
+				start.wait();
+				submit.begin_submission()
+			});
+			barrier.wait();
+			let cancellation = transaction.cancel();
+			let submitted = thread.join().unwrap();
+			assert_eq!(submitted, cancellation == JobState::Submitting);
+			assert_eq!(!submitted, cancellation == JobState::Cancelling);
+			if submitted {
+				transaction.finished(());
+			} else {
+				transaction.cancelled();
+			}
+		}
+	}
+
+	#[test]
+	fn cleanup_errors_are_reported_and_unknown_jobs_are_rejected() {
+		let transaction = new_publish();
+		transaction.cancel();
+		transaction.error("cleanup failed", ());
+		transaction.cancelled();
+		assert_eq!(*transaction.state.lock(), JobState::Failed);
+		assert_eq!(cancel_transaction(u32::MAX).unwrap_err(), "ERR_TRANSACTION_NOT_FOUND");
+	}
 }

@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Cancel publishing during preparation and packing, acknowledge cancellation before unlocking the publisher, and disable cancellation once Steam submission starts. Keep active uploads visible and release the publishing lock when a publishing command is rejected.
 - Isolate each publishing job's archive and generated icons in its own temporary directory, upload only its GMA, and clean up after success, failure, or cancellation. Sanitize archive names consistently across platforms, including reserved names and uppercase extensions.
 - Fix inconsistent addon ordering in the size analyzer and Rust compiler compatibility warnings.
 - Preserve the operation, path, and underlying error when publishing or extracting files fails. Report extraction completion only after files and metadata are written and flushed, reject truncated archive reads, and return icon-generation errors instead of crashing or silently using another image.

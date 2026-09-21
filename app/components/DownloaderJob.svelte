@@ -24,7 +24,7 @@
 	export let job;
 
 	function cancelJob() {
-		if (job.transaction.finished) {
+		if (job.transaction.finished || job.transaction.error) {
 			job.transaction.emit({ cancelled: true });
 		} else {
 			job.transaction.cancel();

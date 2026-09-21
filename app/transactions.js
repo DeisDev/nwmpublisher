@@ -59,6 +59,8 @@ class Transaction {
 		this.finished = false;
 		this.cancelled = false;
 		this.cancellable = cancellable;
+		this.state = 'running';
+		this.cancelPending = false;
 		this.unconsumedEvents = [];
 
 		transactions[id] = this;
@@ -99,23 +101,48 @@ class Transaction {
 		return this;
 	}
 
-	cancel(fromBackend) {
-		if (this.cancelled || this.finished || (!this.cancellable && !fromBackend)) return;
+	async cancel() {
+		if (this.cancelled || this.finished || this.error || !this.cancellable || this.cancelPending) return;
+		this.cancelPending = true;
+		this.emit({ cancelPending: true });
+		try {
+			const state = await invoke('cancel_transaction', { id: this.id });
+			if (state === 'cancelled') this.setCancelled();
+			else if (state === 'cancelling' || state === 'submitting') this.setState(state);
+		} catch (error) {
+			if (!this.cancelled && !this.finished && !this.error) {
+				this.emit({ cancelError: String(error) });
+			}
+		} finally {
+			this.cancelPending = false;
+			this.emit({ cancelPending: false });
+		}
+	}
 
+	setState(state) {
+		if (this.cancelled || this.finished || this.error) return this;
+		const order = { running: 0, preparing: 1, packing: 2, submitting: 3, cancelling: 3 };
+		if (!(state in order) || order[state] < order[this.state]) return this;
+		this.state = state;
+		this.cancellable = state === 'preparing' || state === 'packing';
+		this.emit({ state });
+		return this;
+	}
+
+	setCancelled() {
+		if (this.cancelled || this.finished || this.error) return this;
+		this.state = 'cancelled';
 		this.cancelled = true;
+		this.cancellable = false;
 		this.emit({ cancelled: true });
 		delete transactions[this.id];
-
-		if (!fromBackend) {
-			invoke('cancel_transaction', {
-				id: this.id
-			});
-		}
-
 		return this;
 	}
 
 	setFinished(data) {
+		if (this.cancelled || this.finished || this.error) return this;
+		this.state = 'finished';
+		this.cancellable = false;
 		this.finished = true;
 		if (this.progress < 100) {
 			this.progress = 100;
@@ -128,6 +155,9 @@ class Transaction {
 	}
 
 	setError(msg, data) {
+		if (this.cancelled || this.finished || this.error) return this;
+		this.state = 'failed';
+		this.cancellable = false;
 		this.error = [msg, data];
 		this.emit({ error: msg, data });
 		delete transactions[this.id];
@@ -167,7 +197,7 @@ function receiveTransactionEvent(event, data) {
 	if (transaction) {
 		data[0] = transaction;
 		fireTransactionEvent(event, data);
-	} else {
+	} else if (!(data[0] in dedup)) {
 		orphanedTransactions[data[0]] = true;
 		orphanQueue.push([event, data]);
 	}
@@ -188,8 +218,11 @@ transactionEvent('Progress', ([ transaction, progress ]) => {
 });
 
 transactionEvent('Cancelled', ([ transaction ]) => {
-	//console.log('transactionCancelled', transaction);
-	transaction.cancel(true);
+	transaction.setCancelled();
+});
+
+transactionEvent('State', ([ transaction, state ]) => {
+	transaction.setState(state);
 });
 
 transactionEvent('Finished', ([ transaction, data ]) => {
@@ -285,8 +318,19 @@ invoke('websocket').then(port => {
 			break;
 
 			case 6:
-			receiveTransactionEvent('ResetProgress', [id]);
+				receiveTransactionEvent('ResetProgress', [id]);
+				break;
+
+			case 7:
+			{
+				const [state] = read_json(5, view);
+				receiveTransactionEvent('State', [id, state]);
+			}
 			break;
+
+			case 8:
+				receiveTransactionEvent('Cancelled', [id]);
+				break;
 		}
 	});
 });
