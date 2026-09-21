@@ -219,7 +219,7 @@
 				</div>
 
 				{#if gma || workshop.localFile}
-					<FileBrowser browsePath={gmaPath} {entriesList} {open} openEntry={extractEntry} size={gmaSize}/>
+					<FileBrowser browsePath={gmaPath} {entriesList} {open} openEntry={extractEntry}/>
 				{:else}
 					<Dead size="2rem"/>
 				{/if}

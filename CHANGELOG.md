@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Show recursive file counts and sizes beside folders in the file browser, with footer totals for the current directory.
 - Choose separately whether to open Workshop pages after publishing and folders after single-addon extraction. Existing behavior is preserved by default; required Steam agreement prompts and explicit Open actions remain available.
 - Copy per-job diagnostics from failed publishing, downloading, and extraction jobs.
 - Update an existing addon's description without selecting or uploading addon files, and open its previous change notes on Steam from the Changelog tab.

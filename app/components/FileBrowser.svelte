@@ -15,25 +15,24 @@
 	export let entriesList = null;
 	export let openEntry;
 	export let open;
-	export let size;
 	export let background = false;
 	export let fileSelect = null;
 
-	let browsing;
-	let total_files = 0;
-	let entries = {
+	let browsing = {
 		dirs: Object.create(null),
 		files: [],
 		path: '',
+		size: 0,
+		total_files: 0,
 	};
 
 	function initBrowser() {
-		browsing = undefined;
-		total_files = 0;
-		entries = {
+		const entries = {
 			dirs: Object.create(null),
 			files: [],
 			path: '',
+			size: 0,
+			total_files: 0,
 		};
 
 		for (let i = 0; i < $entriesList.length; i++) {
@@ -41,6 +40,9 @@
 			const components = entry.path.split('/');
 			let path = entries;
 			let path_str = '';
+			// Count each file once per ancestor before collapsing directory shortcuts.
+			path.size += entry.size;
+			path.total_files++;
 			for (let k = 0; k < components.length-1; k++) {
 				const component = components[k];
 				path_str += (k > 0 ? '/' : '') + component;
@@ -49,10 +51,14 @@
 					path.dirs[component] = {
 						dirs: Object.assign(Object.create(null), { '../': path }),
 						files: [],
-						path: path_str
+						path: path_str,
+						size: 0,
+						total_files: 0,
 					};
 
 				path = path.dirs[component];
+				path.size += entry.size;
+				path.total_files++;
 			}
 
 			const name = components[components.length-1];
@@ -67,8 +73,6 @@
 				size: entry.size,
 				typeTip: $_('file_types.' + type, { values: { extension } }),
 			});
-
-			total_files++;
 		}
 
 		browsing = createDirShortcuts(entries, '');
@@ -175,7 +179,7 @@
 					<div>{$_('file_browser_select')}</div>
 				</div>
 			</div>
-		{:else if total_files === 0}
+		{:else if browsing.total_files === 0}
 			<div id="no-files">
 				<div>
 					<Dead size="4rem"/>
@@ -189,13 +193,15 @@
 						{#if dir !== "../"}
 							<tr on:click={browseDirectory} data-path={dir}>
 								<td><img use:tippyFollow={$_('file_types.folder')} src="/img/silkicons/folder.png" alt=""/></td>
-								<td colspan="3">
+								<td>
 									{#if entries.shortcut}
 										<span class="shortcut">{entries.shortcut}/</span><span>{entries.shortcut_dest}</span>
 									{:else}
 										<span>{dir}</span>
 									{/if}
 								</td>
+								<td><span>{entries.total_files === 1 ? $_('items_one') : $_('items_num', { values: { n: entries.total_files } })}</span></td>
+								<td><span>{filesize(entries.size)}</span></td>
 							</tr>
 						{/if}
 					{/each}
@@ -213,7 +219,7 @@
 	</div>
 
 	<div id="ribbon">
-		{total_files === 1 ? $_('items_one') : $_('items_num', { values: { n: total_files } })}&nbsp;&nbsp;∣&nbsp;&nbsp;{$_('items_shown', { values: { n: browsing.files.length + countDirs(browsing.dirs) } })}&nbsp;&nbsp;∣&nbsp;&nbsp;{filesize(size ?? 0)}
+		{browsing.total_files === 1 ? $_('items_one') : $_('items_num', { values: { n: browsing.total_files } })}&nbsp;&nbsp;∣&nbsp;&nbsp;{$_('items_shown', { values: { n: browsing.files.length + countDirs(browsing.dirs) } })}&nbsp;&nbsp;∣&nbsp;&nbsp;{filesize(browsing.size)}
 	</div>
 </main>
 
