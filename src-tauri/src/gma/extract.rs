@@ -1,11 +1,8 @@
 use std::{
 	fs::{self, File},
-	io::{BufWriter, Cursor, Read, SeekFrom},
+	io::{BufWriter, Cursor, Read, SeekFrom, Write},
 	path::{Path, PathBuf},
-	sync::{
-		atomic::{AtomicBool, AtomicUsize, Ordering},
-		Arc,
-	},
+	sync::atomic::{AtomicUsize, Ordering},
 };
 
 use crate::{app_data, transactions::Transaction};
@@ -104,69 +101,34 @@ impl GMAFile {
 	pub fn decompress<P: AsRef<Path>>(path: P, transaction: Transaction) -> Result<GMAFile, GMAError> {
 		main_thread_forbidden!();
 
-		let input = File::open(path.as_ref())?;
-
-		let bytes_total = input.metadata().map(|metadata| metadata.len()).ok();
-
-		let lzma_decoder = xz2::stream::Stream::new_lzma_decoder(u64::MAX).map_err(|err| {
-			eprintln!("LZMA error: {err:?}");
-			GMAError::LZMA
-		})?;
-
+		let path = path.as_ref();
+		let input = File::open(path).map_err(|error| GMAError::io("open compressed archive", path, error))?;
+		let bytes_total = input
+			.metadata()
+			.map_err(|error| GMAError::io("read archive metadata", path, error))?
+			.len();
+		let lzma_decoder = xz2::stream::Stream::new_lzma_decoder(u64::MAX)
+			.map_err(|error| GMAError::LZMA(format!("initialize decoder \"{}\": {}", path.display(), error)))?;
 		let mut xz_decoder = xz2::read::XzDecoder::new_stream(input, lzma_decoder);
-
-		let mut output = if let Some(ref bytes_total) = bytes_total {
-			Vec::with_capacity((*bytes_total * 5) as usize)
-		} else {
-			Vec::new()
-		};
-
-		let result = if let Some(bytes_total) = bytes_total {
-			transaction.data((turbonone!(), bytes_total));
-
-			let bytes_total_f = bytes_total as f64;
-
-			let complete = Arc::new(AtomicBool::new(false));
-			let complete_ref = complete.clone();
-
-			struct StupidlyUnsafeProgressMonitorPtr<T: Read>(*mut xz2::read::XzDecoder<T>);
-			unsafe impl<T: Read> Sync for StupidlyUnsafeProgressMonitorPtr<T> {}
-			unsafe impl<T: Read> Send for StupidlyUnsafeProgressMonitorPtr<T> {}
-
-			let xz_decoder_ptr = StupidlyUnsafeProgressMonitorPtr(&mut xz_decoder as *mut _);
-			rayon::spawn(move || {
-				#[allow(clippy::redundant_locals)]
-				let xz_decoder_ptr = xz_decoder_ptr;
-				while !complete_ref.load(Ordering::Acquire) {
-					let xz_decoder = unsafe { &mut *xz_decoder_ptr.0 };
-
-					let bytes_read = xz_decoder.total_in() as f64;
-					transaction.progress(bytes_read / bytes_total_f);
-
-					let decompressed_bytes = xz_decoder.total_out();
-					if decompressed_bytes > bytes_total {
-						transaction.data((turbonone!(), decompressed_bytes));
-					}
-
-					sleep_ms!(25);
-				}
-			});
-
-			let result = xz_decoder.read_to_end(&mut output);
-			complete.store(true, Ordering::Release);
-			result
-		} else {
-			xz_decoder.read_to_end(&mut output)
-		};
-
-		if let Err(err) = result {
-			// No idea why, but XZ always errors with "corrupt xz stream" even when the decompression succeeds.
-			// Maybe a difference in the way Gmod encoded the XZ stream?
-			// Let's just check if the file has been fully read, then naively continue.
-			let mut input = xz_decoder.into_inner();
-			if input.read(&mut [0u8]).ok() != Some(0) {
-				eprintln!("LZMA error: {err:#?}");
-				return Err(GMAError::LZMA);
+		let mut output = Vec::new();
+		let mut buffer = [0; 64 * 1024];
+		transaction.data((turbonone!(), bytes_total));
+		loop {
+			if transaction.aborted() {
+				return Err(GMAError::Cancelled);
+			}
+			let read = match xz_decoder.read(&mut buffer) {
+				Ok(0) => break,
+				Ok(read) => read,
+				Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+				Err(error) => return Err(GMAError::io("decompress archive", path, error)),
+			};
+			output.extend_from_slice(&buffer[..read]);
+			if bytes_total > 0 {
+				transaction.progress(xz_decoder.total_in() as f64 / bytes_total as f64);
+			}
+			if output.len() as u64 > bytes_total {
+				transaction.data((turbonone!(), output.len() as u64));
 			}
 		}
 
@@ -180,41 +142,31 @@ impl GMAFile {
 		Ok(gma)
 	}
 
-	fn stream_entry_bytes_with_transaction(
+	fn stream_entry_bytes(
+		&self,
 		handle: &mut GMAReader,
-		entries_start: u64,
-		entry_path: &PathBuf,
+		entry_path: &Path,
 		entry: &GMAEntry,
-		transaction: &Transaction,
+		transaction: Option<&Transaction>,
 	) -> Result<(), GMAError> {
-		use std::io::Write;
-
-		fs::create_dir_all(entry_path.with_file_name(""))?;
-		let f = File::create(entry_path)?;
-
-		handle.seek(SeekFrom::Start(entries_start + entry.index))?;
-
-		let mut w = BufWriter::new(f);
-		crate::stream_bytes_with_transaction(&mut **handle, &mut w, entry.size as usize, transaction)?;
-
-		w.flush()?;
-
-		Ok(())
-	}
-
-	fn stream_entry_bytes(handle: &mut GMAReader, entries_start: u64, entry_path: &PathBuf, entry: &GMAEntry) -> Result<(), GMAError> {
-		use std::io::Write;
-
-		fs::create_dir_all(entry_path.with_file_name(""))?;
-		let f = File::create(entry_path)?;
-
-		handle.seek(SeekFrom::Start(entries_start + entry.index))?;
-
-		let mut w = BufWriter::new(f);
-		crate::stream_bytes(&mut **handle, &mut w, entry.size as usize)?;
-
-		w.flush()?;
-
+		let parent = entry_path.parent().ok_or(GMAError::FormatError)?;
+		fs::create_dir_all(parent).map_err(|error| GMAError::io("create directory", parent, error))?;
+		let file = File::create(entry_path).map_err(|error| GMAError::io("create extracted file", entry_path, error))?;
+		let offset = self.pointers.entries.checked_add(entry.index).ok_or(GMAError::FormatError)?;
+		handle
+			.seek(SeekFrom::Start(offset))
+			.map_err(|error| GMAError::io("seek archive entry", &self.path, error))?;
+		let mut writer = BufWriter::new(file);
+		crate::stream_bytes(&mut **handle, &mut writer, entry.size, |written| {
+			if let Some(transaction) = transaction {
+				transaction.progress(written as f64 / entry.size as f64);
+			}
+		})
+		.map_err(|error| match error {
+			crate::StreamError::Read(error) => GMAError::io("read archive entry", &self.path, error),
+			crate::StreamError::Write(error) => GMAError::io("write extracted file", entry_path, error),
+		})?;
+		writer.flush().map_err(|error| GMAError::io("flush extracted file", entry_path, error))?;
 		Ok(())
 	}
 }
@@ -255,74 +207,53 @@ impl ExtractGMAImmut for GMAFile {
 		ignore_whitelist: bool,
 	) -> Result<PathBuf, GMAError> {
 		let result = THREAD_POOL.install(move || {
+			if transaction.aborted() {
+				return Err(GMAError::Cancelled);
+			}
 			let dest_path = dest.prepare(&self.extracted_name);
-			let entries_start = self.pointers.entries;
-
-			let entries = self.entries.as_ref().unwrap();
-			let entries_len_f = entries.len() as f64;
-			let entries_len_i = entries.len();
-
-			self.read()?; // Don't waste time with the threads if the file fails to open
-
-			let i = AtomicUsize::new(0);
-
-			let finished = |mut dest_path: PathBuf| {
-				if i.fetch_add(1, Ordering::AcqRel) > entries_len_i || transaction.aborted() {
-					return;
+			let entries = self.entries.as_ref().ok_or(GMAError::FormatError)?;
+			let metadata = self.metadata.as_ref().ok_or(GMAError::FormatError)?;
+			self.read()?;
+			fs::create_dir_all(&dest_path).map_err(|error| GMAError::io("create extraction directory", &dest_path, error))?;
+			let completed = AtomicUsize::new(0);
+			entries.par_iter().try_for_each(|(entry_path, entry)| -> Result<(), GMAError> {
+				if transaction.aborted() {
+					return Err(GMAError::Cancelled);
 				}
-
-				transaction.finished(dest_path.to_owned());
-
-				if open_after_extract {
-					crate::path::open(&dest_path);
+				if !ignore_whitelist && !whitelist::check(entry_path) {
+					transaction.error("ERR_WHITELIST", entry_path.clone());
+					return Err(GMAError::Cancelled);
 				}
-
-				let metadata = self.metadata.as_ref().unwrap();
-				if let GMAMetadata::Standard { .. } = metadata {
-					if let Ok(json) = serde_json::ser::to_string_pretty(metadata) {
-						dest_path.push("addon.json");
-						if let Some(parent) = dest_path.parent() {
-							ignore! { fs::create_dir_all(parent) };
-						}
-						ignore! { fs::write(dest_path, json.as_bytes()) };
-					}
+				let final_path = dest_path.join(entry_path);
+				if !final_path.starts_with(&dest_path) {
+					return Err(GMAError::FormatError);
 				}
-			};
-
-			entries
-				.par_iter()
-				.try_for_each(|(entry_path, entry)| -> Result<(), GMAError> {
-					let mut handle = self.read()?;
-
-					if ignore_whitelist || whitelist::check(entry_path) {
-						if transaction.aborted() {
-							return Err(GMAError::Cancelled);
-						}
-
-						let final_path = dest_path.join(entry_path);
-						if !final_path.starts_with(&dest_path) {
-							transaction.error("Illegal path", entry_path.clone());
-						} else {
-							// FIXME count errors, check if errors == number of entries, return an error instead of finished
-							ignore! { GMAFile::stream_entry_bytes(&mut handle, entries_start, &final_path, entry) };
-						}
-
-						let i = i.fetch_add(1, Ordering::AcqRel) + 1;
-						transaction.progress((i as f64) / entries_len_f);
-
-						if i == entries_len_i {
-							(finished)(dest_path.to_owned());
-						}
-					} else {
-						transaction.error("ERR_WHITELIST", entry_path.clone()); // TODO
-					}
-
-					Ok(())
-				})
-				.map(|_| {
-					(finished)(dest_path.to_owned());
-					dest_path
-				})
+				let mut handle = self.read()?;
+				self.stream_entry_bytes(&mut handle, &final_path, entry, None)?;
+				let completed = completed.fetch_add(1, Ordering::AcqRel) + 1;
+				transaction.progress(completed as f64 / (entries.len() + 1) as f64);
+				Ok(())
+			})?;
+			if transaction.aborted() {
+				return Err(GMAError::Cancelled);
+			}
+			if let GMAMetadata::Standard { .. } = metadata {
+				let path = dest_path.join("addon.json");
+				let json = serde_json::to_vec_pretty(metadata)
+					.map_err(|error| GMAError::MetadataError(format!("serialize metadata \"{}\": {}", path.display(), error)))?;
+				let file = File::create(&path).map_err(|error| GMAError::io("create metadata", &path, error))?;
+				let mut writer = BufWriter::new(file);
+				writer.write_all(&json).map_err(|error| GMAError::io("write metadata", &path, error))?;
+				writer.flush().map_err(|error| GMAError::io("flush metadata", &path, error))?;
+			}
+			if transaction.aborted() {
+				return Err(GMAError::Cancelled);
+			}
+			transaction.finished(dest_path.clone());
+			if open_after_extract {
+				crate::path::open(&dest_path);
+			}
+			Ok(dest_path)
 		});
 
 		if !transaction.aborted() {
@@ -341,42 +272,50 @@ impl ExtractGMAImmut for GMAFile {
 		open_after_extract: bool,
 		handle: Option<GMAReader>,
 	) -> Result<PathBuf, GMAError> {
-		let mut base = app_data!().temp_dir().to_owned();
-		base.push("nwmpublisher");
-		base.push(&self.extracted_name);
+		let result = (|| -> Result<PathBuf, GMAError> {
+			if transaction.aborted() {
+				return Err(GMAError::Cancelled);
+			}
+			let mut base = app_data!().temp_dir().to_owned();
+			base.push("nwmpublisher");
+			base.push(&self.extracted_name);
 
-		let mut path = base.clone();
-		path.push(&entry_path);
+			let mut path = base.clone();
+			path.push(&entry_path);
 
-		if !path.starts_with(&base) {
-			return Err(GMAError::FormatError);
-		}
+			if !path.starts_with(&base) {
+				return Err(GMAError::FormatError);
+			}
 
-		let mut handle = match handle {
-			Some(handle) => handle,
-			None => self.read()?,
-		};
+			let mut handle = match handle {
+				Some(handle) => handle,
+				None => self.read()?,
+			};
 
-		let entry = self
-			.entries
-			.as_ref()
-			.expect("Expected entries to be read by this point")
-			.get(&entry_path)
-			.ok_or(GMAError::EntryNotFound)?;
+			let entry = self
+				.entries
+				.as_ref()
+				.expect("Expected entries to be read by this point")
+				.get(&entry_path)
+				.ok_or(GMAError::EntryNotFound)?;
 
-		let result =
-			GMAFile::stream_entry_bytes_with_transaction(&mut handle, self.pointers.entries, &path, entry, transaction).map(|_| path.to_owned());
+			self.stream_entry_bytes(&mut handle, &path, entry, Some(transaction))?;
+			if transaction.aborted() {
+				return Err(GMAError::Cancelled);
+			}
+			Ok(path)
+		})();
 
 		if let Err(ref error) = result {
 			if !transaction.aborted() {
 				transaction.error(error.to_string(), turbonone!());
 			}
-		} else if !transaction.aborted() {
-			if open_after_extract {
+		} else if let Ok(ref path) = result {
+			if !transaction.aborted() {
 				transaction.finished(path.to_owned());
-				crate::path::open(path);
-			} else {
-				transaction.finished(path);
+				if open_after_extract {
+					crate::path::open(path);
+				}
 			}
 		}
 
@@ -396,13 +335,23 @@ impl ExtractGMAMut for GMAFile {
 		ignore_whitelist: bool,
 	) -> Result<PathBuf, GMAError> {
 		THREAD_POOL.install(move || {
-			self.entries()?;
+			self.entries().map_err(|error| {
+				if !transaction.aborted() {
+					transaction.error(error.to_string(), turbonone!());
+				}
+				error
+			})?;
 			(*self).extract(dest, transaction, open_after_extract, ignore_whitelist)
 		})
 	}
 	fn extract_entry(&mut self, entry_path: String, transaction: &Transaction, open_after_extract: bool) -> Result<PathBuf, GMAError> {
 		THREAD_POOL.install(move || {
-			let handle = self.entries()?;
+			let handle = self.entries().map_err(|error| {
+				if !transaction.aborted() {
+					transaction.error(error.to_string(), turbonone!());
+				}
+				error
+			})?;
 			(*self).extract_entry_with_handle(entry_path, transaction, open_after_extract, handle)
 		})
 	}
@@ -410,15 +359,143 @@ impl ExtractGMAMut for GMAFile {
 
 #[tauri::command]
 pub fn extract_gma(gma_path: PathBuf, dest: ExtractDestination) -> Option<u32> {
-	let mut gma = GMAFile::open(gma_path).ok()?;
-	gma.entries().ok()?;
-
 	let transaction = transaction!();
 	let id = transaction.id;
-
-	rayon::spawn(move || {
-		ignore! { gma.extract(dest, &transaction, true, true) };
+	rayon::spawn(move || match GMAFile::open(gma_path) {
+		Ok(mut gma) => {
+			let _ = ExtractGMAMut::extract(&mut gma, dest, &transaction, true, true);
+		}
+		Err(error) => transaction.error(error.to_string(), turbonone!()),
 	});
-
 	Some(id)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::collections::HashMap;
+
+	fn fixture(name: &str, bytes: Vec<u8>) -> (GMAFile, PathBuf) {
+		let root = std::env::temp_dir().join(format!("nwmpublisher-{name}-{}", std::process::id()));
+		fs::create_dir(&root).unwrap();
+		let entry = GMAEntry {
+			path: "lua/test.lua".into(),
+			size: 4,
+			crc: 0,
+			index: 0,
+		};
+		let gma = GMAFile {
+			path: root.join("source.gma"),
+			size: bytes.len() as u64,
+			id: None,
+			metadata: Some(GMAMetadata::Standard {
+				title: "Test".into(),
+				addon_type: "tool".into(),
+				tags: vec![],
+				ignore: vec![],
+			}),
+			entries: Some(HashMap::from([(entry.path.clone(), entry)])),
+			pointers: Default::default(),
+			version: 3,
+			extracted_name: "test".into(),
+			modified: None,
+			membuffer: Some(bytes.into()),
+		};
+		(gma, root)
+	}
+
+	#[test]
+	fn extraction_requires_entry_and_metadata_writes() {
+		let (gma, root) = fixture("extraction-failures", b"test".to_vec());
+		let destination = root.join("output");
+		fs::create_dir(&destination).unwrap();
+		fs::write(destination.join("lua"), b"blocks directory creation").unwrap();
+		let transaction = transaction!();
+		let error = gma
+			.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true)
+			.unwrap_err();
+		assert!(error.to_string().contains("create directory"));
+		assert!(error.to_string().contains("lua"));
+		assert!(!destination.join("addon.json").exists());
+		assert!(transaction.aborted());
+
+		fs::remove_file(destination.join("lua")).unwrap();
+		fs::create_dir(destination.join("addon.json")).unwrap();
+		let transaction = transaction!();
+		let error = gma
+			.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true)
+			.unwrap_err();
+		assert!(error.to_string().contains("create metadata"));
+		assert!(error.to_string().contains("addon.json"));
+		assert!(transaction.aborted());
+
+		fs::remove_dir(destination.join("addon.json")).unwrap();
+		let transaction = transaction!();
+		assert_eq!(
+			gma.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true)
+				.unwrap(),
+			destination
+		);
+		assert_eq!(fs::read(destination.join("lua/test.lua")).unwrap(), b"test");
+		let metadata: serde_json::Value = serde_json::from_slice(&fs::read(destination.join("addon.json")).unwrap()).unwrap();
+		assert_eq!(metadata["title"], "Test");
+		fs::remove_dir_all(root).unwrap();
+	}
+
+	#[test]
+	fn truncated_entry_fails_instead_of_completing() {
+		let (gma, root) = fixture("truncated-extraction", b"x".to_vec());
+		let transaction = transaction!();
+		let error = gma
+			.extract(ExtractDestination::Directory(root.join("output")), &transaction, false, true)
+			.unwrap_err();
+		assert!(
+			matches!(error, GMAError::IOError(ref details) if details.operation == "read archive entry" && details.source.kind() == std::io::ErrorKind::UnexpectedEof)
+		);
+		assert!(error.to_string().contains("source.gma"));
+		fs::remove_dir_all(root).unwrap();
+	}
+
+	#[test]
+	fn decompression_rejects_truncated_streams_even_with_a_valid_gma_header() {
+		let (_, root) = fixture("compressed-extraction", Vec::new());
+		let path = root.join("archive.bin");
+		let options = xz2::stream::LzmaOptions::new_preset(1).unwrap();
+		let stream = xz2::stream::Stream::new_lzma_encoder(&options).unwrap();
+		let mut encoder = xz2::write::XzEncoder::new_stream(Vec::new(), stream);
+		let mut bytes = b"GMAD\x03".to_vec();
+		bytes.resize(1024, 0);
+		encoder.write_all(&bytes).unwrap();
+		let compressed = encoder.finish().unwrap();
+		fs::write(&path, &compressed).unwrap();
+		let transaction = transaction!();
+		assert_eq!(GMAFile::decompress(&path, transaction.clone()).unwrap().size, bytes.len() as u64);
+		transaction.cancel();
+
+		fs::write(&path, &compressed[..compressed.len() - 6]).unwrap();
+		let transaction = transaction!();
+		let error = GMAFile::decompress(&path, transaction.clone()).unwrap_err();
+		assert!(error.to_string().contains("decompress archive"));
+		assert!(error.to_string().contains("archive.bin"));
+		transaction.cancel();
+		fs::remove_dir_all(root).unwrap();
+	}
+
+	#[test]
+	fn empty_archive_writes_metadata_and_cancelled_job_does_not_write() {
+		let (mut gma, root) = fixture("empty-extraction", Vec::new());
+		gma.entries.as_mut().unwrap().clear();
+		let transaction = transaction!();
+		gma.extract(ExtractDestination::Directory(root.join("output")), &transaction, false, true)
+			.unwrap();
+		assert!(root.join("output/addon.json").is_file());
+		let transaction = transaction!();
+		transaction.cancel();
+		assert!(matches!(
+			gma.extract(ExtractDestination::Directory(root.join("cancelled")), &transaction, false, true),
+			Err(GMAError::Cancelled)
+		));
+		assert!(!root.join("cancelled").exists());
+		fs::remove_dir_all(root).unwrap();
+	}
 }

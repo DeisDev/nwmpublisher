@@ -8,6 +8,7 @@
 	import { taskHeight, tasksMax, tasks, tasksNum } from '../transactions.js';
 	import { onDestroy, onMount } from "svelte";
 	import Loading from './Loading.svelte';
+	import JobDiagnostics from './JobDiagnostics.svelte';
 
 	export let transaction;
 	export let statusTextFn;
@@ -73,6 +74,16 @@
 			// Task message
 			finish();
 		} else {
+			progress = transaction.progress;
+			if (transaction.error) {
+				error = transaction.error;
+				finished = true;
+			} else if (transaction.finished) {
+				finish();
+			} else if (transaction.cancelled) {
+				cancelled = true;
+				expire();
+			}
 			transaction?.listen(event => {
 				if ('progress' in event) {
 					progress = event.progress;
@@ -80,7 +91,7 @@
 					finish();
 				} else if (event.error) {
 					error = [event.error, event.data];
-					finish();
+					finished = true;
 				} else if (event.cancelled) {
 					cancelled = true;
 					expire();
@@ -93,8 +104,6 @@
 		}
 	});
 
-	// FIXME errors that are long overflow and cause bad things!
-	// TODO internationalize error strings
 </script>
 
 <div bind:this={taskElem} class="task" class:error={error || cancelled} class:pending={!finished} style="transform: translateY({y}px)" class:expired={expired}>
@@ -109,7 +118,7 @@
 				<CircleAlert id="error" stroke-width="3"/>
 			</div>
 			{#if error}
-				{translateError(...error)}
+				<span class="error-message" title={translateError(...error)}>{translateError(...error)}</span>
 			{:else if cancelled}
 				{$_('cancelled')}
 			{:else if finished}
@@ -122,6 +131,12 @@
 				<span bind:this={statusText}>{statusTextFn({ progress: 0 })}</span>
 			{/if}
 		</div>
+		{#if error}
+			<div class="error-actions">
+				<JobDiagnostics {transaction} context={{ task: statusTextFn(transaction) }}/>
+				<button type="button" on:click={expire} aria-label={$_('close')}><Cross stroke-width="3"/></button>
+			</div>
+		{/if}
 		{#if transaction && transaction.cancellable && !finished && !cancelled && !expired}
 			<div id="cancel" use:tippyFollow={$_('cancel')} on:click={cancel}><Cross id="cancel" stroke-width="3"/></div>
 		{/if}
@@ -129,6 +144,10 @@
 </div>
 
 <style>
+	.error-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; pointer-events: auto; }
+	.error-actions { display: flex; gap: .25rem; padding-right: .5rem; pointer-events: auto; }
+	.error-actions button { cursor: pointer; color: inherit; background: transparent; border: 0; }
+	.task.error:not(.pending) { z-index: 1; }
 	.task {
 		z-index: 1;
 		height: 49px;
@@ -186,6 +205,7 @@
 		width: 1rem;
 	}
 	.task #content {
+		min-width: 0;
 		padding: 1rem;
 		flex: 1;
 		display: flex;

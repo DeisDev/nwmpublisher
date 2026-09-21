@@ -17,31 +17,38 @@ use crate::{game_addons::GameAddons, main_thread_forbidden, ArcBytes};
 
 const GMA_HEADER: &[u8; 4] = b"GMAD";
 
-#[derive(Debug, Clone, Serialize, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum GMAError {
-	IOError,
+	IOError(#[source] crate::IoError),
+	MetadataError(String),
 	FormatError,
 	InvalidHeader,
 	EntryNotFound,
-	LZMA,
+	LZMA(String),
 	Cancelled,
 }
 impl Display for GMAError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		use GMAError::*;
 		match self {
-			IOError => write!(f, "ERR_IO_ERROR"),
+			IOError(error) => write!(f, "ERR_IO_ERROR:{}", error),
+			MetadataError(error) => write!(f, "ERR_GMA_FORMAT_ERROR:{}", error),
 			FormatError => write!(f, "ERR_GMA_FORMAT_ERROR"),
 			InvalidHeader => write!(f, "ERR_GMA_INVALID_HEADER"),
 			EntryNotFound => write!(f, "ERR_GMA_ENTRY_NOT_FOUND"),
-			LZMA => write!(f, "ERR_LZMA"),
+			LZMA(error) => write!(f, "ERR_LZMA:{}", error),
 			Cancelled => write!(f, "ERR_CANCELLED"),
 		}
 	}
 }
-impl From<std::io::Error> for GMAError {
-	fn from(_: std::io::Error) -> Self {
-		Self::IOError
+impl GMAError {
+	pub fn io(operation: &'static str, path: &Path, error: std::io::Error) -> Self {
+		Self::IOError(crate::IoError::new(operation, path, error))
+	}
+}
+impl Serialize for GMAError {
+	fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+		serializer.serialize_str(&self.to_string())
 	}
 }
 
@@ -175,7 +182,7 @@ impl Ord for GMAFile {
 impl GMAFile {
 	fn read_header<P: AsRef<Path>>(mut f: GMAReader, path: P) -> Result<GMAFile, GMAError> {
 		let mut gma = GMAFile {
-			size: path.as_ref().metadata().map(|metadata| metadata.len()).unwrap_or(0),
+			size: crate::stream_len(&mut *f).map_err(|error| GMAError::io("measure archive", path.as_ref(), error))?,
 			path: path.as_ref().to_owned(),
 			id: None,
 			metadata: None,
@@ -187,21 +194,18 @@ impl GMAFile {
 			membuffer: None,
 		};
 
-		if gma.size == 0 {
-			if let Ok(size) = crate::stream_len(&mut *f) {
-				gma.size = size;
-			}
-		}
-
 		let mut header_buf = [0; 4];
-		f.read_exact(&mut header_buf).map_err(|_| GMAError::InvalidHeader)?;
+		f.read_exact(&mut header_buf)
+			.map_err(|error| GMAError::io("read header", &gma.path, error))?;
 		if &header_buf != GMA_HEADER {
 			return Err(GMAError::InvalidHeader);
 		}
 
-		gma.version = f.read_u8()?;
+		gma.version = f.read_u8().map_err(|error| GMAError::io("read version", &gma.path, error))?;
 
-		gma.pointers.metadata = f.seek(SeekFrom::Current(0))?;
+		gma.pointers.metadata = f
+			.seek(SeekFrom::Current(0))
+			.map_err(|error| GMAError::io("seek metadata", &gma.path, error))?;
 
 		gma.compute_extracted_name();
 
@@ -214,7 +218,8 @@ impl GMAFile {
 
 	pub fn open<P: AsRef<Path>>(path: P) -> Result<GMAFile, GMAError> {
 		main_thread_forbidden!();
-		GMAFile::read_header(GMAReader::Disk(BufReader::new(File::open(path.as_ref())?)), path)
+		let file = File::open(path.as_ref()).map_err(|error| GMAError::io("open archive", path.as_ref(), error))?;
+		GMAFile::read_header(GMAReader::Disk(BufReader::new(file)), path)
 	}
 
 	pub fn set_ws_id(&mut self, id: PublishedFileId) {
@@ -321,3 +326,26 @@ pub use read::*;
 pub mod write;
 
 pub mod preview;
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::{error::Error, io};
+
+	#[test]
+	fn io_errors_preserve_context_source_and_wire_message() {
+		let path = Path::new("C:/addons/test.gma");
+		let error = GMAError::io("read archive", path, io::Error::new(io::ErrorKind::PermissionDenied, "access denied"));
+		assert_eq!(error.to_string(), "ERR_IO_ERROR:read archive \"C:/addons/test.gma\": access denied");
+		assert!(error.source().unwrap().source().is_some());
+		assert_eq!(serde_json::to_value(error.clone()).unwrap(), error.to_string());
+	}
+
+	#[test]
+	fn truncated_headers_retain_the_read_failure() {
+		let error = GMAFile::read_header(GMAReader::MemBuffer(std::io::Cursor::new(vec![b'G'].into())), "test.gma").unwrap_err();
+		assert!(
+			matches!(error, GMAError::IOError(ref details) if details.operation == "read header" && details.source.kind() == io::ErrorKind::UnexpectedEof)
+		);
+	}
+}

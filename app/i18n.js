@@ -22,18 +22,11 @@ window.APP_LANGUAGES = JSON.parse(__NWMPUBLISHER_APP_LANGUAGES__);
 
 const RE_SPLIT_ERROR = /^(.*?)(?::([\s\S]*))?$/;
 export function translateError(error, data) {
-	if (data != null) {
-		return get(_)(error, { values: { data: data.toString() } });
-	} else {
-		const match = error.match(RE_SPLIT_ERROR);
-		if (!match) {
-			return get(_)(error);
-		} else if (match[2]) {
-			return get(_)(match[1], { values: { data: match[2] } });
-		} else {
-			return get(_)(match[1]);
-		}
-	}
+	const match = String(error).match(RE_SPLIT_ERROR);
+	const key = match?.[1] ?? String(error);
+	const details = data == null ? match?.[2] : (typeof data === 'string' ? data : JSON.stringify(data, null, 2));
+	const message = get(_)(key, { values: { data: details ?? '' } });
+	return details && !message.includes(details) ? message + '\n' + details : message;
 }
 
 export function switchLanguage(switchLocale) {

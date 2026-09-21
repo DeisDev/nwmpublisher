@@ -2,7 +2,9 @@ use parking_lot::{Condvar, Mutex, MutexGuard};
 use rayon::ThreadPool;
 
 use std::{
-	collections::HashSet, path::PathBuf, sync::{atomic::AtomicBool, Arc}
+	collections::HashSet,
+	path::PathBuf,
+	sync::{atomic::AtomicBool, Arc},
 };
 
 use steamworks::{ClientManager, ItemState, PublishedFileId, QueryResults, UGC};
@@ -88,19 +90,23 @@ impl Downloads {
 			let mut gma = if folder.is_dir() {
 				let mut gma_path = None;
 
-				if let Ok(read_dir) = folder.read_dir() {
-					for entry in read_dir.flatten() {
-						if !crate::path::has_extension(entry.path(), "gma") {
-							continue;
-						}
-						if gma_path.is_some() {
-							// TODO better handling here - just include the extra files in the addon
-							gma_path = None;
-							break;
-						} else {
-							gma_path = Some(entry.path());
-						}
+				let read_dir = match folder.read_dir() {
+					Ok(entries) => entries,
+					Err(error) => return transaction.error(crate::GMAError::io("read download directory", &folder, error).to_string(), turbonone!()),
+				};
+				for entry in read_dir {
+					let entry = match entry {
+						Ok(entry) => entry,
+						Err(error) => return transaction.error(crate::GMAError::io("read download entry", &folder, error).to_string(), turbonone!()),
+					};
+					if !crate::path::has_extension(entry.path(), "gma") {
+						continue;
 					}
+					if gma_path.is_some() {
+						gma_path = None;
+						break;
+					}
+					gma_path = Some(entry.path());
 				}
 
 				if let Some(path) = gma_path {
@@ -114,7 +120,7 @@ impl Downloads {
 			} else if folder.is_file() && crate::path::has_extension(&folder, "bin") {
 				match GMAFile::open(&folder) {
 					Ok(gma) => gma,
-					Err(_) => {
+					Err(crate::GMAError::InvalidHeader) => {
 						transaction.status("decompressing");
 						match GMAFile::decompress(folder, transaction.clone()) {
 							Ok(gma) => {
@@ -124,6 +130,7 @@ impl Downloads {
 							Err(err) => return transaction.error(err.to_string(), turbonone!()),
 						}
 					}
+					Err(error) => return transaction.error(error.to_string(), turbonone!()),
 				}
 			} else {
 				return transaction.error("ERR_DOWNLOAD_MISSING", turbonone!());
@@ -134,9 +141,7 @@ impl Downloads {
 			transaction.status("reading_metadata");
 			transaction.data((Some(gma.metadata.as_ref().map(|metadata| metadata.title().to_owned())), gma.size));
 
-			if let Err(err) = gma.extract(extract_destination, &transaction, false, true) {
-				transaction.error(err.to_string(), turbonone!());
-			}
+			let _ = gma.extract(extract_destination, &transaction, false, true);
 		});
 	}
 

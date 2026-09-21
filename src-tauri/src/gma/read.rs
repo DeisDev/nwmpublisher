@@ -10,12 +10,6 @@ use crate::{ArcBytes, NTStringReader};
 
 use super::{GMAEntry, GMAError, GMAFile, GMAMetadata};
 
-macro_rules! safe_read {
-	( $x:expr ) => {
-		$x.map_err(|_| GMAError::FormatError)
-	};
-}
-
 fn is_unsafe_entry_path(path: &str) -> bool {
 	if path.is_empty() {
 		return true;
@@ -64,7 +58,9 @@ impl GMAFile {
 		if let Some(ref membuffer) = self.membuffer {
 			Ok(GMAReader::MemBuffer(Cursor::new(membuffer.clone())))
 		} else {
-			Ok(GMAReader::Disk(BufReader::new(File::open(&self.path)?)))
+			Ok(GMAReader::Disk(BufReader::new(
+				File::open(&self.path).map_err(|error| GMAError::io("open archive", &self.path, error))?,
+			)))
 		}
 	}
 
@@ -75,20 +71,32 @@ impl GMAFile {
 			Ok(None)
 		} else {
 			let mut handle = self.read()?;
-			handle.seek(SeekFrom::Start(self.pointers.metadata))?;
+			handle
+				.seek(SeekFrom::Start(self.pointers.metadata))
+				.map_err(|error| GMAError::io("seek archive", &self.path, error))?;
 
-			safe_read!(handle.read_u64::<LittleEndian>())?; // steamid [unused]
-			safe_read!(handle.read_u64::<LittleEndian>())?; // timestamp
+			handle
+				.read_u64::<LittleEndian>()
+				.map_err(|error| GMAError::io("read metadata", &self.path, error))?; // steamid [unused]
+			handle
+				.read_u64::<LittleEndian>()
+				.map_err(|error| GMAError::io("read metadata", &self.path, error))?; // timestamp
 
 			if self.version > 1 {
 				// required content [unused]
-				safe_read!(handle.skip_nt_string())?;
+				handle
+					.skip_nt_string()
+					.map_err(|error| GMAError::io("read metadata", &self.path, error))?;
 			}
 
-			let embedded_title = safe_read!(handle.read_nt_string())?;
-			let embedded_description = safe_read!(handle.read_nt_string())?;
+			let embedded_title = handle
+				.read_nt_string()
+				.map_err(|error| GMAError::io("read metadata", &self.path, error))?;
+			let embedded_description = handle
+				.read_nt_string()
+				.map_err(|error| GMAError::io("read metadata", &self.path, error))?;
 
-			self.metadata = Some(match serde_json::de::from_str::<GMAMetadata>(&embedded_description) {
+			let metadata = Some(match serde_json::de::from_str::<GMAMetadata>(&embedded_description) {
 				Ok(mut metadata) => {
 					match &mut metadata {
 						GMAMetadata::Standard { title, .. } => *title = embedded_title,
@@ -105,11 +113,18 @@ impl GMAFile {
 				},
 			});
 
-			safe_read!(handle.skip_nt_string())?; // author [unused]
-			safe_read!(handle.read_i32::<LittleEndian>())?; // addon version [unused]
+			handle
+				.skip_nt_string()
+				.map_err(|error| GMAError::io("read metadata", &self.path, error))?; // author [unused]
+			handle
+				.read_i32::<LittleEndian>()
+				.map_err(|error| GMAError::io("read metadata", &self.path, error))?; // addon version [unused]
 
-			self.pointers.entries_list = handle.seek(SeekFrom::Current(0))?;
+			self.pointers.entries_list = handle
+				.seek(SeekFrom::Current(0))
+				.map_err(|error| GMAError::io("seek archive", &self.path, error))?;
 
+			self.metadata = metadata;
 			self.compute_extracted_name();
 
 			Ok(Some(handle))
@@ -128,15 +143,27 @@ impl GMAFile {
 				Some(handle) => handle,
 				None => self.read()?,
 			};
-			handle.seek(SeekFrom::Start(self.pointers.entries_list))?;
+			handle
+				.seek(SeekFrom::Start(self.pointers.entries_list))
+				.map_err(|error| GMAError::io("seek archive", &self.path, error))?;
 
 			let mut entries = HashMap::new();
 			let mut entry_cursor = 0;
 
-			'read_entries: while handle.read_u32::<LittleEndian>()? != 0 {
-				let path = handle.read_nt_string()?;
-				let size = handle.read_i64::<LittleEndian>()? as u64;
-				let crc = handle.read_u32::<LittleEndian>()?;
+			'read_entries: while handle
+				.read_u32::<LittleEndian>()
+				.map_err(|error| GMAError::io("read entry table", &self.path, error))?
+				!= 0
+			{
+				let path = handle
+					.read_nt_string()
+					.map_err(|error| GMAError::io("read entry table", &self.path, error))?;
+				let size = handle
+					.read_i64::<LittleEndian>()
+					.map_err(|error| GMAError::io("read entry table", &self.path, error))? as u64;
+				let crc = handle
+					.read_u32::<LittleEndian>()
+					.map_err(|error| GMAError::io("read entry table", &self.path, error))?;
 
 				let next_cursor = match (entry_cursor as u64).checked_add(size as u64) {
 					None => return Err(GMAError::FormatError),
@@ -161,9 +188,11 @@ impl GMAFile {
 				entries.insert(path, entry);
 			}
 
-			self.entries = Some(entries);
-			self.pointers.entries = handle.seek(SeekFrom::Current(0))?;
+			self.pointers.entries = handle
+				.seek(SeekFrom::Current(0))
+				.map_err(|error| GMAError::io("seek archive", &self.path, error))?;
 
+			self.entries = Some(entries);
 			Ok(Some(handle))
 		}
 	}

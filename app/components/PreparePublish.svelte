@@ -132,6 +132,9 @@
 	function refreshDefaultIcon() {
 		invoke('default_workshop_icon').then(icon => {
 			if (icon) defaultIconUrl = 'data:image/png;base64,' + icon;
+		}).catch(error => {
+			defaultIconUrl = null;
+			dialog.message(translateError(String(error)), { type: 'error' });
 		});
 	}
 	refreshDefaultIcon();

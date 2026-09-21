@@ -1,5 +1,8 @@
 pub mod path;
 
+mod io_error;
+pub use io_error::IoError;
+
 #[macro_use]
 mod macros;
 pub use macros::*;

@@ -369,24 +369,27 @@ pub fn get_installed_addon(path: PathBuf) -> Option<Arc<Addon>> {
 pub fn downloader_extract_gmas(paths: Vec<PathBuf>) {
 	let destination = &app_data!().settings.read().extract_destination;
 	for path in paths.into_iter() {
-		if path.is_file()
-			&& match path.extension() {
-				Some(extension) => extension.to_string_lossy().eq_ignore_ascii_case("gma"),
-				None => false,
-			} {
-			if let Ok(mut gma) = GMAFile::open(&path) {
-				let transaction = transaction!();
-				webview_emit!(
-					"ExtractionStarted",
-					(
-						transaction.id,
-						Some(path.clone()),
-						path.file_name().map(|x| x.to_string_lossy().to_string()).unwrap(),
-						gma.id
-					)
-				);
-				transaction.data((turbonone!(), path.metadata().map(|metadata| metadata.len()).unwrap_or(0)));
-				ignore! { gma.extract(destination.clone(), &transaction, false, true) };
+		if match path.extension() {
+			Some(extension) => extension.to_string_lossy().eq_ignore_ascii_case("gma"),
+			None => false,
+		} {
+			let transaction = transaction!();
+			let gma = GMAFile::open(&path);
+			webview_emit!(
+				"ExtractionStarted",
+				(
+					transaction.id,
+					Some(path.clone()),
+					path.file_name().map(|name| name.to_string_lossy().to_string()),
+					gma.as_ref().ok().and_then(|gma| gma.id)
+				)
+			);
+			match gma {
+				Ok(mut gma) => {
+					transaction.data((turbonone!(), gma.size));
+					let _ = gma.extract(destination.clone(), &transaction, false, true);
+				}
+				Err(error) => transaction.error(error.to_string(), turbonone!()),
 			}
 		}
 	}

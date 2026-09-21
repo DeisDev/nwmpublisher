@@ -30,14 +30,21 @@ pub fn preview_gma(path: Option<PathBuf>) -> Result<Option<Vec<GMAEntry>>, GMAEr
 pub fn extract_preview_entry(gma_path: PathBuf, entry_path: String) -> Option<u32> {
 	let mut lock = PREVIEW_GMA.lock();
 	if let Some(gma) = lock.as_mut() {
-		if *gma.path != gma_path {
-			let mut race_gma = GMAFile::open(gma_path).ok()?;
-			race_gma.entries().ok()?;
-			*gma = Arc::new(race_gma);
-		}
-
 		let transaction = transaction!();
 		let id = transaction.id;
+		if *gma.path != gma_path {
+			let loaded = GMAFile::open(gma_path).and_then(|mut gma| {
+				gma.entries()?;
+				Ok(gma)
+			});
+			match loaded {
+				Ok(loaded) => *gma = Arc::new(loaded),
+				Err(error) => {
+					transaction.error(error.to_string(), turbonone!());
+					return Some(id);
+				}
+			}
+		}
 
 		let gma_ref = gma.clone();
 		rayon::spawn(move || {
@@ -54,14 +61,21 @@ pub fn extract_preview_entry(gma_path: PathBuf, entry_path: String) -> Option<u3
 pub fn extract_preview_gma(gma_path: PathBuf, dest: ExtractDestination) -> Option<u32> {
 	let mut lock = PREVIEW_GMA.lock();
 	if let Some(gma) = lock.as_mut() {
-		if *gma.path != gma_path {
-			let mut race_gma = GMAFile::open(gma_path).ok()?;
-			race_gma.entries().ok()?;
-			*gma = Arc::new(race_gma);
-		}
-
 		let transaction = transaction!();
 		let id = transaction.id;
+		if *gma.path != gma_path {
+			let loaded = GMAFile::open(gma_path).and_then(|mut gma| {
+				gma.entries()?;
+				Ok(gma)
+			});
+			match loaded {
+				Ok(loaded) => *gma = Arc::new(loaded),
+				Err(error) => {
+					transaction.error(error.to_string(), turbonone!());
+					return Some(id);
+				}
+			}
+		}
 
 		let gma_ref = gma.clone();
 		rayon::spawn(move || {

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Copy per-job diagnostics from failed publishing, downloading, and extraction jobs.
 - Update an existing addon's description without selecting or uploading addon files, and open its previous change notes on Steam from the Changelog tab.
 - Undo and redo typing, pasting, and BBCode formatting in both editors, using buttons or Ctrl/Cmd+Z, Ctrl+Y, and Ctrl/Cmd+Shift+Z. Each editor keeps its history across tab and fullscreen changes.
 - Edit Workshop descriptions as plain text or BBCode when publishing or updating addons, with buttons for common Steam formatting. Untouched descriptions remain unchanged; invalid or oversized descriptions are rejected before upload.
@@ -26,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserve the operation, path, and underlying error when publishing or extracting files fails. Report extraction completion only after files and metadata are written and flushed, reject truncated archive reads, and return icon-generation errors instead of crashing or silently using another image.
 - Show Steam error details in downloader tooltips for both separate error data and combined `KEY:details` messages.
 - Keep the publishing details and upload button visible at the default window size by adapting the image preview height and tightening spacing.
 - Replaced the old logo in the Windows installer's header banner.
