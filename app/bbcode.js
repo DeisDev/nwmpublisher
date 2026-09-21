@@ -1,10 +1,10 @@
-const supportedTags = new Set(['b', 'i', 'u', 'strike', 'h1', 'h2', 'h3', 'spoiler', 'url', 'list', 'olist', 'quote', 'code', 'noparse', 'img', 'hr']);
+const supportedTags = new Set(['b', 'i', 'u', 'strike', 'h1', 'h2', 'h3', 'spoiler', 'url', 'list', 'olist', 'quote', 'code', 'noparse', 'img', 'hr', 'table', 'tr', 'th', 'td']);
 const literalTags = new Set(['code', 'noparse', 'img']);
 
 export function parseBBCode(source) {
 	const root = { children: [] };
 	const stack = [root];
-	const tokens = /\[(\/?)([a-z][a-z0-9]*|\*)(?:=([^\]\r\n]*))?\]/gi;
+	const tokens = /\[(\/?)([a-z][a-z0-9]*|\*)(?:=([^\]\r\n]*)|([ \t]+[^\]\r\n]*))?\]/gi;
 	let position = 0;
 	let match;
 
@@ -29,10 +29,11 @@ export function parseBBCode(source) {
 	while ((match = tokens.exec(source))) {
 		append(source.slice(position, match.index));
 		position = tokens.lastIndex;
-		const [opening, closing, name, argument] = match;
+		const [opening, closing, name, argument, attributes] = match;
 		const tag = name.toLowerCase();
+		const options = attributes?.trim().toLowerCase().split(/[ \t]+/) ?? [];
 
-		if (tag === '*' && !closing && argument === undefined) {
+		if (tag === '*' && !closing && argument === undefined && attributes === undefined) {
 			let listIndex = stack.length - 1;
 			while (listIndex > 0 && !['list', 'olist'].includes(stack[listIndex].tag)) listIndex--;
 			if (listIndex === 0) {
@@ -46,7 +47,15 @@ export function parseBBCode(source) {
 			continue;
 		}
 
-		if (!supportedTags.has(tag) || (argument !== undefined && (closing || !['url', 'quote'].includes(tag)))) {
+		if (!supportedTags.has(tag)
+			|| (argument !== undefined && (closing || !['url', 'quote'].includes(tag)))
+			|| (attributes !== undefined && (closing || tag !== 'table' || options.some(option => !['noborder=1', 'equalcells=1'].includes(option))))) {
+			append(opening);
+			continue;
+		}
+
+		const parent = stack[stack.length - 1].tag;
+		if (!closing && ((tag === 'tr' && parent !== 'table') || (['th', 'td'].includes(tag) && parent !== 'tr'))) {
 			append(opening);
 			continue;
 		}
@@ -84,6 +93,10 @@ export function parseBBCode(source) {
 			continue;
 		}
 		const node = { tag, argument, opening, children: [] };
+		if (tag === 'table') {
+			node.noborder = options.includes('noborder=1');
+			node.equalcells = options.includes('equalcells=1');
+		}
 		stack[stack.length - 1].children.push(node);
 		stack.push(node);
 	}

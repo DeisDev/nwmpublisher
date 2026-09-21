@@ -1,5 +1,5 @@
 <script context="module">
-	const elements = { b: 'strong', i: 'em', u: 'u', strike: 's', h1: 'h1', h2: 'h2', h3: 'h3' };
+	const elements = { b: 'strong', i: 'em', u: 'u', strike: 's', h1: 'h1', h2: 'h2', h3: 'h3', table: 'table', tr: 'tr', th: 'th', td: 'td' };
 </script>
 
 <script>
@@ -34,7 +34,7 @@
 			{/each}
 		</svelte:element>
 	{:else if elements[node.tag]}
-		<svelte:element this={elements[node.tag]} class="formatted"><svelte:self nodes={node.children}/></svelte:element>
+		<svelte:element this={elements[node.tag]} class="formatted" class:noborder={node.noborder} class:equalcells={node.equalcells}><svelte:self nodes={node.children}/></svelte:element>
 	{:else}
 		<svelte:self nodes={node.children}/>
 	{/if}
@@ -64,6 +64,30 @@
 	}
 	li {
 		white-space: pre-wrap;
+	}
+	table.formatted {
+		--cell-border: 1px solid #666;
+		border-collapse: collapse;
+		max-width: 100%;
+		margin: .5rem 0;
+		white-space: normal;
+	}
+	table.formatted.noborder {
+		--cell-border: 0;
+	}
+	table.formatted.equalcells {
+		width: 100%;
+		table-layout: fixed;
+	}
+	th.formatted, td.formatted {
+		border: var(--cell-border);
+		padding: .4rem .6rem;
+		text-align: left;
+		vertical-align: top;
+		white-space: pre-wrap;
+	}
+	th.formatted {
+		background: #202020;
 	}
 	pre {
 		padding: .7rem;

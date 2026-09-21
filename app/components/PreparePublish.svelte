@@ -579,10 +579,10 @@
 			</details>
 		</div>
 		<div id="publish-panel-description" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-description" tabindex="0" hidden={activeTab !== 'description'}>
-			<BBCodeEditor id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen}/>
+			<BBCodeEditor id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'}/>
 		</div>
 		<div id="publish-panel-changelog" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-changelog" tabindex="0" hidden={activeTab !== 'changelog'}>
-			<BBCodeEditor id="changes" label={$_('changelog_optional')} bind:value={changes} disabled={$isPublishing} bind:formattingOpen={changesFormattingOpen}/>
+			<BBCodeEditor id="changes" label={$_('changelog_optional')} bind:value={changes} disabled={$isPublishing} bind:formattingOpen={changesFormattingOpen} active={$preparePublish && activeTab === 'changelog'}/>
 		</div>
 	</div>
 </Modal>
@@ -613,6 +613,10 @@
 	}
 	#details-container > * {
 		flex-shrink: 0;
+	}
+	#details-container > #icon-container {
+		flex: 0 1 15rem;
+		min-height: 4rem;
 	}
 	#publish-workspace {
 		flex: 1;
@@ -700,6 +704,7 @@
 	}
 	.path-container > input {
 		flex: 1;
+		min-width: 0;
 	}
 	#gma-name-container > .extension {
 		display: flex;
@@ -758,7 +763,7 @@
 	}
 	#addon-icon {
 		width: 100%;
-		height: 15rem;
+		height: 100%;
 		position: relative;
 		max-height: 100%;
 	}
@@ -778,7 +783,6 @@
 	}
 	#addon-icon.upscale {
 		width: max-content;
-		height: 15rem;
 		position: relative;
 		display: block;
 		margin: auto;
@@ -807,7 +811,7 @@
 
 	p {
 		white-space: pre-line;
-		line-height: 1.6;
+		line-height: 1.4;
 		margin-top: 0;
 		margin-bottom: 0;
 		text-align: center;
@@ -823,10 +827,11 @@
 	#addon-tags select {
 		flex: 1;
 		flex-basis: 0;
+		min-width: 0;
 	}
 
 	#details-container > *:not(:last-child) {
-		margin-bottom: 1rem;
+		margin-bottom: .6rem;
 	}
 
 	select {
@@ -963,7 +968,6 @@
 	}
 
 	#ws-link {
-		margin-bottom: 1.2rem;
 		text-align: center;
 	}
 	#ws-link :global(.icon) {
