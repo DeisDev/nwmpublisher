@@ -110,24 +110,56 @@ impl ContentPath {
 			return Err(PublishError::InvalidContentPath);
 		}
 
-		let mut gma_path: Option<PathBuf> = None;
+		let mut found_gma = false;
 		for entry in path
 			.read_dir()
 			.map_err(|error| PublishError::io("read content directory", &path, error))?
 		{
 			let entry = entry.map_err(|error| PublishError::io("read directory entry", &path, error))?;
-			let path = entry.path();
-			if path.extension().is_none_or(|extension| extension != "gma") {
-				continue;
+			let entry_path = entry.path();
+			if !entry
+				.file_type()
+				.map_err(|error| PublishError::io("read content file type", &entry_path, error))?
+				.is_file() || entry_path.extension().is_none_or(|extension| !extension.eq_ignore_ascii_case("gma"))
+			{
+				return Err(PublishError::InvalidContentPath);
 			}
 
-			if gma_path.is_some() {
+			if found_gma {
 				return Err(PublishError::MultipleGMAs);
 			}
-			gma_path = Some(path);
+			found_gma = true;
 		}
 
-		gma_path.map(ContentPath).ok_or(PublishError::NoEntries)
+		if found_gma {
+			Ok(ContentPath(path))
+		} else {
+			Err(PublishError::NoEntries)
+		}
+	}
+}
+
+fn with_publish_staging<T>(parent: &Path, operation: impl FnOnce(&Path, &Path) -> Result<T, String>) -> Result<T, String> {
+	std::fs::create_dir_all(parent).map_err(|error| PublishError::io("create publishing parent directory", parent, error).to_string())?;
+	let staging = tempfile::Builder::new()
+		.prefix("nwmpublisher-publishing-")
+		.tempdir_in(parent)
+		.map_err(|error| PublishError::io("create publishing staging directory", parent, error).to_string())?;
+	let root = staging.path().to_owned();
+	let content = root.join("content");
+	let result = std::fs::create_dir(&content)
+		.map_err(|error| PublishError::io("create publishing content directory", &content, error).to_string())
+		.and_then(|()| operation(&root, &content));
+
+	// Steam's completion callback must have returned before the operation releases these files.
+	let cleanup = staging
+		.close()
+		.map_err(|error| PublishError::io("remove publishing staging directory", &root, error));
+	match (result, cleanup) {
+		(Ok(value), Ok(())) => Ok(value),
+		(Err(error), Ok(())) => Err(error),
+		(Ok(_), Err(error)) => Err(format!("{} (operation completed; temporary-file cleanup failed)", error)),
+		(Err(error), Err(cleanup)) => Err(format!("{}\nCleanup failed: {}", error, cleanup)),
 	}
 }
 
@@ -559,25 +591,30 @@ pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId
 	let id = transaction.id;
 
 	rayon::spawn(move || {
-		let preview = match WorkshopIcon::new(icon_path, upscale).and_then(|icon| icon.into_path(&app_data!().temp_dir())) {
-			Ok(icon) => icon,
-			Err(error) => {
-				transaction.error(error.to_string(), turbonone!());
-				return;
+		let temp_dir = app_data!().temp_dir().to_owned();
+		let result = with_publish_staging(&temp_dir, |root, _| {
+			let preview = WorkshopIcon::new(icon_path, upscale)
+				.and_then(|icon| icon.into_path(root))
+				.map_err(|error| error.to_string())?;
+			if transaction.aborted() {
+				return Ok(None);
 			}
-		};
-
-		let result = steam!().update_icon(addon_id, preview, &transaction);
+			steam!()
+				.update_icon(addon_id, preview, &transaction)
+				.map(Some)
+				.map_err(|error| error.to_string())
+		});
 
 		match result {
-			Ok(legal_agreement) => {
+			Ok(Some(legal_agreement)) if !transaction.aborted() => {
 				if legal_agreement {
 					crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
 				}
 				transaction.finished(turbonone!());
 			}
+			Ok(_) => {}
 			Err(error) => {
-				transaction.error(error.to_string(), turbonone!());
+				transaction.error(error, turbonone!());
 			}
 		};
 	});
@@ -609,21 +646,33 @@ pub fn publish_description(addon_id: PublishedFileId, description: String) -> Re
 
 const DEFAULT_GMA_FILE_NAME: &str = "publishedaddon";
 const GMA_FILE_NAME_MAX_CHARS: usize = 120;
+const GMA_FILE_NAME_MAX_BYTES: usize = 251;
 
 /// Turns an arbitrary string into a file name that is safe on every supported platform.
 /// Returns None when nothing usable is left, so that callers can fall back to another name.
 fn sanitize_gma_file_name(name: &str) -> Option<String> {
+	let mut bytes = 0;
 	let sanitized: String = name
 		.trim()
 		.chars()
 		.filter(|c| !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
 		.take(GMA_FILE_NAME_MAX_CHARS)
+		.take_while(|c| {
+			bytes += c.len_utf8();
+			bytes <= GMA_FILE_NAME_MAX_BYTES
+		})
 		.collect();
 
-	// Windows rejects file names that end in a dot or a space
-	let sanitized = sanitized.trim().trim_end_matches('.').trim_end();
+	// Leave room for .gma and avoid Windows device names, even with multiple extensions.
+	let sanitized = sanitized.trim().trim_end_matches(|c: char| c == '.' || c.is_whitespace());
+	let base = sanitized.split('.').next().unwrap().trim_end().to_ascii_uppercase();
+	let reserved = matches!(base.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+		|| base
+			.strip_prefix("COM")
+			.or_else(|| base.strip_prefix("LPT"))
+			.is_some_and(|suffix| matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"));
 
-	if sanitized.is_empty() {
+	if sanitized.is_empty() || sanitized.eq_ignore_ascii_case(".gma") || reserved {
 		None
 	} else {
 		Some(sanitized.to_owned())
@@ -637,9 +686,10 @@ fn resolve_gma_file_name(gma_name: Option<&str>) -> String {
 		.and_then(sanitize_gma_file_name)
 		.unwrap_or_else(|| DEFAULT_GMA_FILE_NAME.to_owned());
 
-	if !file_name.to_ascii_lowercase().ends_with(".gma") {
-		file_name.push_str(".gma");
+	if file_name.to_ascii_lowercase().ends_with(".gma") {
+		file_name.truncate(file_name.len() - 4);
 	}
+	file_name.push_str(".gma");
 
 	file_name
 }
@@ -679,57 +729,28 @@ pub fn publish(request: PublishRequest) -> u32 {
 	let is_updating = update_id.is_some();
 
 	rayon::spawn(move || {
-		if let Err(error) = validate_description(description.as_deref()) {
-			transaction.error(error.to_string(), turbonone!());
-			return;
-		}
+		let temp_dir = app_data!().temp_dir().to_owned();
+		let result = with_publish_staging(&temp_dir, |root, content| {
+			validate_description(description.as_deref()).map_err(|error| error.to_string())?;
+			if transaction.aborted() {
+				return Ok(None);
+			}
 
-		let preview = match icon_path {
-			Some(icon_path) => {
-				transaction.status("PUBLISH_PROCESSING_ICON");
-
-				match WorkshopIcon::new(icon_path, upscale) {
-					Ok(icon) => Some(icon),
-					Err(error) => {
-						transaction.error(error.to_string(), turbonone!());
-						return;
-					}
+			let preview = match icon_path {
+				Some(icon_path) => {
+					transaction.status("PUBLISH_PROCESSING_ICON");
+					Some(WorkshopIcon::new(icon_path, upscale).map_err(|error| error.to_string())?)
 				}
-			}
-			None => {
-				if !is_updating {
-					Some(WorkshopIcon::Default)
-				} else {
-					None
-				}
-			}
-		};
+				None if !is_updating => Some(WorkshopIcon::Default),
+				None => None,
+			};
+			let preview = preview.map(|icon| icon.into_path(root)).transpose().map_err(|error| error.to_string())?;
 
-		let preview = match preview.map(|icon| icon.into_path(&app_data!().temp_dir())).transpose() {
-			Ok(preview) => preview,
-			Err(error) => {
-				transaction.error(error.to_string(), turbonone!());
-				return;
-			}
-		};
+			transaction.status("PUBLISH_PACKING");
 
-		transaction.status("PUBLISH_PACKING");
-
-		let mut path = app_data!().temp_dir().to_owned();
-		path.pop();
-		path.push("nwmpublisher_publishing");
-
-		if let Err(error) = std::fs::create_dir_all(&path) {
-			transaction.error(PublishError::io("create publishing directory", &path, error).to_string(), turbonone!());
-			return;
-		}
-
-		path.push(resolve_gma_file_name(gma_name.as_deref()));
-
-		{
 			let gma = GMAFile {
 				// TODO convert to GMAFile::new()
-				path: path.clone(),
+				path: content.join(resolve_gma_file_name(gma_name.as_deref())),
 				size: 0,
 				id: None,
 				metadata: Some(GMAMetadata::Standard {
@@ -747,83 +768,77 @@ pub fn publish(request: PublishRequest) -> u32 {
 			};
 
 			if let Err(error) = gma.create(&content_path_src, transaction.clone()) {
-				if !transaction.aborted() {
-					transaction.error(error.to_string(), turbonone!());
+				if transaction.aborted() {
+					return Ok(None);
 				}
-				return;
+				return Err(error.to_string());
 			}
-		}
-
-		let mut content_path = path.clone();
-		content_path.pop();
-
-		let content_path = match ContentPath::new(content_path) {
-			Ok(content_path) => content_path,
-			Err(error) => {
-				transaction.error(error.to_string(), turbonone!());
-				return;
+			if transaction.aborted() {
+				return Ok(None);
 			}
-		};
+			let content_path = ContentPath::new(content.to_owned()).map_err(|error| error.to_string())?;
 
-		transaction.status("PUBLISH_STARTING");
+			transaction.status("PUBLISH_STARTING");
 
-		let (id, result) = if let Some(id) = update_id {
-			(
-				update_id,
-				steam!().update(
-					id,
-					WorkshopUpdateType::Update {
+			let (id, result) = if let Some(id) = update_id {
+				(
+					update_id,
+					steam!().update(
+						id,
+						WorkshopUpdateType::Update {
+							description,
+							path: content_path,
+							tags,
+							addon_type,
+							preview,
+							changes,
+						},
+						&transaction,
+					),
+				)
+			} else {
+				steam!().publish(
+					WorkshopUpdateType::Creation {
+						title,
 						description,
 						path: content_path,
 						tags,
 						addon_type,
-						preview,
+						preview: preview.unwrap(),
 						changes,
 					},
 					&transaction,
-				),
-			)
-		} else {
-			steam!().publish(
-				WorkshopUpdateType::Creation {
-					title,
-					description,
-					path: content_path,
-					tags,
-					addon_type,
-					preview: preview.unwrap(),
-					changes,
-				},
-				&transaction,
-			)
-		};
-
-		ignore! { std::fs::remove_file(path) };
+				)
+			};
+			match result {
+				Ok(legal_agreement) => Ok(Some((id.unwrap(), legal_agreement))),
+				Err(error) => {
+					if !is_updating {
+						if let Some(id) = id {
+							steam!().client().ugc().delete_item(id, |_| {});
+						}
+					}
+					Err(error.to_string())
+				}
+			}
+		});
 
 		match result {
-			Ok(legal_agreement) => {
-				if legal_agreement {
-					crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
+			Ok(Some((id, legal_agreement))) => {
+				if !transaction.aborted() {
+					if legal_agreement {
+						crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
+					}
+					crate::path::open(format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id.0));
+					transaction.finished(turbonone!());
 				}
-
-				let id = id.unwrap();
-
-				crate::path::open(format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id.0));
-
-				transaction.finished(turbonone!());
 
 				app_data!().settings.write().my_workshop_local_paths.insert(id, content_path_src);
 				ignore! { app_data!().settings.read().save() };
 				app_data!().send();
 			}
-			Err(error) => {
-				transaction.error(error.to_string(), turbonone!());
-				if !is_updating {
-					if let Some(id) = id {
-						steam!().client().ugc().delete_item(id, |_| {});
-					}
-				}
-			}
+			Ok(None) => {}
+			Err(error) => transaction.error(error, turbonone!()),
 		};
 	});
 
@@ -861,7 +876,191 @@ pub fn verify_icon(path: PathBuf) -> Result<(String, bool), Transaction> {
 
 #[cfg(test)]
 mod tests {
-	use super::{publish_description, validate_description, PublishError, PublishRequest, WORKSHOP_DESCRIPTION_MAX_BYTES};
+	use super::*;
+	use std::fs;
+
+	#[test]
+	fn overlapping_jobs_isolate_archives_and_generated_icons() {
+		let parent = tempfile::tempdir().unwrap();
+		let source = parent.path().join("source.png");
+		DynamicImage::new_rgb8(32, 32).save(&source).unwrap();
+		let first_root = with_publish_staging(parent.path(), |first_root, first_content| {
+			let archive = first_content.join("addon.gma");
+			fs::write(&archive, b"first job").unwrap();
+			let first_icon = WorkshopIcon::new(&source, true).unwrap().into_path(first_root).unwrap();
+			assert_eq!(first_icon.parent(), Some(first_root));
+			let content = ContentPath::new(first_content.to_owned()).unwrap();
+			assert_eq!(&**content, first_content);
+			assert_eq!(fs::read_dir(&*content).unwrap().count(), 1);
+
+			let second_root = with_publish_staging(parent.path(), |second_root, second_content| {
+				assert_ne!(first_root, second_root);
+				fs::write(second_content.join("addon.gma"), b"second job").unwrap();
+				let second_icon = WorkshopIcon::new(&source, true).unwrap().into_path(second_root).unwrap();
+				assert_ne!(first_icon, second_icon);
+				assert_eq!(fs::read(&archive).unwrap(), b"first job");
+				assert_eq!(fs::read(second_content.join("addon.gma")).unwrap(), b"second job");
+				assert_eq!(&**ContentPath::new(second_content.to_owned()).unwrap(), second_content);
+				Ok(second_root.to_owned())
+			})?;
+			assert!(!second_root.exists());
+			assert!(archive.is_file());
+			assert!(first_icon.is_file());
+			Ok(first_root.to_owned())
+		})
+		.unwrap();
+		assert!(!first_root.exists());
+		assert!(source.is_file());
+		parent.close().unwrap();
+	}
+
+	#[test]
+	fn staging_cleans_up_after_failure_and_cancellation() {
+		let parent = tempfile::tempdir().unwrap();
+		for failure in [true, false] {
+			let mut staged_root = PathBuf::new();
+			let result = with_publish_staging(parent.path(), |root, content| {
+				staged_root = root.to_owned();
+				fs::write(content.join("partial.gma"), b"partial archive").unwrap();
+				fs::write(root.join("default_workshop_icon.png"), b"generated preview").unwrap();
+				if failure {
+					return Err("ERR_STEAM_ERROR:upload failed".to_owned());
+				}
+				Ok(None::<()>)
+			});
+			if failure {
+				assert_eq!(result.unwrap_err(), "ERR_STEAM_ERROR:upload failed");
+			} else {
+				assert_eq!(result.unwrap(), None);
+			}
+			assert!(!staged_root.exists());
+		}
+		parent.close().unwrap();
+	}
+
+	#[test]
+	fn staging_cleans_up_after_icon_and_content_validation_errors() {
+		let parent = tempfile::tempdir().unwrap();
+		for invalid_icon in [true, false] {
+			let mut staged_root = PathBuf::new();
+			let result = with_publish_staging(parent.path(), |root, content| {
+				staged_root = root.to_owned();
+				fs::write(content.join("addon.gma"), b"archive").unwrap();
+				if invalid_icon {
+					WorkshopIcon::new(root.join("missing.png"), true).map_err(|error| error.to_string())?;
+				} else {
+					fs::write(content.join("second.gma"), b"another archive").unwrap();
+					ContentPath::new(content.to_owned()).map_err(|error| error.to_string())?;
+				}
+				Ok(())
+			});
+			assert!(result
+				.unwrap_err()
+				.contains(if invalid_icon { "read icon metadata" } else { "ERR_MULTIPLE_GMAS" }));
+			assert!(!staged_root.exists());
+		}
+		parent.close().unwrap();
+	}
+
+	#[cfg(target_os = "windows")]
+	#[test]
+	fn cleanup_failures_preserve_the_operation_error_and_path() {
+		use std::os::windows::fs::OpenOptionsExt;
+		let parent = tempfile::tempdir().unwrap();
+		for failure in [true, false] {
+			let mut lock = None;
+			let mut staged_root = PathBuf::new();
+			let error = with_publish_staging(parent.path(), |root, content| {
+				staged_root = root.to_owned();
+				lock = Some(
+					fs::OpenOptions::new()
+						.write(true)
+						.create_new(true)
+						.share_mode(0)
+						.open(content.join("locked.gma"))
+						.unwrap(),
+				);
+				if failure {
+					Err("ERR_STEAM_ERROR:upload failed".to_owned())
+				} else {
+					Ok(())
+				}
+			})
+			.unwrap_err();
+			assert!(error.contains("remove publishing staging directory"));
+			assert!(error.contains(staged_root.to_str().unwrap()));
+			assert!(error.contains(if failure {
+				"ERR_STEAM_ERROR:upload failed"
+			} else {
+				"operation completed"
+			}));
+			drop(lock);
+		}
+		parent.close().unwrap();
+	}
+
+	#[test]
+	fn content_requires_exactly_one_regular_gma_and_returns_its_directory() {
+		let directory = tempfile::tempdir().unwrap();
+		let path = directory.path();
+		assert!(matches!(ContentPath::new(path.to_owned()), Err(PublishError::NoEntries)));
+		let archive = path.join("addon.GMA");
+		fs::create_dir(&archive).unwrap();
+		assert!(matches!(ContentPath::new(path.to_owned()), Err(PublishError::InvalidContentPath)));
+		fs::remove_dir(&archive).unwrap();
+		fs::write(&archive, b"archive").unwrap();
+		assert_eq!(&**ContentPath::new(path.to_owned()).unwrap(), path);
+		let extra = path.join("preview.png");
+		fs::write(&extra, b"icon").unwrap();
+		assert!(matches!(ContentPath::new(path.to_owned()), Err(PublishError::InvalidContentPath)));
+		fs::remove_file(extra).unwrap();
+		fs::write(path.join("second.gma"), b"archive").unwrap();
+		assert!(matches!(ContentPath::new(path.to_owned()), Err(PublishError::MultipleGMAs)));
+		directory.close().unwrap();
+	}
+
+	#[test]
+	fn generated_names_are_sanitized_and_accepted_as_content() {
+		let directory = tempfile::tempdir().unwrap();
+		for (input, expected) in [
+			(None, "publishedaddon.gma"),
+			(Some(""), "publishedaddon.gma"),
+			(Some(" /\\:*?\"<>|\0\n . . "), "publishedaddon.gma"),
+			(Some(".GMA"), "publishedaddon.gma"),
+			(Some("NUL.tar.gma"), "publishedaddon.gma"),
+			(Some("con .gma"), "publishedaddon.gma"),
+			(Some("prn"), "publishedaddon.gma"),
+			(Some("AUX"), "publishedaddon.gma"),
+			(Some("COM1"), "publishedaddon.gma"),
+			(Some("lpt9.GMA"), "publishedaddon.gma"),
+			(Some("COM¹"), "publishedaddon.gma"),
+			(Some("LPT²"), "publishedaddon.gma"),
+			(Some("COM³"), "publishedaddon.gma"),
+			(Some("COM10"), "COM10.gma"),
+			(Some(" My:Addon?.GmA  "), "MyAddon.gma"),
+			(Some("name. . "), "name.gma"),
+			(Some("../folder\\addon\0"), "..folderaddon.gma"),
+		] {
+			let name = resolve_gma_file_name(input);
+			assert_eq!(name, expected, "{input:?}");
+			assert_eq!(Path::new(&name).components().count(), 1);
+			let archive = directory.path().join(name);
+			fs::write(&archive, b"archive").unwrap();
+			assert!(ContentPath::new(directory.path().to_owned()).is_ok());
+			fs::remove_file(archive).unwrap();
+		}
+		for input in ["a".repeat(130), "🦀".repeat(120), "界".repeat(120)] {
+			let name = resolve_gma_file_name(Some(&input));
+			assert!(name.len() <= 255);
+			assert!(name.chars().count() <= GMA_FILE_NAME_MAX_CHARS + 4);
+			assert!(name.ends_with(".gma"));
+			let archive = directory.path().join(name);
+			fs::write(&archive, b"archive").unwrap();
+			assert!(ContentPath::new(directory.path().to_owned()).is_ok());
+			fs::remove_file(archive).unwrap();
+		}
+		directory.close().unwrap();
+	}
 
 	#[test]
 	fn publish_request_accepts_frontend_fields_and_optional_updates() {

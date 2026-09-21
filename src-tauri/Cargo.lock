@@ -2638,6 +2638,7 @@ dependencies = [
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
  "tauri-plugin-shell",
+ "tempfile",
  "thiserror 1.0.58",
  "trash",
  "turbonone",

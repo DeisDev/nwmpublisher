@@ -59,6 +59,7 @@ trash = "2.0.1"
 ureq = { version = "2.9.4", features = ["native-tls"] }
 regex = "1"
 steamworks = { version = "0.11.0", features = ["serde"] }
+tempfile = "3.10.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 fork = "0.1"
