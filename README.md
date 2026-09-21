@@ -5,7 +5,7 @@
 # ⚙️ nwmpublisher (no watermark publisher)
 
 A fork of [gmpublisher](https://github.com/WilliamVenner/gmpublisher) with the branding stripped out.
-Underneath it's the same feature-packed Workshop publisher for Garry's Mod.
+At it's core, it's still the same feature-packed workshop publisher for Garry's Mod, but now with some improvements made in various areas such as quality of life and stability. 
 
 Maintained by [DeisDev](https://github.com/DeisDev) ("CatSniffer").
 
@@ -90,19 +90,13 @@ To move them yourself instead, copy `settings.json` from the old `gmpublisher` f
 
 [Want to translate nwmpublisher to your language?](i18n)
 
-## Requirements
+## Supported Platforms
 
-Windows, macOS or Linux
+* Windows
+* MacOS (untested)
+* Linux (untested)
 
-Linux users may need to install additional dependencies.
-
-## Technical Stuff
-
-* The program makes heavy use of multithreading, and will work best on processors with a decent amount of cores.
-* Made using [Rust](https://www.rust-lang.org/) (backend) and [Svelte](https://svelte.dev/) (frontend)
-* This is not an Electron app; this is a [Tauri](https://github.com/tauri-apps/tauri) app. Big thanks to all the contributors to Tauri for their amazing work on finally killing Electron for good.
-* nwmpublisher uses the fantastic [steamworks-rs](https://crates.io/crates/steamworks) library for interfacing with the [Steamworks SDK](https://partner.steamgames.com/doc/api)
-* The program is only about ~10 MB
+Windows is what I develop and test this program on. Linux and MacOS may work, or it may not. I know upstream has several issues with linux. I am working on making nwmpublisher work great on all platforms, not just windows. 
 
 ## Media
 
