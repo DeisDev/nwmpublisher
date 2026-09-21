@@ -19,12 +19,13 @@ pub enum VariableSingleton<T> {
 
 pub type PromiseHashCache<K, V> = PromiseCache<HashMap<K, V>, K, V>;
 pub type PromiseHashNullableCache<K, V> = PromiseCache<HashMap<K, V>, K, Option<V>>;
+pub type PromiseCallbacks<Args> = VariableSingleton<Box<dyn FnOnce(&Args) + Send + 'static>>;
 
 #[derive(derive_more::Deref)]
 pub struct PromiseCache<Cache: Default + Send + Sync + 'static, K: Hash + Eq + Clone, Args: Clone + Sync + Send> {
 	#[deref]
 	cache: RelaxedRwLock<Cache>,
-	promises: RwLock<HashMap<K, VariableSingleton<Box<dyn FnOnce(&Args) + Send + 'static>>>>,
+	promises: RwLock<HashMap<K, PromiseCallbacks<Args>>>,
 }
 impl<Cache: Default + Send + Sync + 'static, K: Hash + Eq + Clone, Args: Clone + Sync + Send> PromiseCache<Cache, K, Args> {
 	pub fn new(cache: Cache) -> PromiseCache<Cache, K, Args> {
@@ -54,7 +55,7 @@ impl<Cache: Default + Send + Sync + 'static, K: Hash + Eq + Clone, Args: Clone +
 		}
 	}
 
-	pub fn promises(&self, k: &K) -> Option<VariableSingleton<Box<dyn FnOnce(&Args) + Send + 'static>>> {
+	pub fn promises(&self, k: &K) -> Option<PromiseCallbacks<Args>> {
 		self.promises.write().remove(k)
 	}
 
@@ -108,17 +109,18 @@ impl<'a, V> From<AtomicRefMut<'a, Option<V>>> for AtomicRefMutSome<'a, V> {
 }
 
 pub type RelaxedRwLockFn<V> = dyn FnOnce(&mut RwLockWriteGuard<'_, V>) + 'static + Send + Sync;
+type RelaxedRwLockQueue<V> = Arc<(Mutex<VecDeque<Box<RelaxedRwLockFn<V>>>>, Condvar)>;
 
 #[derive(derive_more::Deref, Clone)]
 pub struct RelaxedRwLock<V: Send + Sync + 'static> {
 	#[deref]
 	inner: Arc<RwLock<V>>,
-	queue: Arc<(Mutex<VecDeque<Box<RelaxedRwLockFn<V>>>>, Condvar)>,
+	queue: RelaxedRwLockQueue<V>,
 }
 impl<V: Send + Sync + 'static> RelaxedRwLock<V> {
 	pub fn new(inner: V) -> Self {
 		let inner = Arc::new(RwLock::new(inner));
-		let queue: Arc<(Mutex<VecDeque<Box<RelaxedRwLockFn<V>>>>, Condvar)> = Arc::new((Mutex::new(VecDeque::new()), Condvar::new()));
+		let queue: RelaxedRwLockQueue<V> = Arc::new((Mutex::new(VecDeque::new()), Condvar::new()));
 
 		{
 			let inner = inner.clone();

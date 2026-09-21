@@ -3,10 +3,13 @@
 	import { _ } from 'svelte-i18n';
 	import filesize from 'filesize';
 	import { tippyFollow } from '../tippy.js';
-	import { ChevronUp, Copy, Folder, FolderAdd } from 'akar-icons-svelte';
+	import ChevronUp from '@lucide/svelte/icons/chevron-up';
+	import Copy from '@lucide/svelte/icons/copy';
+	import Folder from '@lucide/svelte/icons/folder';
+	import FolderAdd from '@lucide/svelte/icons/folder-plus';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import Dead from './Dead.svelte';
-	import * as dialog from '@tauri-apps/api/dialog';
+	import * as dialog from '@tauri-apps/plugin-dialog';
 
 	export let browsePath;
 	export let entriesList = null;
@@ -147,7 +150,7 @@
 <main id="file-browser">
 	<div id="nav">
 		{#if browsePath}
-			<div id="up" class="control" on:click={goUp}><ChevronUp size="1rem"/></div>
+			<div id="up" class="control" on:click={goUp}><ChevronUp class="icon" size="1rem"/></div>
 			<div id="path" class="select hide-scroll" bind:this={pathContainer}>
 				{#if browsing}
 					{browsePath.replace(/\\/g, '/')}{browsing.path.length > 0 ? '/' : ''}{browsing.path}
@@ -155,8 +158,8 @@
 					{browsePath.replace(/\\/g, '/')}
 				{/if}
 			</div>
-			<div id="copy" class="control" on:click={copy} use:tippyFollow={$_('copy_path')}><Copy size="1rem"/></div>
-			<div id="open" class="control" on:click={open} use:tippyFollow={$_('open_addon_location')}><Folder size="1rem"/></div>
+			<div id="copy" class="control" on:click={copy} use:tippyFollow={$_('copy_path')}><Copy class="icon" size="1rem"/></div>
+			<div id="open" class="control" on:click={open} use:tippyFollow={$_('open_addon_location')}><Folder class="icon" size="1rem"/></div>
 		{:else}
 			<div id="path" class="select hide-scroll" bind:this={pathContainer}>
 				<div style="text-align:center">{$_('file_browser')}</div>
@@ -168,7 +171,7 @@
 		{#if !browsePath && fileSelect}
 			<div id="file-select" on:click={selectFile}>
 				<div>
-					<FolderAdd size="4rem" stroke-width="1"/>
+					<FolderAdd class="icon" size="4rem" stroke-width="1"/>
 					<div>{$_('file_browser_select')}</div>
 				</div>
 			</div>

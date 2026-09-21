@@ -1,8 +1,8 @@
 <script>
-	import { Folder } from "akar-icons-svelte";
+	import Folder from '@lucide/svelte/icons/folder';
 	import Switch from "./Switch.svelte";
-	import * as dialog from '@tauri-apps/api/dialog';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import * as dialog from '@tauri-apps/plugin-dialog';
+	import { invoke } from '@tauri-apps/api/core';
 	import { playSound } from "../sounds";
 	import { _ } from "svelte-i18n";
 	import { tippy } from '../tippy';
@@ -95,7 +95,7 @@
 		{#if type === 'directory'}
 			<div class="path-container">
 				<input type="text" {id} name={id} placeholder={initial} {value} on:change={beforeChange || afterChange ? change : null} required={initial == null ? true : null}/>
-				<div class="browse icon-button" on:click={browse}><Folder size="1rem"/></div>
+				<div class="browse icon-button" on:click={browse}><Folder class="icon" size="1rem"/></div>
 			</div>
 		{/if}
 	{/if}

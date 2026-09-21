@@ -6,11 +6,16 @@
 <script>
 	import { _ } from 'svelte-i18n';
 	import Modal from '../components/Modal.svelte';
-	import { ChevronDown, ChevronRight, CloudUpload, Cross, Folder, LinkOut } from 'akar-icons-svelte';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import CloudUpload from '@lucide/svelte/icons/cloud-upload';
+	import Cross from '@lucide/svelte/icons/x';
+	import Folder from '@lucide/svelte/icons/folder';
+	import LinkOut from '@lucide/svelte/icons/external-link';
 	import { tippyFollow, tippy } from '../tippy';
-	import * as dialog from '@tauri-apps/api/dialog';
-	import { invoke } from '@tauri-apps/api/tauri';
-	import { open } from '@tauri-apps/api/shell';
+	import * as dialog from '@tauri-apps/plugin-dialog';
+	import { invoke } from '@tauri-apps/api/core';
+	import { open } from '@tauri-apps/plugin-shell';
 	import { playSound } from '../sounds';
 	import FileBrowser from './FileBrowser.svelte';
 	import BBCodeEditor from './BBCodeEditor.svelte';
@@ -79,7 +84,7 @@
 			await invoke('update_settings', { settings: { ...AppSettings, workshop_update_mode: mode } });
 			AppSettings.workshop_update_mode = mode;
 		} catch (error) {
-			await dialog.message($_('remember_update_mode_error', { values: { error: String(error) } }), { type: 'error' });
+			await dialog.message($_('remember_update_mode_error', { values: { error: String(error) } }), { kind: 'error' });
 		} finally {
 			savingPublishMode = false;
 		}
@@ -134,7 +139,7 @@
 			if (icon) defaultIconUrl = 'data:image/png;base64,' + icon;
 		}).catch(error => {
 			defaultIconUrl = null;
-			dialog.message(translateError(String(error)), { type: 'error' });
+			dialog.message(translateError(String(error)), { kind: 'error' });
 		});
 	}
 	refreshDefaultIcon();
@@ -302,22 +307,18 @@
 		playSound('success');
 
 		invoke('publish', {
-
-			contentPathSrc: pathValue,
-
-			title: titleInput.value.trim(),
-			description: descriptionUpdate,
-			tags: chosenAddonTags.filter(tag => !!tag),
-			addonType: addonTypeInput.value,
-
-			gmaName: gmaNameInput.value.trim(),
-
-			iconPath: gmaIconPath,
-			upscale: canUpscale && upscale.checked,
-
-			updateId: publishingAddon?.id,
-			changes: changes || null,
-
+			request: {
+				contentPathSrc: pathValue,
+				title: titleInput.value.trim(),
+				description: descriptionUpdate,
+				tags: chosenAddonTags.filter(tag => !!tag),
+				addonType: addonTypeInput.value,
+				gmaName: gmaNameInput.value.trim(),
+				iconPath: gmaIconPath,
+				upscale: canUpscale && upscale.checked,
+				updateId: publishingAddon?.id,
+				changes: changes || null,
+			},
 		}).then(transactionId => {
 			const transaction = new Transaction(transactionId, transaction => {
 				return $_(transaction.status ?? 'PUBLISH_PACKING', { values: {
@@ -370,7 +371,7 @@
 			});
 		} catch (error) {
 			$isPublishing = false;
-			await dialog.message(translateError(String(error)), { type: 'error' });
+			await dialog.message(translateError(String(error)), { kind: 'error' });
 		}
 	}
 
@@ -378,7 +379,7 @@
 		try {
 			await open(event.currentTarget.href);
 		} catch (error) {
-			await dialog.message(String(error), { type: 'error' });
+			await dialog.message(String(error), { kind: 'error' });
 		}
 	}
 
@@ -532,7 +533,7 @@
 <Modal id="prepare-publish" active={$preparePublish} cancel={togglePreparePublish}>
 	<div id="details-container" class="hide-scroll">
 		{#if $updatingAddon}
-			<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={$updatingAddon.id}" target="_blank">{$_('workshop_page')}<LinkOut size=".8rem"/></a></div>
+			<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={$updatingAddon.id}" target="_blank">{$_('workshop_page')}<LinkOut class="icon" size=".8rem"/></a></div>
 		{/if}
 
 		{#if gmaIconBase64}
@@ -557,12 +558,12 @@
 		{/if}
 		<div id="icon-browse-container">
 			{#if gmaIconBase64 && !$updatingAddon}
-				<div id="icon-browse" on:click={removeIcon}><Cross size="1rem"/>{$_('remove_icon')}</div>
+				<div id="icon-browse" on:click={removeIcon}><Cross class="icon" size="1rem"/>{$_('remove_icon')}</div>
 			{:else}
-				<div id="icon-browse" on:click={browseIcon}><Folder size="1rem"/>{$_('browse')}</div>
+				<div id="icon-browse" on:click={browseIcon}><Folder class="icon" size="1rem"/>{$_('browse')}</div>
 			{/if}
 			{#if $updatingAddon && !$isPublishing}
-				<div id="icon-publish" on:click={publishIcon} use:tippy={$_('publish_icon')} class:disabled={gmaIconPath == null}><CloudUpload size="1rem"/></div>
+				<div id="icon-publish" on:click={publishIcon} use:tippy={$_('publish_icon')} class:disabled={gmaIconPath == null}><CloudUpload class="icon" size="1rem"/></div>
 			{/if}
 		</div>
 		<p>{$_('icon_instructions')}</p>
@@ -575,7 +576,7 @@
 
 		<div class="path-container" bind:this={pathInputContainer}>
 			<input type="text" class:error={pathFailMessage?.length > 0} bind:this={pathInput} id="path" placeholder={$_('addon_path')} required on:change={() => onPathChanged(pathInput.value, true)} value={pathValue}/>
-			<div class="browse icon-button" on:click={browseAddon}><Folder size="1rem"/></div>
+			<div class="browse icon-button" on:click={browseAddon}><Folder class="icon" size="1rem"/></div>
 		</div>
 
 		<span use:tippy={$updatingAddon ? $_('update_addon_title_via_steam') : null}>
@@ -632,13 +633,13 @@
 				{#if $isPublishing}
 					<Loading size="1.1rem"/>
 				{:else}
-					<CloudUpload size="1.1rem"/>
+					<CloudUpload class="icon" size="1.1rem"/>
 				{/if}
 				<span>{publishLabel}</span>
 			</button>
 			{#if $updatingAddon}
 				<button type="button" id="publish-mode-button" bind:this={publishModeButton} on:click={() => publishModeOpen = !publishModeOpen} disabled={$isPublishing || savingPublishMode} aria-label={$_('choose_update_mode')} aria-expanded={publishModeOpen} aria-controls="publish-modes">
-					<ChevronDown size="1rem"/>
+					<ChevronDown class="icon" size="1rem"/>
 				</button>
 				<div id="publish-modes" role="group" aria-label={$_('choose_update_mode')} hidden={!publishModeOpen}>
 					<button type="button" aria-pressed={publishMode === 'description'} on:click={() => selectPublishMode('description')} disabled={$isPublishing || savingPublishMode}>{$_('description_only')}</button>
@@ -658,7 +659,7 @@
 		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
 			<FileBrowser fileSelect={path => onPathChanged(path)} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} {openEntry} open={openAddon} size={gmaSize}/>
 			<details id="ignore" bind:open={ignoreOpen}>
-				<summary><span class="ignore-chevron"><ChevronRight size=".85rem"/></span>{$_('ignored_file_patterns')}</summary>
+				<summary><span class="ignore-chevron"><ChevronRight class="icon" size=".85rem"/></span>{$_('ignored_file_patterns')}</summary>
 				<div class="ignore-content">
 					<input type="text" aria-label={$_('ignored_file_patterns')} placeholder={$_('add_ellipsis')} on:keypress={ignoreKeyPress}/>
 					<div class="ignore-patterns">
@@ -679,7 +680,7 @@
 			<BBCodeEditor id="changes" label={$_('changelog_optional')} bind:value={changes} disabled={$isPublishing} bind:formattingOpen={changesFormattingOpen} active={$preparePublish && activeTab === 'changelog'} historyKey={editorHistoryKey}/>
 			{#if $updatingAddon}
 				<div class="editor-footer">
-					<a href={`https://steamcommunity.com/sharedfiles/filedetails/changelog/${$updatingAddon.id}`} on:click|preventDefault={openChangeNotes}>{$_('view_edit_change_notes')}<LinkOut size=".85rem"/></a>
+					<a href={`https://steamcommunity.com/sharedfiles/filedetails/changelog/${$updatingAddon.id}`} on:click|preventDefault={openChangeNotes}>{$_('view_edit_change_notes')}<LinkOut class="icon" size=".85rem"/></a>
 				</div>
 			{/if}
 		</div>

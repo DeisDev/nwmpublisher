@@ -4,8 +4,8 @@
 	import filesize from 'filesize';
 	import Dead from './Dead.svelte';
 	import SteamID from 'steamid';
-	import { LinkOut } from 'akar-icons-svelte';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import LinkOut from '@lucide/svelte/icons/external-link';
+	import { invoke } from '@tauri-apps/api/core';
 	import Timestamp from './Timestamp.svelte';
 	import { onDestroy } from 'svelte';
 	import { Transaction } from '../transactions.js';
@@ -210,7 +210,7 @@
 							</tbody>
 						</table>
 						{#if (gma && gma.id) || workshop}
-							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut size=".8rem"/></a></div>
+							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut class="icon" size=".8rem"/></a></div>
 						{/if}
 						{#if workshop && workshop.description}
 							<p id="description" class="select">{workshop.description}</p>

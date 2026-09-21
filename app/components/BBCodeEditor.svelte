@@ -1,6 +1,6 @@
 <script>
 	import { _ } from 'svelte-i18n';
-	import { ChevronRight } from 'akar-icons-svelte';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import { createEventDispatcher, onDestroy } from 'svelte';
 	import { parseBBCode } from '../bbcode';
 	import BBCodePreview from './BBCodePreview.svelte';
@@ -236,7 +236,7 @@
 					<span aria-hidden="true">↷</span>
 				</button>
 				<button type="button" class="formatting-toggle" aria-expanded={formattingOpen} aria-controls={`${id}-toolbar`} on:click={() => formattingOpen = !formattingOpen}>
-					<span class="chevron" class:expanded={formattingOpen}><ChevronRight size=".85rem"/></span>{$_('bbcode.formatting')}
+					<span class="chevron" class:expanded={formattingOpen}><ChevronRight class="icon" size=".85rem"/></span>{$_('bbcode.formatting')}
 				</button>
 				<button type="button" class="fullscreen-toggle" bind:this={fullscreenButton} title={$_(fullscreen ? 'bbcode.restore' : 'bbcode.fullscreen')} aria-label={$_(fullscreen ? 'bbcode.restore' : 'bbcode.fullscreen')} aria-pressed={fullscreen} aria-controls={`${id}-fullscreen`} on:click={toggleFullscreen}>
 					<svg width="1rem" height="1rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

@@ -5,7 +5,7 @@ use std::{
 	sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::{app_data, transactions::Transaction};
+use crate::transactions::Transaction;
 
 use super::{whitelist, GMAEntry, GMAError, GMAFile, GMAMetadata, GMAReader};
 
@@ -335,22 +335,20 @@ impl ExtractGMAMut for GMAFile {
 		ignore_whitelist: bool,
 	) -> Result<PathBuf, GMAError> {
 		THREAD_POOL.install(move || {
-			self.entries().map_err(|error| {
+			self.entries().inspect_err(|error| {
 				if !transaction.aborted() {
 					transaction.error(error.to_string(), turbonone!());
 				}
-				error
 			})?;
 			(*self).extract(dest, transaction, open_after_extract, ignore_whitelist)
 		})
 	}
 	fn extract_entry(&mut self, entry_path: String, transaction: &Transaction, open_after_extract: bool) -> Result<PathBuf, GMAError> {
 		THREAD_POOL.install(move || {
-			let handle = self.entries().map_err(|error| {
+			let handle = self.entries().inspect_err(|error| {
 				if !transaction.aborted() {
 					transaction.error(error.to_string(), turbonone!());
 				}
-				error
 			})?;
 			(*self).extract_entry_with_handle(entry_path, transaction, open_after_extract, handle)
 		})

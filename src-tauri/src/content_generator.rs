@@ -31,7 +31,7 @@ impl PartialEq for AddWorkshopManifest {
 impl Eq for AddWorkshopManifest {}
 impl PartialOrd for AddWorkshopManifest {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		self.date.partial_cmp(&other.date)
+		Some(self.cmp(other))
 	}
 }
 impl Ord for AddWorkshopManifest {

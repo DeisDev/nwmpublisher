@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from "svelte";
-	import { open } from '@tauri-apps/api/shell';
+	import { open } from '@tauri-apps/plugin-shell';
 	import Modal from './Modal.svelte';
 	import { _ } from 'svelte-i18n';
 	import Logo from "./Logo.svelte";

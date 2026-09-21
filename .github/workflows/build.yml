@@ -15,29 +15,31 @@ jobs:
   build_linux:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-node@v2
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
 
     - name: Install system dependencies
       run: |
-        echo "deb http://archive.ubuntu.com/ubuntu jammy main universe" | sudo tee -a /etc/apt/sources.list
         sudo apt update
-        sudo apt install -y libwebkit2gtk-4.0-dev \
+        sudo apt install -y libwebkit2gtk-4.1-dev \
             build-essential \
             curl \
             wget \
             file \
             libssl-dev \
             libgtk-3-dev \
+            libxdo-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf
 
     - name: Install NPM dependencies
-      run: npm install
+      run: npm install --global npm@12.0.2 && npm ci
 
     - name: Build
-      run: npm run tauri build -- -v
+      run: npm run tauri build -- -v -- --locked
 
     - name: Prepare ZIP
       run: |
@@ -54,7 +56,7 @@ jobs:
         zip -r nwmpublisher_linux64.zip nwmpublisher libsteam_api.so libwebkit2gtk-* libjavascriptcoregtk-*
 
     - name: Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         body: |
           See the [changelog for ${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for release notes.
@@ -64,19 +66,21 @@ jobs:
   build_windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-node@v2
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
 
     - name: Install NPM dependencies
-      run: npm install
+      run: npm install --global npm@12.0.2 && npm ci
 
     - name: Build
-      run: npm run tauri build -- -v
+      run: npm run tauri build -- -v -- --locked
       env:
         RUSTFLAGS: -Ctarget-feature=+crt-static
 
     - name: Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         body: |
           See the [changelog for ${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for release notes.
@@ -86,24 +90,21 @@ jobs:
   build_macos:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v7
 
     - name: Install Rust targets
-      run: |
-        mkdir -p /tmp/rust-toolchain-plz
-        cp src-tauri/rust-toolchain.toml /tmp/rust-toolchain-plz/
-        cd /tmp/rust-toolchain-plz
-        cargo init --lib
-        cargo check
-        rustup target add x86_64-apple-darwin
+      working-directory: src-tauri
+      run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-    - uses: actions/setup-node@v2
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
 
     - name: Install NPM dependencies
-      run: npm install
+      run: npm install --global npm@12.0.2 && npm ci
 
     - name: Build
-      run: npm run tauri build -- --target universal-apple-darwin -v
+      run: npm run tauri build -- --target universal-apple-darwin -v -- --locked
 
     - name: Copy Steamworks SDK to bundle
       run: cp src-tauri/lib/steam_api/redistributable_bin/osx/libsteam_api.dylib src-tauri/target/universal-apple-darwin/release/bundle/macos/nwmpublisher.app/Contents/MacOS/libsteam_api.dylib
@@ -114,7 +115,7 @@ jobs:
         zip -r nwmpublisher_macOS.app.zip nwmpublisher.app
 
     - name: Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         body: |
           See the [changelog for ${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for release notes.

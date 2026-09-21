@@ -1,7 +1,5 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
-import replace from '@rollup/plugin-replace';
-import { svelteSVG } from "rollup-plugin-svelte-svg";
 import fs from 'fs';
 
 const appLanguages = {};
@@ -16,12 +14,7 @@ const appLanguages = {};
 	}
 }
 
-const production = process.env.TAURI_DEBUG != "true";
-
-console.log('production', production);
-
-// https://vitejs.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig({
 	plugins: [svelte()],
 
 	// Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
@@ -40,27 +33,10 @@ export default defineConfig(async () => ({
 	root: "app",
 	publicDir: "../public",
 	build: {
-		inlineDynamicImports: true,
 		outDir: "../dist",
-		rollupOptions: {
-			compilerOptions: {
-				// enable run-time checks when not in production
-				dev: !production
-			},
-			input: {
-				app: './app/index.html',
-			},
-			plugins: [
-				replace({
-					'process.env.NODE_ENV': JSON.stringify(
-						production ? 'production' : 'development'
-					),
-				}),
-				svelteSVG(),
-			]
-		},
+		emptyOutDir: true,
 	},
 	define: {
 		'__NWMPUBLISHER_APP_LANGUAGES__': JSON.stringify(JSON.stringify(appLanguages))
 	}
-}));
+});

@@ -1,5 +1,6 @@
 <script>
-	import { Cross, LinkChain } from "akar-icons-svelte";
+	import Cross from '@lucide/svelte/icons/x';
+	import LinkChain from '@lucide/svelte/icons/link';
 	import Dead from "./Dead.svelte";
 	import { _ } from 'svelte-i18n';
 	import { translateError } from '../i18n';
@@ -7,7 +8,7 @@
 	import filesize from 'filesize';
 	import { tippyFollow } from '../tippy';
 	import { JOB_TYPE_EXTRACT } from '../pages/Downloader.svelte';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import { invoke } from '@tauri-apps/api/core';
 	import JobDiagnostics from './JobDiagnostics.svelte';
 
 	function calculateSpeed(timestamp, progress, total) {
@@ -39,8 +40,8 @@
 
 <tr>
 	<td class="controls">
-		<span on:click={cancelJob}><Cross size="1rem"/></span>
-		<a target="_blank" href="https://steamcommunity.com/sharedfiles/filedetails/?id={job.ws_id}"><LinkChain size="1rem"/></a>
+		<span on:click={cancelJob}><Cross class="icon" size="1rem"/></span>
+		<a target="_blank" href="https://steamcommunity.com/sharedfiles/filedetails/?id={job.ws_id}"><LinkChain class="icon" size="1rem"/></a>
 		{#if job.transaction.error}
 			<JobDiagnostics transaction={job.transaction} context={{ workshopId: job.ws_id, fileName: job.fileName, sourcePath: job.srcPath, path: job.path, type: job.type }}/>
 		{/if}

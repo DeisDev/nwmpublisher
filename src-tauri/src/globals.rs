@@ -12,51 +12,51 @@ lazy_static! {
 #[macro_export]
 macro_rules! steam {
 	() => {
-		&crate::STEAMWORKS
+		&$crate::STEAMWORKS
 	};
 }
 #[macro_export]
 macro_rules! downloads {
 	() => {
-		&crate::steam::DOWNLOADS
+		&$crate::steam::DOWNLOADS
 	};
 }
 
 #[macro_export]
 macro_rules! game_addons {
 	() => {
-		&crate::GAME_ADDONS
+		&$crate::GAME_ADDONS
 	};
 }
 
 #[macro_export]
 macro_rules! app_data {
 	() => {
-		&crate::APP_DATA
+		&$crate::APP_DATA
 	};
 }
 
 #[macro_export]
 macro_rules! search {
 	() => {
-		&crate::SEARCH
+		&$crate::SEARCH
 	};
 }
 
 #[macro_export]
 macro_rules! webview {
 	() => {
-		&crate::WEBVIEW
+		&$crate::WEBVIEW
 	};
 }
 #[macro_export]
 macro_rules! webview_emit {
 	( $event:expr, $data:expr ) => {
-		crate::webview!().emit($event, Some($data))
+		$crate::webview!().emit($event, Some($data))
 	};
 
 	( $event:expr ) => {
-		crate::webview!().emit($event, turbonone!())
+		$crate::webview!().emit($event, turbonone!())
 	};
 }
 

@@ -1,5 +1,5 @@
 <script>
-	import { CloudDownload } from 'akar-icons-svelte';
+	import CloudDownload from '@lucide/svelte/icons/cloud-download';
 	import { _ } from 'svelte-i18n';
 	import tippy from 'tippy.js';
 
@@ -35,7 +35,7 @@
 {#await updateAvailable} {:then newVersion}
 	{#if newVersion}
 		<a href="https://github.com/DeisDev/nwmpublisher/releases/tag/{encodeURIComponent(newVersion)}" target="_blank" use:tooltip={newVersion} class="nav-icon">
-			<CloudDownload size="1.5rem" stroke-width="1.5" id="update-icon"/>
+			<CloudDownload class="icon" size="1.5rem" stroke-width="1.5" id="update-icon"/>
 		</a>
 	{/if}
 {/await}

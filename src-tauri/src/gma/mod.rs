@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use steamworks::PublishedFileId;
 use thiserror::Error;
 
-use crate::{game_addons::GameAddons, main_thread_forbidden, ArcBytes};
+use crate::{game_addons::GameAddons, ArcBytes};
 
 const GMA_HEADER: &[u8; 4] = b"GMAD";
 
@@ -170,7 +170,7 @@ impl PartialEq for GMAFile {
 impl Eq for GMAFile {}
 impl PartialOrd for GMAFile {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		self.modified.partial_cmp(&other.modified).map(|x| x.reverse())
+		Some(self.cmp(other))
 	}
 }
 impl Ord for GMAFile {

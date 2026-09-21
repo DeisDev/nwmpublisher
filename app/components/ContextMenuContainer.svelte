@@ -1,10 +1,11 @@
 <script>
+	import { mount } from 'svelte';
 	import ContextMenu, { currentContext } from './ContextMenu.svelte';
 
 	let container;
 	currentContext.subscribe(context => {
 		if (context) {
-			new ContextMenu({
+			mount(ContextMenu, {
 				target: container,
 				props: context
 			});

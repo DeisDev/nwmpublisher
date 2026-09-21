@@ -46,7 +46,7 @@
 
 		<DirectoryRef Id="INSTALLDIR">
 			<Component Id="ProgramBinary" Guid="{{{path_component_guid}}}" Win64="$(var.Win64)">
-				<File Id="EXE" Source="{{{app_exe_source}}}" KeyPath="yes" Checksum="yes"/>
+				<File Id="EXE" Source="{{main_binary_path}}" KeyPath="yes" Checksum="yes"/>
 			</Component>
             {{#each binaries as |bin| ~}}
 			<Component Id="{{ bin.id }}" Guid="{{bin.guid}}" Win64="$(var.Win64)">

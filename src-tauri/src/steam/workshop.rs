@@ -16,7 +16,7 @@ use parking_lot::Mutex;
 
 use super::{users::SteamUser, Steam};
 
-use crate::{main_thread_forbidden, webview::Addon, GMOD_APP_ID};
+use crate::{webview::Addon, GMOD_APP_ID};
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -96,17 +96,7 @@ impl PartialEq for WorkshopItem {
 impl Eq for WorkshopItem {}
 impl PartialOrd for WorkshopItem {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		if self.time_created == 0 {
-			if self.time_updated == 0 {
-				self.id.partial_cmp(&other.id)
-			} else {
-				self.time_updated.partial_cmp(&other.time_updated)
-			}
-		} else if other.time_created == 0 {
-			self.id.partial_cmp(&other.id)
-		} else {
-			self.time_created.partial_cmp(&other.time_created)
-		}
+		Some(self.cmp(other))
 	}
 }
 

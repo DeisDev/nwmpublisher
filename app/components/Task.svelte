@@ -1,7 +1,9 @@
 <svelte:options accessors={true}/>
 
 <script>
-	import { Cross, Check, CircleAlert } from "akar-icons-svelte";
+	import Cross from '@lucide/svelte/icons/x';
+	import Check from '@lucide/svelte/icons/check';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import { tippyFollow } from '../tippy.js';
 	import { _ } from 'svelte-i18n';
 	import { translateError } from '../i18n';
@@ -114,8 +116,8 @@
 		<div id="content">
 			<div id="status">
 				<Loading inline={true}/>
-				<Check id="finished" stroke-width="3"/>
-				<CircleAlert id="error" stroke-width="3"/>
+				<Check class="icon" id="finished" stroke-width="3"/>
+				<CircleAlert class="icon" id="error" stroke-width="3"/>
 			</div>
 			{#if error}
 				<span class="error-message" title={translateError(...error)}>{translateError(...error)}</span>
@@ -134,11 +136,11 @@
 		{#if error}
 			<div class="error-actions">
 				<JobDiagnostics {transaction} context={{ task: statusTextFn(transaction) }}/>
-				<button type="button" on:click={expire} aria-label={$_('close')}><Cross stroke-width="3"/></button>
+				<button type="button" on:click={expire} aria-label={$_('close')}><Cross class="icon" stroke-width="3"/></button>
 			</div>
 		{/if}
 		{#if transaction && transaction.cancellable && !finished && !cancelled && !expired}
-			<div id="cancel" use:tippyFollow={$_('cancel')} on:click={cancel}><Cross id="cancel" stroke-width="3"/></div>
+			<div id="cancel" use:tippyFollow={$_('cancel')} on:click={cancel}><Cross class="icon" id="cancel" stroke-width="3"/></div>
 		{/if}
 	</div>
 </div>

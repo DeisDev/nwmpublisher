@@ -3,6 +3,7 @@ use std::{
 	fmt::Debug,
 	path::{Path, PathBuf},
 };
+use tauri_plugin_dialog::DialogExt;
 
 pub fn canonicalize(path: PathBuf) -> PathBuf {
 	dunce::canonicalize(path.clone()).unwrap_or(path)
@@ -26,6 +27,12 @@ pub struct NormalizedPathBuf {
 	pub normalized: PathBuf,
 	path: PathBuf,
 }
+impl Default for NormalizedPathBuf {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 impl NormalizedPathBuf {
 	pub fn new() -> NormalizedPathBuf {
 		NormalizedPathBuf {
@@ -47,7 +54,7 @@ impl PartialEq for NormalizedPathBuf {
 impl Eq for NormalizedPathBuf {}
 impl PartialOrd for NormalizedPathBuf {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		self.path.partial_cmp(&other.path)
+		Some(self.cmp(other))
 	}
 }
 impl Ord for NormalizedPathBuf {
@@ -138,15 +145,19 @@ pub fn has_extension<P: AsRef<Path>, S: AsRef<str>>(path: P, extension: S) -> bo
 
 pub fn open<P: AsRef<Path>>(path: P) {
 	let path = path.as_ref();
-	if opener::open(path).is_err() {
-		tauri::api::dialog::message(None::<&tauri::Window<tauri::Wry>>, "File", path.to_string_lossy());
+	if let Err(error) = opener::open(path) {
+		if *crate::cli::CLI_MODE {
+			eprintln!("Failed to open {}: {}", path.display(), error);
+			return;
+		}
+		webview!().window().dialog().message(path.to_string_lossy()).title("File").show(|_| {});
 	}
 }
 
 pub fn open_file_location<P: AsRef<Path>>(path: P) {
 	let path = dunce::canonicalize(path.as_ref()).unwrap_or_else(|_| path.as_ref().to_path_buf());
 
-	if let Err(_) = (|| {
+	if (|| {
 		#[cfg(target_os = "windows")]
 		return std::process::Command::new("explorer").arg(format!("/select,{}", path.display())).spawn();
 
@@ -184,8 +195,8 @@ pub fn open_file_location<P: AsRef<Path>>(path: P) {
 		}
 
 		#[allow(unreachable_code)]
-		Err(std::io::Error::new(std::io::ErrorKind::Other, "Unsupported OS"))
-	})() {
-		tauri::api::dialog::message(None::<&tauri::Window<tauri::Wry>>, "File Location", path.display().to_string());
+		Err(std::io::Error::other("Unsupported OS"))
+	})().is_err() {
+		webview!().window().dialog().message(path.display().to_string()).title("File Location").show(|_| {});
 	}
 }

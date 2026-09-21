@@ -1,4 +1,5 @@
 <script>
+	import { mount, unmount } from 'svelte';
 	import { taskHeight, tasksMax, tasks as tasksStore, tasksNum } from '../transactions.js';
 	import Task from './Task.svelte';
 
@@ -13,7 +14,7 @@
 			const [transaction, statusTextFn, elem] = tasks[i];
 			if (!elem) {
 				update = true;
-				tasks[i][2] = new Task({
+				tasks[i][2] = mount(Task, {
 					target: tasksContainer,
 					props: {
 						pos: pos++,
@@ -24,7 +25,7 @@
 			} else {
 				if (elem.destroyed) {
 					update = true;
-					elem.$destroy();
+					unmount(elem);
 					tasks.splice(i, 1);
 				} else if (!elem.expired) {
 					elem.pos = pos++;

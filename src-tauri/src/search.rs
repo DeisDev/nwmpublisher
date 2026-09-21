@@ -48,9 +48,7 @@ unsafe impl Send for SearchItem {}
 unsafe impl Sync for SearchItem {}
 impl PartialOrd for SearchItem {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		let cmp1 = self.timestamp.partial_cmp(&other.timestamp).map(|ord| ord.reverse());
-		let cmp2 = self.len.partial_cmp(&other.len).map(|ord| ord.reverse());
-		cmp1.partial_cmp(&cmp2)
+		Some(self.cmp(other))
 	}
 }
 impl Ord for SearchItem {

@@ -38,7 +38,7 @@ macro_rules! sleep_ms {
 macro_rules! main_thread_forbidden {
 	() => {
 		#[cfg(debug_assertions)]
-		if !*crate::cli::CLI_MODE {
+		if !*$crate::cli::CLI_MODE {
 			debug_assert_ne!(
 				std::thread::current().name(),
 				Some("main"),
@@ -96,6 +96,6 @@ macro_rules! thread_pool {
 	};
 
 	() => {
-		rayon::ThreadPoolBuilder::new().num_threads(*crate::NUM_THREADS).build().unwrap()
+		rayon::ThreadPoolBuilder::new().num_threads(*$crate::NUM_THREADS).build().unwrap()
 	};
 }

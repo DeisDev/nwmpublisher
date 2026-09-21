@@ -1,6 +1,6 @@
 <script>
-	import { writeText } from '@tauri-apps/api/clipboard';
-	import { message } from '@tauri-apps/api/dialog';
+	import { writeText } from '@tauri-apps/plugin-clipboard-manager';
+	import { message } from '@tauri-apps/plugin-dialog';
 	import { _ } from 'svelte-i18n';
 
 	export let transaction;
@@ -22,7 +22,7 @@
 			await writeText(diagnostics);
 			copied = true;
 		} catch (error) {
-			await message($_('copy_diagnostics_failed', { values: { error: String(error) } }), { type: 'error' });
+			await message($_('copy_diagnostics_failed', { values: { error: String(error) } }), { kind: 'error' });
 		}
 	}
 </script>

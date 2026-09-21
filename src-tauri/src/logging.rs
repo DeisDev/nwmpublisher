@@ -40,11 +40,11 @@ lazy_static! {
 				match log {
 					LogMessage::Stdout(log) => {
 						ignore! { stdout.write_all(log.as_bytes()) };
-						ignore! { stdout.write_all(&[b'\n']) };
+						ignore! { stdout.write_all(b"\n") };
 					}
 					LogMessage::Stderr(log) => {
 						ignore! { stderr.write_all(log.as_bytes()) };
-						ignore! { stderr.write_all(&[b'\n']) };
+						ignore! { stderr.write_all(b"\n") };
 					}
 				}
 			}
@@ -58,7 +58,7 @@ macro_rules! println {
 	($($arg:tt)*) => {{
 		let log = format!($($arg)*);
 		std::println!("{}", &log);
-		crate::ignore! { crate::logging::LOG_CHANNEL.send(crate::logging::LogMessage::Stdout(log)) };
+		$crate::ignore! { $crate::logging::LOG_CHANNEL.send($crate::logging::LogMessage::Stdout(log)) };
 	}};
 }
 
@@ -67,7 +67,7 @@ macro_rules! eprintln {
 	($($arg:tt)*) => {{
 		let log = format!($($arg)*);
 		std::eprintln!("{}", &log);
-		crate::ignore! { crate::logging::LOG_CHANNEL.send(crate::logging::LogMessage::Stderr(log)) };
+		$crate::ignore! { $crate::logging::LOG_CHANNEL.send($crate::logging::LogMessage::Stderr(log)) };
 	}};
 }
 
@@ -78,7 +78,7 @@ pub fn panic(panic: &PanicHookInfo<'_>) {
 
 	if let Ok(mut f) = OpenOptions::new().append(true).create(true).open(LOGS_DIR.join("stderr.log")) {
 		f.sync_data().ok();
-		write!(f, "\n\n!!!!!!!!!!!!! PANIC !!!!!!!!!!!!!\n{}\n{:#?}\n\n", panic, &backtrace).ok();
+		write!(f, "\n\n!!!!!!!!!!!!! PANIC !!!!!!!!!!!!!\n{}\n{:#?}\n\n", panic, backtrace).ok();
 	}
 
 	std::eprintln!("{}\n{:#?}", panic, backtrace);

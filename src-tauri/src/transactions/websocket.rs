@@ -134,10 +134,9 @@ impl TransactionServer {
 				Err(err) => {
 					match &err {
 						websocket::WebSocketError::NoDataAvailable => continue,
-						websocket::WebSocketError::IoError(error) => {
-							if error.kind() == std::io::ErrorKind::ConnectionReset {
-								break;
-							}
+						websocket::WebSocketError::IoError(error)
+							if error.kind() == std::io::ErrorKind::ConnectionReset => {
+							break;
 						}
 						_ => {}
 					};

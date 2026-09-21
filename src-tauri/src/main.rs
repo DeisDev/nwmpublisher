@@ -98,10 +98,13 @@ fn main() {
 	println!("Starting GUI...");
 
 	tauri::Builder::default()
+		.plugin(tauri_plugin_dialog::init())
+		.plugin(tauri_plugin_shell::init())
+		.plugin(tauri_plugin_clipboard_manager::init())
 		.setup(|app| {
 			let settings = APP_DATA.settings.read();
 
-			let window = app.get_window("nwmpublisher").unwrap();
+			let window = app.get_webview_window("nwmpublisher").unwrap();
 
 			window.set_title(&format!("nwmpublisher v{}", env!("CARGO_PKG_VERSION"))).ok();
 

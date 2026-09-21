@@ -1,8 +1,9 @@
 <script>
 	import { tippy } from '../tippy';
 	import { _ } from 'svelte-i18n';
-	import { Rss, TriangleAlert } from 'akar-icons-svelte';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import Rss from '@lucide/svelte/icons/rss';
+	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
+	import { invoke } from '@tauri-apps/api/core';
 	import { listen } from '@tauri-apps/api/event';
 	import Search from './Search.svelte';
 	import Settings from './Settings.svelte';
@@ -71,7 +72,7 @@
 	<UpdateNotification/>
 
 	{#if steamConnected}
-		<span class="nav-icon" use:tippy={'✔ ' + $_('steam_connected')}><Rss id="steam-connection" size="1.5rem" stroke-width="1.5"/></span>
+		<span class="nav-icon" use:tippy={'✔ ' + $_('steam_connected')}><Rss class="icon" id="steam-connection" size="1.5rem" stroke-width="1.5"/></span>
 	{:else}
 		<span class="nav-icon" use:tippy={'❌ ' + $_('steam_disconnected')}><TriangleAlert class="icon error" id="steam-connection" size="1.5rem" stroke-width="1.5"/></span>
 	{/if}

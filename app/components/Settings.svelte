@@ -1,14 +1,14 @@
 <script>
 	import { tippy } from '../tippy';
 	import { getLocaleFromNavigator, _ } from 'svelte-i18n';
-	import { Gear } from 'akar-icons-svelte';
+	import Gear from '@lucide/svelte/icons/settings';
 	import Modal from './Modal.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import { writable } from 'svelte/store';
 	import SidebarItem from './SidebarItem.svelte';
 	import Setting from './Setting.svelte';
 	import { playSound } from '../sounds';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import { invoke } from '@tauri-apps/api/core';
 	import { switchLanguage } from '../i18n';
 
 	let active = false;
@@ -118,7 +118,7 @@
 	</form>
 </Modal>
 
-<span class="nav-icon" use:tippy={$_('settings.settings')} on:click={toggle}><Gear size="1.5rem" stroke-width="1.5" id="settings"/></span>
+<span class="nav-icon" use:tippy={$_('settings.settings')} on:click={toggle}><Gear class="icon" size="1.5rem" stroke-width="1.5" id="settings"/></span>
 
 <style>
 	:global(#settings-sidebar) {

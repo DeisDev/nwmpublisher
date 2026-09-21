@@ -148,7 +148,7 @@ impl GMAFile {
 				.map_err(|error| GMAError::io("seek archive", &self.path, error))?;
 
 			let mut entries = HashMap::new();
-			let mut entry_cursor = 0;
+			let mut entry_cursor: u64 = 0;
 
 			'read_entries: while handle
 				.read_u32::<LittleEndian>()
@@ -165,7 +165,7 @@ impl GMAFile {
 					.read_u32::<LittleEndian>()
 					.map_err(|error| GMAError::io("read entry table", &self.path, error))?;
 
-				let next_cursor = match (entry_cursor as u64).checked_add(size as u64) {
+				let next_cursor = match entry_cursor.checked_add(size) {
 					None => return Err(GMAError::FormatError),
 					Some(next_cursor) => next_cursor,
 				};

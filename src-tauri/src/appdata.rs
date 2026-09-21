@@ -10,7 +10,7 @@ use std::{
 
 use crate::{
 	gma::{ExtractDestination, ExtractionOverwriteMode},
-	webview_emit, RwLockCow,
+	RwLockCow,
 };
 
 use crate::GMOD_APP_ID;
@@ -156,10 +156,7 @@ impl Settings {
 
 		lazy_static::initialize(&HAD_SETTINGS_FILE);
 
-		match Settings::load(&APP_SETTINGS_PATH, false) {
-			Ok(settings) => settings,
-			Err(_) => Settings::default(),
-		}
+		Settings::load(&APP_SETTINGS_PATH, false).unwrap_or_default()
 	}
 
 	fn load(path: &std::path::Path, sanitize: bool) -> Result<Settings, anyhow::Error> {
@@ -172,7 +169,7 @@ impl Settings {
 	}
 
 	pub fn save(&self) -> Result<(), anyhow::Error> {
-		if let Some(parent) = (&*APP_SETTINGS_PATH).parent() {
+		if let Some(parent) = APP_SETTINGS_PATH.parent() {
 			std::fs::create_dir_all(parent)?;
 		}
 
@@ -199,10 +196,8 @@ impl Settings {
 					self.extract_destination = ExtractDestination::default();
 				}
 			}
-			ExtractDestination::Addons => {
-				if app_data!().gmod_dir().is_none() {
-					self.extract_destination = ExtractDestination::default();
-				}
+			ExtractDestination::Addons if app_data!().gmod_dir().is_none() => {
+				self.extract_destination = ExtractDestination::default();
 			}
 			_ => {}
 		}

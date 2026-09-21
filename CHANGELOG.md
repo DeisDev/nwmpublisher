@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Upgrade to Tauri 2, Svelte 5, Vite 8, Rust 1.98.1, Node.js 26.9.0, and npm 12.0.2. Linux builds now use WebKitGTK 4.1.
+- Replace the interface icons with Lucide icons.
 - Use one main upload button with a dropdown for description-only updates or packaging and updating an addon. Remember the selected mode, and show exactly what the button will send.
 - Keep the default Workshop preview image square, without circular cropping, borders, or shadows.
 - Give the publishing file browser its own full-height tab, alongside Description and Changelog. Formatting toolbars and ignored-file patterns start collapsed.
@@ -27,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix inconsistent addon ordering in the size analyzer and Rust compiler compatibility warnings.
 - Preserve the operation, path, and underlying error when publishing or extracting files fails. Report extraction completion only after files and metadata are written and flushed, reject truncated archive reads, and return icon-generation errors instead of crashing or silently using another image.
 - Show Steam error details in downloader tooltips for both separate error data and combined `KEY:details` messages.
 - Keep the publishing details and upload button visible at the default window size by adapting the image preview height and tightening spacing.

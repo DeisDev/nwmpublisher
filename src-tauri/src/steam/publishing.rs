@@ -644,8 +644,9 @@ fn resolve_gma_file_name(gma_name: Option<&str>) -> String {
 	file_name
 }
 
-#[tauri::command]
-pub fn publish(
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishRequest {
 	content_path_src: PathBuf,
 	icon_path: Option<PathBuf>,
 	title: String,
@@ -656,7 +657,22 @@ pub fn publish(
 	update_id: Option<PublishedFileId>,
 	changes: Option<String>,
 	gma_name: Option<String>,
-) -> u32 {
+}
+
+#[tauri::command]
+pub fn publish(request: PublishRequest) -> u32 {
+	let PublishRequest {
+		content_path_src,
+		icon_path,
+		title,
+		description,
+		tags,
+		addon_type,
+		upscale,
+		update_id,
+		changes,
+		gma_name,
+	} = request;
 	let transaction = transaction!();
 	let id = transaction.id;
 
@@ -845,7 +861,44 @@ pub fn verify_icon(path: PathBuf) -> Result<(String, bool), Transaction> {
 
 #[cfg(test)]
 mod tests {
-	use super::{publish_description, validate_description, PublishError, WORKSHOP_DESCRIPTION_MAX_BYTES};
+	use super::{publish_description, validate_description, PublishError, PublishRequest, WORKSHOP_DESCRIPTION_MAX_BYTES};
+
+	#[test]
+	fn publish_request_accepts_frontend_fields_and_optional_updates() {
+		let mut payload = serde_json::json!({
+			"contentPathSrc": "addons/example",
+			"title": "Example",
+			"tags": ["fun"],
+			"addonType": "tool",
+			"upscale": false,
+		});
+		let request: PublishRequest = serde_json::from_value(payload.clone()).unwrap();
+		assert_eq!(request.content_path_src, std::path::Path::new("addons/example"));
+		assert_eq!(request.title, "Example");
+		assert_eq!(request.tags, ["fun"]);
+		assert_eq!(request.addon_type, "tool");
+		assert!(!request.upscale);
+		assert!(request.description.is_none());
+		assert!(request.update_id.is_none());
+		assert!(request.icon_path.is_none());
+		assert!(request.changes.is_none());
+		assert!(request.gma_name.is_none());
+
+		payload["description"] = serde_json::json!("");
+		payload["updateId"] = serde_json::json!(PublishedFileId(42));
+		payload["iconPath"] = serde_json::json!("preview.png");
+		payload["changes"] = serde_json::json!("[b]Updated[/b]");
+		payload["gmaName"] = serde_json::json!("example.gma");
+		let request: PublishRequest = serde_json::from_value(payload.clone()).unwrap();
+		assert_eq!(request.description.as_deref(), Some(""));
+		assert_eq!(request.update_id, Some(PublishedFileId(42)));
+		assert_eq!(request.icon_path.as_deref(), Some(std::path::Path::new("preview.png")));
+		assert_eq!(request.changes.as_deref(), Some("[b]Updated[/b]"));
+		assert_eq!(request.gma_name.as_deref(), Some("example.gma"));
+
+		payload.as_object_mut().unwrap().remove("title");
+		assert!(serde_json::from_value::<PublishRequest>(payload).is_err());
+	}
 
 	#[test]
 	fn icon_output_errors_are_returned_with_context() {
@@ -876,7 +929,7 @@ mod tests {
 				}
 			}
 			fn flush(&mut self) -> io::Result<()> {
-				Err(io::Error::new(io::ErrorKind::Other, "flush failed"))
+				Err(io::Error::other("flush failed"))
 			}
 		}
 		let image = DynamicImage::new_rgb8(2, 2);

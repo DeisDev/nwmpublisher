@@ -15,7 +15,7 @@ use rayon::ThreadPool;
 use serde::ser::SerializeTuple;
 use steamworks::PublishedFileId;
 
-use crate::{game_addons, gma::extract::ExtractGMAMut, webview::Addon, GMAFile};
+use crate::{gma::extract::ExtractGMAMut, webview::Addon, GMAFile};
 
 lazy_static! {
 	static ref DISCOVERY_POOL: ThreadPool = thread_pool!(4);
@@ -294,7 +294,7 @@ impl GameAddons {
 		self.paths.read().get(path.as_ref()).cloned()
 	}
 
-	pub fn get_addons(&self) -> RwLockReadGuard<Vec<Arc<Addon>>> {
+	pub fn get_addons(&self) -> RwLockReadGuard<'_, Vec<Arc<Addon>>> {
 		self.discover_addons();
 		self.pages.read()
 	}

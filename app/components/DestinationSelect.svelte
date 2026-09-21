@@ -2,10 +2,12 @@
 	import { trimPath } from '../steam.js';
 	import { _ } from 'svelte-i18n';
 	import { tippy } from '../tippy.js';
-	import { Folder, Download, FolderAdd } from 'akar-icons-svelte';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import Folder from '@lucide/svelte/icons/folder';
+	import Download from '@lucide/svelte/icons/download';
+	import FolderAdd from '@lucide/svelte/icons/folder-plus';
+	import { invoke } from '@tauri-apps/api/core';
 	import Modal from './Modal.svelte';
-	import * as dialog from '@tauri-apps/api/dialog';
+	import * as dialog from '@tauri-apps/plugin-dialog';
 	import GmodLogo from './GmodLogo.svelte';
 
 	export let active;
@@ -140,12 +142,12 @@
 
 	<div id="destinations">
 		<div class="destination" class:active={extractPath[0] === 'browse'} on:hover={extractDestHover} on:click={extractDestBrowse} data-dest="browse">
-			<Folder/>
+			<Folder class="icon"/>
 			<div>{$_('browse')}</div>
 		</div>
 
 		<div class="destination" class:disabled={!!!AppData.temp_dir} class:active={extractPath[0] === 'tmp'} use:tippy={$_('extract_open_tip')} on:mouseover={extractDestHover} on:click={updateExtractDest} on:mouseleave={extractDestHoverLeave} data-dest="tmp">
-			<FolderAdd/>
+			<FolderAdd class="icon"/>
 			<div>{$_('open')}</div>
 		</div>
 
@@ -155,7 +157,7 @@
 		</div>
 
 		<div class="destination" class:disabled={!!!AppData.downloads_dir} class:active={extractPath[0] === 'downloads'} on:mouseover={extractDestHover} on:mouseleave={extractDestHoverLeave} on:click={updateExtractDest} data-dest="downloads">
-			<Download/>
+			<Download class="icon"/>
 			<div>{$_('downloads_folder')}</div>
 		</div>
 	</div>

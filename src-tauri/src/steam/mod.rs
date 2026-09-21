@@ -17,8 +17,6 @@ use crate::{
 	Transaction,
 };
 
-use crate::webview_emit;
-
 pub mod default_icon;
 pub mod downloads;
 pub mod publishing;
@@ -169,11 +167,11 @@ impl Steam {
 		webview_emit!(if connected { "SteamConnected" } else { "SteamDisconnected" });
 	}
 
-	pub fn client(&self) -> AtomicRefSome<Interface> {
+	pub fn client(&self) -> AtomicRefSome<'_, Interface> {
 		self.interface.borrow().into()
 	}
 
-	pub fn client_wait(&self) -> AtomicRefSome<Interface> {
+	pub fn client_wait(&self) -> AtomicRefSome<'_, Interface> {
 		loop {
 			if self.connected() {
 				if let Ok(interface) = self.interface.try_borrow() {
@@ -185,9 +183,9 @@ impl Steam {
 	}
 
 	// Callbacks //
-	pub fn callback_once_with_data<C: 'static, EqF>(&'static self, eq_f: EqF, timeout: u8) -> Option<C>
+	pub fn callback_once_with_data<C, EqF>(&'static self, eq_f: EqF, timeout: u8) -> Option<C>
 	where
-		C: Callback,
+		C: Callback + 'static,
 		EqF: Fn(&C) -> bool + 'static + Send,
 	{
 		struct MultithreadedCallbackData<C> {

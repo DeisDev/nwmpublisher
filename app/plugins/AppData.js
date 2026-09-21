@@ -52,7 +52,7 @@ window.__NWMPUBLISHER__ = async appDataCallback => {
 		await __TAURI__.event.listen('UpdateAppData', ({ payload }) => updateAppData(payload));
 
 		// Fetch current settings before mounting components that read them on startup.
-		updateAppData(await __TAURI__.tauri.invoke('reloaded'));
+		updateAppData(await __TAURI__.core.invoke('reloaded'));
 	}
 };
 
@@ -69,7 +69,7 @@ window.DEFAULT_IGNORE_GLOBS = JSON.parse('{$_DEFAULT_IGNORE_GLOBS_$}');
 
 let resizeTimeout;
 function resized() {
-	window.__TAURI__.invoke("window_resized", {
+	window.__TAURI__.core.invoke("window_resized", {
 		width: window.innerWidth,
 		height: window.innerHeight
 	});

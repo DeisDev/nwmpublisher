@@ -1,5 +1,6 @@
 import { switchLanguage } from './i18n.js';
 import App from './App.svelte';
+import { mount } from 'svelte';
 
 function rgbToHsl(r, g, b) {
 	r /= 255, g /= 255, b /= 255;
@@ -50,7 +51,7 @@ __NWMPUBLISHER__(() => {
 	updateCustomColor('success', AppSettings.color_success);
 	updateCustomColor('error', AppSettings.color_error);
 }).then(() => {
-	new App({ target: document.body });
+	mount(App, { target: document.body });
 }).catch(error => {
 	console.error('Failed to initialize nwmpublisher:', error);
 	document.body.textContent = `Failed to load application settings: ${error}`;

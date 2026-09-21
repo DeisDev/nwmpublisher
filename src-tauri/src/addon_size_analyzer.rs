@@ -7,23 +7,67 @@ use steamworks::PublishedFileId;
 
 use serde::Serialize;
 
-use crate::{game_addons, transaction, transactions::Transaction, webview::Addon};
+use crate::{transactions::Transaction, webview::Addon};
 
 lazy_static! {
 	static ref THREAD_POOL: ThreadPool = thread_pool!(4);
 	static ref ANALYZER_THREAD_POOL: ThreadPool = thread_pool!();
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq, Eq, derive_more::Deref)]
+#[derive(Debug, Serialize, Clone, derive_more::Deref)]
 struct AnalyzedAddon(Arc<Addon>);
+impl PartialEq for AnalyzedAddon {
+	fn eq(&self, other: &Self) -> bool {
+		self.0.installed().size == other.0.installed().size
+	}
+}
+impl Eq for AnalyzedAddon {}
 impl PartialOrd for AnalyzedAddon {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		self.0.installed().size.partial_cmp(&other.0.installed().size).map(|x| x.reverse())
+		Some(self.cmp(other))
 	}
 }
 impl Ord for AnalyzedAddon {
 	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-		self.0.installed().id.cmp(&other.0.installed().id).reverse()
+		self.0.installed().size.cmp(&other.0.installed().size).reverse()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::gma::{GMAFile, GMAFilePointers};
+
+	fn addon(size: u64, id: u64) -> AnalyzedAddon {
+		AnalyzedAddon(Arc::new(Addon::Installed(GMAFile {
+			path: format!("{id}.gma").into(),
+			size,
+			id: Some(PublishedFileId(id)),
+			metadata: None,
+			entries: None,
+			pointers: GMAFilePointers::default(),
+			version: 3,
+			extracted_name: String::new(),
+			modified: None,
+			membuffer: None,
+		})))
+	}
+
+	#[test]
+	fn analyzer_orders_addons_by_size_instead_of_id() {
+		let addons = BinaryHeap::from(vec![addon(25, 999), addon(900, 1), addon(100, 500)]).into_sorted_vec();
+		let sizes: Vec<_> = addons.iter().map(|addon| addon.installed().size).collect();
+		assert_eq!(sizes, [900, 100, 25]);
+		assert_eq!(addons[0].partial_cmp(&addons[1]), Some(addons[0].cmp(&addons[1])));
+	}
+
+	#[test]
+	fn equally_sized_addons_compare_equal() {
+		let first = addon(100, 1);
+		let second = addon(100, 2);
+		assert_eq!(first.cmp(&second), std::cmp::Ordering::Equal);
+		assert_eq!(first.partial_cmp(&second), Some(std::cmp::Ordering::Equal));
+		assert_eq!(first, second);
 	}
 }
 
@@ -282,12 +326,10 @@ impl AddonSizeAnalyzer {
 			let total_squares_i = master_treemap.squares.len(); // TODO is this = to something?
 			let total_squares_f = total_squares_i as f64; // TODO is this = to something?
 
-			for (i, square) in master_treemap.squares.chunks_exact_mut(1).enumerate() {
+			for (i, square) in master_treemap.squares.iter_mut().enumerate() {
 				if transaction.aborted() {
 					break;
 				}
-
-				let square = square.get_mut(0).unwrap();
 
 				let (_, tag) = square.data.as_ref().unwrap();
 				let tag = tag.as_ref().unwrap().clone();

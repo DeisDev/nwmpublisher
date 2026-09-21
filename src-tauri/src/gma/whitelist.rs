@@ -132,7 +132,7 @@ fn download_addon_whitelist() -> &'static [&'static str] {
 	ureq::get("https://raw.githubusercontent.com/Facepunch/gmad/master/include/AddonWhiteList.h")
 		.timeout(Duration::from_secs(2))
 		.call()
-		.map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+		.map_err(std::io::Error::other)
 		.and_then(|response| response.into_string())
 		.and_then(|response| {
 			let mut wildcard = Vec::new();

@@ -1,6 +1,6 @@
 <script>
 	import { _ } from 'svelte-i18n';
-	import { CirclePlus } from 'akar-icons-svelte';
+	import CirclePlus from '@lucide/svelte/icons/circle-plus';
 	import { Steam } from '../steam';
 	import { tippyFollow } from '../tippy';
 	import Loading from './Loading.svelte';
@@ -99,7 +99,7 @@
 
 		{#if newAddon}
 			<div id="preview" class="new">
-				<CirclePlus size="4rem"/>
+				<CirclePlus class="icon" size="4rem"/>
 			</div>
 			<div id="title">{$_('publish_new')}</div>
 		{:else}

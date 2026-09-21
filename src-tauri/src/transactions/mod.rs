@@ -9,8 +9,6 @@ use std::sync::{
 	Arc, Weak,
 };
 
-use crate::dprintln;
-
 use self::websocket::{TransactionMessage, TransactionServer};
 
 lazy_static! {
@@ -66,7 +64,7 @@ impl std::ops::Deref for TransactionRef {
 }
 impl PartialOrd for TransactionRef {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		self.id.partial_cmp(&other.id)
+		Some(self.cmp(other))
 	}
 }
 impl Ord for TransactionRef {
@@ -213,7 +211,7 @@ pub fn new() -> Transaction {
 #[macro_export]
 macro_rules! transaction {
 	() => {
-		crate::transactions::new()
+		$crate::transactions::new()
 	};
 }
 

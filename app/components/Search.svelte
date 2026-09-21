@@ -1,7 +1,8 @@
 <script>
 	import { _ } from 'svelte-i18n';
-	import { Search, Cross } from 'akar-icons-svelte';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import Search from '@lucide/svelte/icons/search';
+	import Cross from '@lucide/svelte/icons/x';
+	import { invoke } from '@tauri-apps/api/core';
 	import { Transaction } from '../transactions';
 	import Loading from './Loading.svelte';
 	import { Steam } from '../steam';
@@ -115,9 +116,9 @@
 	<div id="input-container">
 		<input type="text" id="search" placeholder={$_('search')} on:input={updateSearch} on:paste={updateSearch} on:change={updateSearch} on:keydown={updateSearch} bind:this={searchInput}/>
 		{#if isSearching}
-			<span id="cancel-search" on:click={clearSearch}><Cross size="1rem"/></span>
+			<span id="cancel-search" on:click={clearSearch}><Cross class="icon" size="1rem"/></span>
 		{:else}
-			<Search id="search-icon" size="1rem"/>
+			<Search class="icon" id="search-icon" size="1rem"/>
 		{/if}
 	</div>
 	<div id="search-results" class="hide-scroll" class:loading={isLoading}>

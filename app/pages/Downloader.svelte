@@ -6,13 +6,17 @@
 </script>
 
 <script>
-	import { CloudDownload, Cross, Folder, FolderAdd, LinkChain } from 'akar-icons-svelte';
+	import CloudDownload from '@lucide/svelte/icons/cloud-download';
+	import Cross from '@lucide/svelte/icons/x';
+	import Folder from '@lucide/svelte/icons/folder';
+	import FolderAdd from '@lucide/svelte/icons/folder-plus';
+	import LinkChain from '@lucide/svelte/icons/link';
 	import { _ } from 'svelte-i18n';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import { invoke } from '@tauri-apps/api/core';
 	import { listen } from '@tauri-apps/api/event';
 	import DestinationSelect from '../components/DestinationSelect.svelte';
 	import { Transaction } from '../transactions';
-	import * as dialog from '@tauri-apps/api/dialog';
+	import * as dialog from '@tauri-apps/plugin-dialog';
 	import { tippyFollow } from '../tippy';
 	import { playSound } from '../sounds';
 	import DownloaderJob from '../components/DownloaderJob.svelte';
@@ -240,18 +244,18 @@
 <main class="hide-scroll">
 	<div id="top-controls">
 		<div id="download" class="icon-button" on:click={browseGMA} use:tippyFollow={$_('bulk_extract_gmas')}>
-			<Folder size="1.2rem"/>
+			<Folder class="icon" size="1.2rem"/>
 		</div>
 		<div id="download-input-container">
 			<input type="text" id="download-input" placeholder={$_('download-input')} on:paste={parseInput} on:change={parseInput} on:input={checkEmptyInput} on:focus={showFocusTip} on:blur={hideFocusTip}/>
-			<LinkChain size="1rem"/>
+			<LinkChain class="icon" size="1rem"/>
 		</div>
 	</div>
 
 	<div id="layout">
 		<div id="downloading">
 			<h2>
-				<CloudDownload size="2rem"/>
+				<CloudDownload class="icon" size="2rem"/>
 				{$_('downloading')}
 				{#if downloadingWorkers > 0}
 					<img src="/img/dog.gif" class="working"/>
@@ -307,7 +311,7 @@
 
 		<div id="extracting">
 			<h2>
-				<FolderAdd size="2rem"/>
+				<FolderAdd class="icon" size="2rem"/>
 				{$_('extracting')}
 				{#if extractingWorkers > 0}
 					<img src="/img/dog.gif" class="working"/>
@@ -317,7 +321,7 @@
 				<table class:idle={extractingJobs.length === 0}>
 					<thead>
 						<tr>
-							<th class="controls"><Cross size="1rem"/><LinkChain size="1rem"/></th>
+							<th class="controls"><Cross class="icon" size="1rem"/><LinkChain class="icon" size="1rem"/></th>
 							<th class="details">{$_('addon')}</th>
 							<th class="speed">{$_('speed')}</th>
 							<th class="total">{$_('total_filesize')}</th>

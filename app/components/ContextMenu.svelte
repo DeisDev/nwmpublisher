@@ -71,11 +71,16 @@
 
 <script>
 	import { _ } from 'svelte-i18n';
-	import { Folder, FolderAdd, LinkChain, LinkOut, Image, CloudDownload } from 'akar-icons-svelte';
+	import Folder from '@lucide/svelte/icons/folder';
+	import FolderAdd from '@lucide/svelte/icons/folder-plus';
+	import LinkChain from '@lucide/svelte/icons/link';
+	import LinkOut from '@lucide/svelte/icons/external-link';
+	import Image from '@lucide/svelte/icons/image';
+	import CloudDownload from '@lucide/svelte/icons/cloud-download';
 	import { get, writable } from 'svelte/store';
 	import Loading from './Loading.svelte';
 	import { onDestroy, onMount } from 'svelte';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import { invoke } from '@tauri-apps/api/core';
 	import DestinationSelect from './DestinationSelect.svelte';
 	import fileSize from 'filesize';
 	import { taskMessage, Transaction } from '../transactions';
@@ -222,11 +227,11 @@ import { playSound } from '../sounds';
 				{#if gma}
 					{#if gma.path}
 						<ContextMenuItem click={chooseExtractDestination}>
-							<span slot="icon"><FolderAdd size="1rem"/></span>
+							<span slot="icon"><FolderAdd class="icon" size="1rem"/></span>
 							<span slot="label">{$_('extract')}</span>
 						</ContextMenuItem>
 						<ContextMenuItem click={openAddonLocation}>
-							<span slot="icon"><Folder size="1rem"/></span>
+							<span slot="icon"><Folder class="icon" size="1rem"/></span>
 							<span slot="label">{$_('open_addon_location')}</span>
 						</ContextMenuItem>
 					{/if}
@@ -243,17 +248,17 @@ import { playSound } from '../sounds';
 				{#if workshop && !workshop.dead}
 					<a class="nostyle" href="https://steamcommunity.com/sharedfiles/filedetails/?id={workshop.id}" target="_blank">
 						<ContextMenuItem>
-							<span slot="icon"><LinkOut size="1rem"/></span>
+							<span slot="icon"><LinkOut class="icon" size="1rem"/></span>
 							<span slot="label">{$_('steam_workshop')}</span>
 						</ContextMenuItem>
 					</a>
 					<ContextMenuItem click={copyLink}>
-						<span slot="icon"><LinkChain size="1rem"/></span>
+						<span slot="icon"><LinkChain class="icon" size="1rem"/></span>
 						<span slot="label">{$_('copy_link')}</span>
 					</ContextMenuItem>
 					{#if !disableDownload}
 						<ContextMenuItem click={download}>
-							<span slot="icon"><CloudDownload size="1rem"/></span>
+							<span slot="icon"><CloudDownload class="icon" size="1rem"/></span>
 							<span slot="label">{$_('download')}</span>
 						</ContextMenuItem>
 					{/if}
@@ -261,12 +266,12 @@ import { playSound } from '../sounds';
 						<div class="divider"></div>
 						<a class="nostyle" href={workshop.previewUrl} target="_blank">
 							<ContextMenuItem>
-								<span slot="icon"><LinkOut size="1rem"/></span>
+								<span slot="icon"><LinkOut class="icon" size="1rem"/></span>
 								<span slot="label">{$_('open_image')}</span>
 							</ContextMenuItem>
 						</a>
 						<ContextMenuItem click={copyImageLink}>
-							<span slot="icon"><Image size="1rem"/></span>
+							<span slot="icon"><Image class="icon" size="1rem"/></span>
 							<span slot="label">{$_('copy_image_link')}</span>
 						</ContextMenuItem>
 					{/if}

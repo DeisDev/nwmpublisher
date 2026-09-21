@@ -6,7 +6,7 @@
 	import GitHubStar from './components/GitHubStar.svelte';
 	import ContextMenuContainer from './components/ContextMenuContainer.svelte';
 	import MigrateSettings from './components/MigrateSettings.svelte';
-	import { invoke } from '@tauri-apps/api/tauri';
+	import { invoke } from '@tauri-apps/api/core';
 
 	let migrateSettings = false;
 	invoke('legacy_settings_pending').then(pending => migrateSettings = pending);
