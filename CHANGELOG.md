@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Clear Steam launch variables after connecting on Windows so browsers and folder windows opened by nwmpublisher do not inherit Garry's Mod's Steam identity and keep it marked as running after closing the publisher.
 - Use the same normalized file manifest for publishing previews and packing, reject duplicate archive paths, and revalidate content and exclusions when publishing starts. Report traversal and whitelist errors instead of silently omitting files.
 - Cancel publishing during preparation and packing, acknowledge cancellation before unlocking the publisher, and disable cancellation once Steam submission starts. Keep active uploads visible and release the publishing lock when a publishing command is rejected.
 - Isolate each publishing job's archive and generated icons in its own temporary directory, upload only its GMA, and clean up after success, failure, or cancellation. Sanitize archive names consistently across platforms, including reserved names and uppercase extensions.

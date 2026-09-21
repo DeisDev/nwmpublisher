@@ -137,7 +137,17 @@ impl Steam {
 
 	pub fn connect() {
 		loop {
-			if let Ok(connection) = Client::init_app(4000) {
+			let connection = Client::init_app(crate::GMOD_APP_ID);
+
+			#[cfg(target_os = "windows")]
+			{
+				// init_app leaves these set even on failure. Do not let browsers or file managers
+				// inherit Garry's Mod's Steam identity. Environment mutation is thread-safe on Windows.
+				std::env::remove_var("SteamAppId");
+				std::env::remove_var("SteamGameId");
+			}
+
+			if let Ok(connection) = connection {
 				println!("[Steam] Client initialized");
 
 				loop {
