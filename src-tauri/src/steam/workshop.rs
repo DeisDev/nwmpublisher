@@ -168,6 +168,7 @@ impl Steam {
 						.ugc()
 						.query_items(queue.to_owned())
 						.unwrap()
+						.include_long_desc(true)
 						.allow_cached_response(600)
 						.fetch(move |results: Result<QueryResults<'_>, SteamError>| {
 							if let Ok(results) = results {
@@ -296,6 +297,7 @@ impl Steam {
 			)
 			.ok()?
 			.require_tag("addon")
+			.include_long_desc(true)
 			.fetch(move |result: Result<QueryResults<'_>, SteamError>| {
 				if let Ok(data) = result {
 					*results_ref.lock() = Some(Some((

@@ -40,6 +40,62 @@
 	let changeLog;
 	let gmaNameInput;
 	let gmaNameTouched = false;
+	let description = '';
+	let descriptionInput;
+	let descriptionTouched = false;
+	let descriptionError = null;
+	const descriptionMaxBytes = 7999;
+	const descriptionEncoder = new TextEncoder();
+	const bbcodeFormats = [
+		{ tag: 'b', label: 'B' },
+		{ tag: 'i', label: 'I' },
+		{ tag: 'u', label: 'U' },
+		{ tag: 'strike', label: 'S' },
+		{ tag: 'h1', label: 'H1' },
+		{ tag: 'h2', label: 'H2' },
+		{ tag: 'h3', label: 'H3' },
+		{ tag: 'spoiler' },
+		{ tag: 'url' },
+		{ tag: 'list' },
+		{ tag: 'olist' },
+		{ tag: 'code' },
+	];
+	$: descriptionBytes = descriptionEncoder.encode(description).length;
+
+	function onDescriptionInput() {
+		descriptionTouched = true;
+		descriptionError = descriptionEncoder.encode(description).length > descriptionMaxBytes
+			? 'ERR_DESCRIPTION_TOO_LONG'
+			: description.includes('\0') ? 'ERR_DESCRIPTION_CONTAINS_NUL' : null;
+		checkForm();
+	}
+
+	function formatText(input, tag) {
+		if ($isPublishing) return;
+
+		const start = input.selectionStart;
+		const end = input.selectionEnd;
+		let text = input.value.slice(start, end) || $_(tag === 'url' ? 'bbcode.link_text' : 'bbcode.text');
+		let opening = tag === 'url' ? '[url=https://]' : `[${tag}]`;
+		let closing = `[/${tag}]`;
+		if (tag === 'list' || tag === 'olist') {
+			opening += '\n';
+			closing = '\n' + closing;
+			text = text.split('\n').map(line => '[*]' + line).join('\n');
+		}
+
+		input.setRangeText(opening + text + closing, start, end, 'select');
+		if (input === descriptionInput) {
+			description = input.value;
+			onDescriptionInput();
+		}
+		input.focus();
+		if (tag === 'url') {
+			input.setSelectionRange(start + '[url='.length, start + opening.length - 1);
+		} else {
+			input.setSelectionRange(start + opening.length, start + opening.length + text.length);
+		}
+	}
 
 	let upscale;
 	let canUpscale = false;
@@ -213,6 +269,8 @@
 
 	async function publish() {
 		if (!readyForPublish || $isPublishing) return;
+		const publishingAddon = $updatingAddon;
+		const descriptionUpdate = descriptionTouched ? description : null;
 		$isPublishing = true;
 		playSound('success');
 
@@ -221,6 +279,7 @@
 			contentPathSrc: pathValue,
 
 			title: titleInput.value.trim(),
+			description: descriptionUpdate,
 			tags: chosenAddonTags.filter(tag => !!tag),
 			addonType: addonTypeInput.value,
 
@@ -229,8 +288,8 @@
 			iconPath: gmaIconPath,
 			upscale: canUpscale && upscale.checked,
 
-			updateId: $updatingAddon ? ((await $updatingAddon).id) : undefined,
-			changes: changeLog ? changeLog.value : null,
+			updateId: publishingAddon?.id,
+			changes: changeLog.value || null,
 
 		}).then(transactionId => {
 			const transaction = new Transaction(transactionId, transaction => {
@@ -243,6 +302,10 @@
 
 			transaction.listen(event => {
 				if (event.finished) {
+					if (descriptionUpdate !== null) {
+						if (publishingAddon) publishingAddon.description = descriptionUpdate;
+						if (publishingAddon && $updatingAddon === publishingAddon && description === descriptionUpdate) descriptionTouched = false;
+					}
 					$remountAddonScroller = true;
 					Steam.MyWorkshop = [];
 				}
@@ -255,6 +318,7 @@
 	}
 
 	function isFormValid() {
+		if (descriptionError) return false;
 		if (pathValue.length === 0 || pathFailMessage !== null) return false;
 
 		let chosenAddonTag = false;
@@ -290,6 +354,9 @@
 	const tagSearchMax = Math.max(addonTypes.length, addonTags.length);
 	onMount(() => updatingAddon.subscribe(async updatingAddon => {
 		if (changeLog) changeLog.value = '';
+		description = updatingAddon?.description ?? '';
+		descriptionTouched = false;
+		descriptionError = null;
 
 		if (!updatingAddon) {
 			gmaIconPath = null;
@@ -510,12 +577,30 @@
 	<div id="middle-column">
 		<FileBrowser fileSelect={path => onPathChanged(path)} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} {openEntry} open={openAddon} size={gmaSize}/>
 
-		{#if $updatingAddon}
-			<div id="changes-container">
-				<textarea id="changes" bind:this={changeLog} required></textarea>
-				<div>{$_('changelog')}</div>
+		<div id="description-container">
+			<label for="description">{$_('workshop_description')}</label>
+			<div class="bbcode-toolbar" role="group" aria-label={$_('bbcode.toolbar')} aria-controls="description">
+				{#each bbcodeFormats as format}
+					<button type="button" data-format={format.tag} title={$_('bbcode.' + format.tag)} aria-label={$_('bbcode.' + format.tag)} disabled={$isPublishing} on:click={() => formatText(descriptionInput, format.tag)}>{format.label ?? $_('bbcode.' + format.tag)}</button>
+				{/each}
 			</div>
-		{/if}
+			<textarea id="description" bind:this={descriptionInput} bind:value={description} on:input={onDescriptionInput} disabled={$isPublishing} class:error={descriptionError !== null} aria-invalid={descriptionError !== null} aria-describedby="description-help description-size description-error"></textarea>
+			<p id="description-help">{$_('workshop_description_help')}</p>
+			<p id="description-size">{$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })}</p>
+			{#if descriptionError}
+				<p id="description-error" role="alert">{$_(descriptionError)}</p>
+			{/if}
+		</div>
+
+		<div id="changes-container">
+			<label for="changes">{$_('changelog_optional')}</label>
+			<div class="bbcode-toolbar" role="group" aria-label={$_('bbcode.toolbar')} aria-controls="changes">
+				{#each bbcodeFormats as format}
+					<button type="button" data-format={format.tag} title={$_('bbcode.' + format.tag)} aria-label={$_('bbcode.' + format.tag)} disabled={$isPublishing} on:click={() => formatText(changeLog, format.tag)}>{format.label ?? $_('bbcode.' + format.tag)}</button>
+				{/each}
+			</div>
+			<textarea id="changes" bind:this={changeLog} disabled={$isPublishing}></textarea>
+		</div>
 	</div>
 
 	<div id="ignore">
@@ -830,29 +915,7 @@
 		margin-right: .5rem;
 	}
 
-	#changes-container {
-		position: relative;
-	}
-	#changes-container > div {
-		position: absolute;
-		top: 1.5rem;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		margin: auto;
-		font-size: 1.3em;
-		text-shadow: 0px 1px 0px rgb(0 0 0 / 60%);
-		opacity: .5;
-		pointer-events: none;
-		-webkit-pointer-events: none;
-		width: min-content;
-		height: min-content;
-		z-index: 2;
-	}
-	#changes-container:focus-within > div, #changes:not(:invalid) + div {
-		opacity: 0;
-	}
-	#changes {
+	#changes, #description {
 		appearance: none;
 		font: inherit;
 		border-radius: 4px;
@@ -863,17 +926,76 @@
 		color: #fff;
 		font-size: .85em;
 		width: 100%;
-		min-height: 12.35rem;
-		height: 12.35rem;
-		max-height: 12.35rem;
-		margin-top: 1.5rem;
 		resize: none;
 		z-index: 1;
 		display: block;
 	}
-	#changes:focus {
+	#changes {
+		min-height: 12.35rem;
+		height: 12.35rem;
+		max-height: 12.35rem;
+		margin-top: .5rem;
+	}
+	#changes:focus, #description:focus {
 		box-shadow: inset 0 0 0px 1.5px #127cff;
 		outline: none;
+	}
+	#description-container, #changes-container {
+		margin-top: 1.5rem;
+	}
+	.bbcode-toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		gap: .3rem;
+		margin-top: .5rem;
+	}
+	.bbcode-toolbar button {
+		font: inherit;
+		font-size: .8em;
+		min-width: 2rem;
+		padding: .35rem .5rem;
+		border: 1px solid #414141;
+		border-radius: 4px;
+		background: #313131;
+		color: #fff;
+		cursor: pointer;
+	}
+	.bbcode-toolbar button:hover:not(:disabled) {
+		background: #414141;
+	}
+	.bbcode-toolbar button:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: 1px;
+	}
+	.bbcode-toolbar button:disabled {
+		opacity: .5;
+		cursor: default;
+	}
+	.bbcode-toolbar [data-format='b'] {
+		font-weight: bold;
+	}
+	.bbcode-toolbar [data-format='i'] {
+		font-style: italic;
+	}
+	.bbcode-toolbar [data-format='u'] {
+		text-decoration: underline;
+	}
+	.bbcode-toolbar [data-format='strike'] {
+		text-decoration: line-through;
+	}
+	#description {
+		height: 9rem;
+		margin-top: .5rem;
+	}
+	#description-container p {
+		font-size: .8em;
+		margin: .4rem 0 0;
+	}
+	#description.error {
+		box-shadow: inset 0 0 0 1.5px var(--error);
+	}
+	#description-error {
+		color: var(--error);
 	}
 
 	#ws-link {

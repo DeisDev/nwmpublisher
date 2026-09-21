@@ -26,6 +26,8 @@ pub enum PublishError {
 	IconTooLarge,
 	IconTooSmall,
 	IconInvalidFormat,
+	DescriptionTooLong,
+	DescriptionContainsNul,
 	IOError,
 	SteamError(SteamError),
 	ImageError(ImageError),
@@ -41,6 +43,8 @@ impl std::fmt::Display for PublishError {
 			PublishError::IconTooLarge => write!(f, "ERR_ICON_TOO_LARGE"),
 			PublishError::IconTooSmall => write!(f, "ERR_ICON_TOO_SMALL"),
 			PublishError::IconInvalidFormat => write!(f, "ERR_ICON_INVALID_FORMAT"),
+			PublishError::DescriptionTooLong => write!(f, "ERR_DESCRIPTION_TOO_LONG"),
+			PublishError::DescriptionContainsNul => write!(f, "ERR_DESCRIPTION_CONTAINS_NUL"),
 			PublishError::IOError => write!(f, "ERR_IO_ERROR"),
 			PublishError::SteamError(error) => write!(f, "ERR_STEAM_ERROR:{}", error),
 			PublishError::ImageError(error) => write!(f, "ERR_IMAGE_ERROR:{}", error),
@@ -206,15 +210,34 @@ impl WorkshopIcon {
 	}
 }
 
+// k_cchPublishedDocumentDescriptionMax is 8000, including the C string terminator.
+const WORKSHOP_DESCRIPTION_MAX_BYTES: usize = 7999;
+
+fn validate_description(description: Option<&str>) -> Result<(), PublishError> {
+	if let Some(description) = description {
+		if description.len() > WORKSHOP_DESCRIPTION_MAX_BYTES {
+			return Err(PublishError::DescriptionTooLong);
+		}
+		if description.contains('\0') {
+			return Err(PublishError::DescriptionContainsNul);
+		}
+	}
+	Ok(())
+}
+
 pub enum WorkshopUpdateType {
 	Creation {
 		title: String,
+		description: Option<String>,
 		path: ContentPath,
 		tags: Vec<String>,
 		addon_type: String,
 		preview: WorkshopIcon,
+		changes: Option<String>,
 	},
 	Update {
+		// None preserves the current description; Some("") explicitly clears it.
+		description: Option<String>,
 		path: ContentPath,
 		tags: Vec<String>,
 		addon_type: String,
@@ -232,28 +255,36 @@ impl Steam {
 		let update_handle = match details {
 			Creation {
 				title,
+				description,
 				path,
 				mut tags,
 				addon_type,
 				preview,
+				changes,
 			} => {
 				tags.reserve(tags.len() + 2);
 				tags.push("Addon".to_string());
 				tags.push(addon_type);
 
-				self.client()
+				let update = self
+					.client()
 					.ugc()
 					.start_item_update(GMOD_APP_ID, id)
 					.content_path(&path)
 					.title(&title)
 					.preview_path(&Into::<PathBuf>::into(preview))
-					.tags(tags, false)
-					.submit(None, move |result| {
-						*result_ref.lock() = Some(result);
-					})
+					.tags(tags, false);
+				let update = match description {
+					Some(description) => update.description(&description),
+					None => update,
+				};
+				update.submit(changes.as_deref(), move |result| {
+					*result_ref.lock() = Some(result);
+				})
 			}
 
 			Update {
+				description,
 				path,
 				tags,
 				addon_type,
@@ -268,6 +299,10 @@ impl Steam {
 				let preview_path: Option<PathBuf> = preview.map(|value| value.into());
 
 				let update = self.client().ugc().start_item_update(GMOD_APP_ID, id);
+				let update = match description {
+					Some(description) => update.description(&description),
+					None => update,
+				};
 				match preview_path {
 					Some(preview_path) => update.preview_path(&preview_path),
 					None => update,
@@ -559,6 +594,7 @@ pub fn publish(
 	content_path_src: PathBuf,
 	icon_path: Option<PathBuf>,
 	title: String,
+	description: Option<String>,
 	tags: Vec<String>,
 	addon_type: String,
 	upscale: bool,
@@ -572,6 +608,11 @@ pub fn publish(
 	let is_updating = update_id.is_some();
 
 	rayon::spawn(move || {
+		if let Err(error) = validate_description(description.as_deref()) {
+			transaction.error(error.to_string(), turbonone!());
+			return;
+		}
+
 		let preview = match icon_path {
 			Some(icon_path) => {
 				transaction.status("PUBLISH_PROCESSING_ICON");
@@ -653,6 +694,7 @@ pub fn publish(
 				steam!().update(
 					id,
 					WorkshopUpdateType::Update {
+						description,
 						path: content_path,
 						tags,
 						addon_type,
@@ -666,10 +708,12 @@ pub fn publish(
 			steam!().publish(
 				WorkshopUpdateType::Creation {
 					title,
+					description,
 					path: content_path,
 					tags,
 					addon_type,
 					preview: preview.unwrap(),
+					changes,
 				},
 				&transaction,
 			)
@@ -734,4 +778,52 @@ pub fn verify_icon(path: PathBuf) -> Result<(String, bool), Transaction> {
 			transaction.error(error.to_string(), turbonone!());
 			transaction
 		})
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{validate_description, PublishError, WORKSHOP_DESCRIPTION_MAX_BYTES};
+
+	#[test]
+	fn description_can_be_omitted_or_explicitly_empty() {
+		assert!(validate_description(None).is_ok());
+		assert!(validate_description(Some("")).is_ok());
+	}
+
+	#[test]
+	fn description_accepts_plain_text_bbcode_and_whitespace() {
+		assert!(validate_description(Some("  [b]Title[/b]\n\n[code]print('hello')[/code]\n  ")).is_ok());
+		assert!(validate_description(Some("\n\t ")).is_ok());
+	}
+
+	#[test]
+	fn description_reserves_space_for_the_nul_terminator() {
+		let description = "a".repeat(WORKSHOP_DESCRIPTION_MAX_BYTES);
+		assert!(validate_description(Some(&description)).is_ok());
+		assert!(matches!(
+			validate_description(Some(&(description + "a"))),
+			Err(PublishError::DescriptionTooLong)
+		));
+	}
+
+	#[test]
+	fn description_limit_counts_utf8_bytes() {
+		let description = "🦀".repeat(WORKSHOP_DESCRIPTION_MAX_BYTES / 4) + "abc";
+		assert_eq!(description.len(), WORKSHOP_DESCRIPTION_MAX_BYTES);
+		assert!(validate_description(Some(&description)).is_ok());
+		assert!(matches!(
+			validate_description(Some(&(description + "é"))),
+			Err(PublishError::DescriptionTooLong)
+		));
+	}
+
+	#[test]
+	fn description_rejects_nul_anywhere() {
+		for description in ["\0text", "before\0after", "text\0"] {
+			assert!(matches!(
+				validate_description(Some(description)),
+				Err(PublishError::DescriptionContainsNul)
+			));
+		}
+	}
 }

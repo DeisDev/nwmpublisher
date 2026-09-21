@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Edit Workshop descriptions as plain text or BBCode when publishing or updating addons, with buttons for common Steam formatting. Untouched descriptions remain unchanged; invalid or oversized descriptions are rejected before upload.
+- Include an optional changelog on an addon's initial Workshop upload, with Steam BBCode formatting buttons available for both initial uploads and updates.
+
 ### Changed
 
 - Use the new logo throughout the app, favicon, and packaged application icons.
