@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Filter My Workshop by Public, Friends only, Private, or Unlisted visibility, and sort the full collection by current subscribers, last updated, publication date, or title in either direction. Remember both choices across sessions.
 - Show recursive file counts and sizes beside folders in the file browser, with footer totals for the current directory.
 - Choose separately whether to open Workshop pages after publishing and folders after single-addon extraction. Existing behavior is preserved by default; required Steam agreement prompts and explicit Open actions remain available.
 - Copy per-job diagnostics from failed publishing, downloading, and extraction jobs.

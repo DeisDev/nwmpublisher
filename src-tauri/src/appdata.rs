@@ -10,6 +10,7 @@ use std::{
 
 use crate::{
 	gma::{ExtractDestination, ExtractionOverwriteMode},
+	steam::workshop::WorkshopVisibility,
 	RwLockCow,
 };
 
@@ -87,6 +88,19 @@ pub enum WorkshopUpdateMode {
 	Package,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkshopSort {
+	UpdatedDesc,
+	UpdatedAsc,
+	SubscribersDesc,
+	SubscribersAsc,
+	CreatedDesc,
+	CreatedAsc,
+	TitleAsc,
+	TitleDesc,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Settings {
@@ -108,6 +122,8 @@ pub struct Settings {
 	pub ignore_globs: Vec<String>,
 
 	pub my_workshop_local_paths: HashMap<PublishedFileId, PathBuf>,
+	pub my_workshop_visibility: Vec<WorkshopVisibility>,
+	pub my_workshop_sort: WorkshopSort,
 	pub upscale_addon_icon: bool,
 	pub workshop_update_mode: WorkshopUpdateMode,
 	pub open_workshop_after_publish: bool,
@@ -140,6 +156,13 @@ impl Default for Settings {
 
 			ignore_globs: Vec::new(),
 			my_workshop_local_paths: HashMap::new(),
+			my_workshop_visibility: vec![
+				WorkshopVisibility::Public,
+				WorkshopVisibility::FriendsOnly,
+				WorkshopVisibility::Private,
+				WorkshopVisibility::Unlisted,
+			],
+			my_workshop_sort: WorkshopSort::UpdatedDesc,
 			upscale_addon_icon: true,
 			workshop_update_mode: WorkshopUpdateMode::Description,
 			open_workshop_after_publish: true,
@@ -504,7 +527,66 @@ pub fn write_tauri_settings() -> Option<()> {
 
 #[cfg(test)]
 mod tests {
-	use super::{Settings, WorkshopUpdateMode};
+	use super::{Settings, WorkshopSort, WorkshopUpdateMode, WorkshopVisibility};
+
+	#[test]
+	fn workshop_browsing_defaults_preserve_existing_settings() {
+		let settings: Settings = serde_json::from_str(r#"{"sounds":false,"ignore_globs":["*.bak"]}"#).unwrap();
+		assert_eq!(settings.my_workshop_sort, WorkshopSort::UpdatedDesc);
+		assert_eq!(
+			settings.my_workshop_visibility,
+			vec![
+				WorkshopVisibility::Public,
+				WorkshopVisibility::FriendsOnly,
+				WorkshopVisibility::Private,
+				WorkshopVisibility::Unlisted,
+			]
+		);
+		assert!(!settings.sounds);
+		assert_eq!(settings.ignore_globs, vec!["*.bak"]);
+	}
+
+	#[test]
+	fn workshop_browsing_preferences_round_trip_including_no_visibility() {
+		let visibility_options = ["public", "friends_only", "private", "unlisted"];
+		for sort in [
+			"updated_desc",
+			"updated_asc",
+			"subscribers_desc",
+			"subscribers_asc",
+			"created_desc",
+			"created_asc",
+			"title_asc",
+			"title_desc",
+		] {
+			for mask in 0..16 {
+				let visibility: Vec<_> = visibility_options
+					.iter()
+					.enumerate()
+					.filter_map(|(index, value)| (mask & (1 << index) != 0).then_some(*value))
+					.collect();
+				let settings: Settings = serde_json::from_value(serde_json::json!({
+					"my_workshop_visibility": visibility,
+					"my_workshop_sort": sort,
+					"sounds": false,
+				}))
+				.unwrap();
+				let saved = serde_json::to_value(&settings).unwrap();
+				assert_eq!(saved["my_workshop_visibility"], serde_json::json!(visibility));
+				assert_eq!(saved["my_workshop_sort"], sort);
+				let loaded: Settings = serde_json::from_value(saved).unwrap();
+				assert_eq!(loaded.my_workshop_visibility, settings.my_workshop_visibility);
+				assert_eq!(loaded.my_workshop_sort, settings.my_workshop_sort);
+				assert!(!loaded.sounds);
+			}
+		}
+	}
+
+	#[test]
+	fn workshop_browsing_preferences_reject_invalid_values() {
+		assert!(serde_json::from_value::<Settings>(serde_json::json!({"my_workshop_sort": "invalid"})).is_err());
+		assert!(serde_json::from_value::<Settings>(serde_json::json!({"my_workshop_visibility": ["invalid"]})).is_err());
+	}
 
 	#[test]
 	fn automatic_open_preferences_preserve_legacy_settings() {

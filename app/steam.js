@@ -54,7 +54,11 @@ class Steam {
 
 	getMyWorkshop(page) {
 		if (this.MyWorkshop[page] == null) {
-			this.MyWorkshop[page] = new DeferredPromise(invoke("browse_my_workshop", { page }));
+			const pages = this.MyWorkshop;
+			pages[page] = invoke("browse_my_workshop", { page }).catch(error => {
+				delete pages[page];
+				throw error;
+			});
 		}
 		return this.MyWorkshop[page];
 	}

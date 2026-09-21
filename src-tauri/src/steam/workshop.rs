@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
 	cell::RefCell,
 	collections::{HashMap, HashSet, VecDeque},
@@ -18,6 +18,26 @@ use super::{users::SteamUser, Steam};
 
 use crate::{webview::Addon, GMOD_APP_ID};
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkshopVisibility {
+	Public,
+	FriendsOnly,
+	Private,
+	Unlisted,
+}
+
+impl From<steamworks::PublishedFileVisibility> for WorkshopVisibility {
+	fn from(visibility: steamworks::PublishedFileVisibility) -> Self {
+		match visibility {
+			steamworks::PublishedFileVisibility::Public => Self::Public,
+			steamworks::PublishedFileVisibility::FriendsOnly => Self::FriendsOnly,
+			steamworks::PublishedFileVisibility::Private => Self::Private,
+			steamworks::PublishedFileVisibility::Unlisted => Self::Unlisted,
+		}
+	}
+}
+
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkshopItem {
@@ -26,6 +46,7 @@ pub struct WorkshopItem {
 	pub owner: Option<SteamUser>,
 	pub time_created: u32,
 	pub time_updated: u32,
+	pub visibility: Option<WorkshopVisibility>,
 	pub description: Option<String>,
 	pub score: f32,
 	pub tags: Vec<String>,
@@ -47,6 +68,7 @@ impl From<QueryResult> for WorkshopItem {
 			owner: None,
 			time_created: result.time_created,
 			time_updated: result.time_updated,
+			visibility: Some(result.visibility.into()),
 			description: Some(result.description), // TODO parse or strip bbcode?
 			score: result.score,
 			tags: result.tags,
@@ -67,6 +89,7 @@ impl From<PublishedFileId> for WorkshopItem {
 			owner: None,
 			time_created: 0,
 			time_updated: 0,
+			visibility: None,
 			description: None,
 			score: 0.,
 			tags: Vec::with_capacity(0),
@@ -270,7 +293,7 @@ impl Steam {
 		rayon::spawn(move || f(&self.fetch_collection_items(collection)));
 	}
 
-	pub fn browse_my_workshop(&'static self, page: u32) -> Option<(u32, Vec<Addon>)> {
+	pub fn browse_my_workshop(&'static self, page: u32) -> Result<(u32, Vec<Addon>), String> {
 		let results = Arc::new(Mutex::new(None));
 
 		let results_ref = results.clone();
@@ -285,27 +308,30 @@ impl Steam {
 				steamworks::AppIDs::ConsumerAppId(GMOD_APP_ID),
 				page,
 			)
-			.ok()?
+			.map_err(|error| format!("Failed to query Workshop page {page}: {error}"))?
 			.require_tag("addon")
 			.include_long_desc(true)
 			.fetch(move |result: Result<QueryResults<'_>, SteamError>| {
-				if let Ok(data) = result {
-					*results_ref.lock() = Some(Some((
-						data.total_results(),
-						data.iter()
-							.enumerate()
-							.map(|(i, x)| {
-								let mut item: WorkshopItem = x.unwrap().into();
-								item.preview_url = data.preview_url(i as u32);
-								item.subscriptions = data.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions).unwrap_or(0);
-								search!().add(&item);
-								item.into()
-							})
-							.collect::<Vec<Addon>>(),
-					)));
-				} else {
-					*results_ref.lock() = Some(None);
-				}
+				*results_ref.lock() = Some(
+					result
+						.map_err(|error| format!("Failed to load Workshop page {page}: {error}"))
+						.and_then(|data| {
+							let items = data
+								.iter()
+								.enumerate()
+								.map(|(i, result)| {
+									let mut item: WorkshopItem = result.ok_or_else(|| format!("Missing Workshop item {i} on page {page}"))?.into();
+									item.preview_url = data.preview_url(i as u32);
+									item.subscriptions = data
+										.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions)
+										.ok_or_else(|| format!("Missing subscriber count for Workshop item {}", item.id.0))?;
+									search!().add(&item);
+									Ok(item.into())
+								})
+								.collect::<Result<Vec<Addon>, String>>()?;
+							Ok((data.total_results(), items))
+						}),
+				);
 			});
 
 		mutex_wait!(results, {
@@ -317,7 +343,7 @@ impl Steam {
 }
 
 #[tauri::command]
-pub fn browse_my_workshop(page: u32) -> Option<(u32, Vec<Addon>)> {
+pub fn browse_my_workshop(page: u32) -> Result<(u32, Vec<Addon>), String> {
 	steam!().client_wait();
 	rayon::scope(|_| steam!().browse_my_workshop(page))
 }
