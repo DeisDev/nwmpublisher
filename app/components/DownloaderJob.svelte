@@ -2,10 +2,10 @@
 	import Cross from '@lucide/svelte/icons/x';
 	import LinkChain from '@lucide/svelte/icons/link';
 	import Dead from "./Dead.svelte";
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import { translateError } from '../i18n';
 	import { Steam } from '../steam';
-	import filesize from 'filesize';
+	import { formatSize, formatRate } from '../format.js';
 	import { tippyFollow } from '../tippy';
 	import { JOB_TYPE_EXTRACT } from '../pages/Downloader.svelte';
 	import { invoke } from '@tauri-apps/api/core';
@@ -15,10 +15,10 @@
 		if (total > 0 && progress > 0) {
 			const elapsed = ((new Date().getTime() - timestamp) / 1000);
 			if (elapsed > 0) {
-				return filesize((total * (progress / 100)) / elapsed);
+				return (total * (progress / 100)) / elapsed;
 			}
 		}
-		return filesize(0);
+		return 0;
 	}
 
 	export let job;
@@ -78,12 +78,12 @@
 	<td class="speed">
 		{#if !job.transaction.finished && !job.transaction.error && job.transaction.progress > 0 && job.transaction.progress < 100 && !!job.size && job.transaction.status !== 'decompressing'}
 			<!-- TODO accurate speed when decompressing -->
-			{calculateSpeed(job.timestamp, job.transaction.progress, job.size) + '/s'}
+			{formatRate(calculateSpeed(job.timestamp, job.transaction.progress, job.size), $locale)}
 		{/if}
 	</td>
 	<td class="total">
 		{#if !!job.size}
-			{filesize(job.size)}
+			{formatSize(job.size, $locale)}
 		{/if}
 	</td>
 	{#if job.type === JOB_TYPE_EXTRACT && job.transaction.finished}

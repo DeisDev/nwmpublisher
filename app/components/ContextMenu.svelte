@@ -82,7 +82,7 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import DestinationSelect from './DestinationSelect.svelte';
-	import fileSize from 'filesize';
+	import { formatSize } from '../format.js';
 	import { taskMessage, Transaction } from '../transactions';
 import { playSound } from '../sounds';
 
@@ -202,8 +202,8 @@ import { playSound } from '../sounds';
 			.then(transactionId => new Transaction(transactionId, transaction => {
 				return $_('extracting_progress', { values: {
 					pct: transaction.progress,
-					data: fileSize((transaction.progress / 100) * gmaSize),
-					dataTotal: fileSize(gmaSize)
+					data: formatSize((transaction.progress / 100) * gmaSize),
+					dataTotal: formatSize(gmaSize)
 				}});
 			}));
 	}

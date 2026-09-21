@@ -21,7 +21,7 @@
 	import BBCodeEditor from './BBCodeEditor.svelte';
 	import { writable } from 'svelte/store';
 	import { Transaction } from '../transactions';
-	import filesize from 'filesize';
+	import { formatSize } from '../format.js';
 	import Loading from './Loading.svelte';
 	import { translateError } from '../i18n';
 	import { Steam } from '../steam';
@@ -323,8 +323,8 @@
 			const transaction = new Transaction(transactionId, transaction => {
 				return $_(transaction.status ?? 'PUBLISH_PACKING', { values: {
 					pct: transaction.progress,
-					data: filesize((transaction.progress / 100) * gmaSize),
-					dataTotal: filesize(gmaSize)
+					data: formatSize((transaction.progress / 100) * gmaSize),
+					dataTotal: formatSize(gmaSize)
 				}});
 			});
 
@@ -511,8 +511,8 @@
 			const transaction = new Transaction(transactionId, transaction => {
 				return $_(transaction.status ?? 'PUBLISH_PROCESSING_ICON', { values: {
 					pct: transaction.progress,
-					data: filesize((transaction.progress / 100) * gmaSize),
-					dataTotal: filesize(gmaSize)
+					data: formatSize((transaction.progress / 100) * gmaSize),
+					dataTotal: formatSize(gmaSize)
 				}});
 			});
 

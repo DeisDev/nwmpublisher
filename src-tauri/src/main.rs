@@ -72,7 +72,7 @@ fn deadlock_watchdog() {
 	});
 }
 
-fn main() {
+fn main() -> std::process::ExitCode {
 	// https://github.com/WilliamVenner/gmpublisher/issues/210
 	if cfg!(target_os = "linux") {
 		std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
@@ -82,8 +82,8 @@ fn main() {
 
 	rayon::ThreadPoolBuilder::new().num_threads(*crate::NUM_THREADS).build_global().unwrap();
 
-	if cli::stdin() {
-		return;
+	if let Some(exit_code) = cli::stdin() {
+		return exit_code;
 	}
 
 	println!("nwmpublisher v{}", env!("CARGO_PKG_VERSION"));
@@ -130,4 +130,5 @@ fn main() {
 		.unwrap();
 
 	println!("Goodbye!");
+	std::process::ExitCode::SUCCESS
 }

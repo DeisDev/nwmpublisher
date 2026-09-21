@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add `--no-open` to CLI extraction to suppress opening the output folder for that invocation.
 - Filter My Workshop by Public, Friends only, Private, or Unlisted visibility, and sort the full collection by current subscribers, last updated, publication date, or title in either direction. Remember both choices across sessions.
 - Show recursive file counts and sizes beside folders in the file browser, with footer totals for the current directory.
 - Choose separately whether to open Workshop pages after publishing and folders after single-addon extraction. Existing behavior is preserved by default; required Steam agreement prompts and explicit Open actions remain available.
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Format file sizes and transfer rates using the selected application language and consistent IEC binary units (KiB, MiB, and KiB/s) throughout the interface.
 - Replace the Linux ZIP with AppImage, DEB and RPM packages, and the macOS ZIP with a universal drag-to-Applications DMG. Bundle Steam's library with working launch paths, support optional Mac signing and notarization, and publish all platforms together with checksums after package checks pass.
 - Upgrade to Tauri 2, Svelte 5, Vite 8, Rust 1.98.1, Node.js 26.9.0, and npm 12.0.2. Linux builds now use WebKitGTK 4.1.
 - Replace the interface icons with Lucide icons.
@@ -33,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Document only supported CLI commands, report archive and extraction failures with their paths, and return nonzero exit codes for failed operations or invalid arguments. Show command-line output in the parent Windows console.
 - Enable dropping one addon folder into the publishing File Browser using the same validation as browsing. Reject multiple paths and ignore drops when the browser is hidden or publishing is in progress.
 - Clear Steam launch variables after connecting on Windows so browsers and folder windows opened by nwmpublisher do not inherit Garry's Mod's Steam identity and keep it marked as running after closing the publisher.
 - Use the same normalized file manifest for publishing previews and packing, reject duplicate archive paths, and revalidate content and exclusions when publishing starts. Report traversal and whitelist errors instead of silently omitting files.

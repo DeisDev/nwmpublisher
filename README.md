@@ -4,25 +4,16 @@
 
 # ⚙️ nwmpublisher (no watermark publisher)
 
-A fork of [gmpublisher](https://github.com/WilliamVenner/gmpublisher) with the branding stripped out.
-At it's core, it's still the same feature-packed workshop publisher for Garry's Mod, but now with some improvements made in various areas such as quality of life and stability. 
+A fork of [gmpublisher](https://github.com/WilliamVenner/gmpublisher).
+At it's core, it's still the same feature-packed workshop publisher for Garry's Mod, but now with some improvements made in various areas such as quality of life and stability.
+
+The main difference is that there is no more gmpublisher advertising/branding such as the "Uploaded with gmpublisher" links in your description when you first upload an addon. You get to control the name of the .gma file (no longer gmpublisher.gma), the icon, description and changelog all from the first publish.
+
+Aside from this, there is also an assortment of bug fixes, technical changes and overall improvements to the user experience that might make you want to switch over to nwmpublisher.
 
 Maintained by [DeisDev](https://github.com/DeisDev) ("CatSniffer").
 
-## What's different
-
-* **The name.** The executable, installer, window title, CLI, config and temp folders, registry
-  entries and `.gma` file association all say nwmpublisher.
-* **Your GMA files are named by you.** The packed file follows the addon title you type in the
-  publish window, can be renamed to whatever you like, and falls back to `publishedaddon.gma` when
-  left empty. No more `gmpublisher.gma`.
-* **The default Workshop preview icon is your own Steam avatar**, kept square without borders or
-  shadows, instead of the gmpublisher logo.
-* **Nothing you publish mentions gmpublisher** — not the item description, and not your Steam status,
-  which reads "In the Workshop".
-
-Everything else is upstream gmpublisher, so the documentation below still applies. All credit for the
-app itself goes to [William Venner](https://github.com/WilliamVenner) and the
+Built on the work of [William Venner](https://github.com/WilliamVenner) and the
 [gmpublisher contributors](https://github.com/WilliamVenner/gmpublisher/graphs/contributors).
 
 ## 📦 Installation
@@ -37,21 +28,12 @@ Download the latest release from the [releases page](https://github.com/DeisDev/
 | Fedora | `x86_64.rpm` | Run `sudo dnf install ./nwmpublisher-*.rpm` in your download folder. |
 | Other Linux distributions / Steam Deck | `amd64.AppImage` | In the file's properties, allow it to run as a program, then open it. On Steam Deck, use Desktop Mode. |
 
-Keep Steam running and signed in when using Workshop features. The Steam API library is included;
-you do not need to download an SDK or copy libraries yourself.
 
-Mac builds currently have no Apple Developer ID signature or notarization. After the first launch
-is blocked, open **System Settings → Privacy & Security → Open Anyway**, then confirm Open.
-See [Apple's instructions](https://support.apple.com/en-us/102445).
 
-Linux downloads support **x86_64** and are built on **Ubuntu 22.04**; older distributions are not
-supported. Prefer DEB or RPM where available for application-menu integration and managed dependencies.
-For an AppImage, the terminal equivalent is `chmod +x nwmpublisher_*.AppImage`, then
-`./nwmpublisher_*.AppImage`. If it reports a missing FUSE library, use
-`./nwmpublisher_*.AppImage --appimage-extract-and-run` to run without FUSE.
 
-To update, download the new package and install it the same way; for AppImage, replace the old file.
-Your settings are stored separately. Each release includes `SHA256SUMS` for verifying downloads.
+
+
+
 
 ### Upgrading from gmpublisher
 
@@ -66,24 +48,62 @@ To move them yourself instead, copy `settings.json` from the old `gmpublisher` f
 `nwmpublisher` folder in your config directory (`%APPDATA%` on Windows, `~/.config` on Linux,
 `~/Library/Application Support` on macOS).
 
-## Tutorials
-
-[DanFMN - Fastest Way to Upload a Garry's Mod Addon To Workshop](https://youtu.be/_syLXTFXmgM)
-
-[DarkFated - GMPublisher Guide in Russian](https://youtu.be/ldjHm85AnYk)
 
 ## Features
 
 * Doesn't depend on gmad.exe or gmpublish.exe
-* Publish & update your Workshop items
+* Publish & update your Workshop items without added branding
+* Choose your GMA filenames and use your Steam avatar as the default icon
+* Edit descriptions & changelogs with BBCode, live previews, fullscreen editing and undo/redo
+* Update descriptions without reuploading addon files
+* Filter & sort your Workshop items, with your choices saved between sessions
+* Drag addon folders into the publishing file browser
 * Extract, search and browse GMA files and installed addons
+* View file counts and sizes for entire folders
 * Bulk download & extract Workshop items and collections
 * Upload animated GIFs as your Workshop item's icon
 * Analyze which addons are taking up the most disk space using the addon size analyzer treemap
 * Supports legacy SteamPipe addons and old GMA versions
 * Works without an Internet connection
-* CLI interface
+* Choose whether to open Workshop pages after publishing and folders after extraction
+* Copy diagnostics from failed jobs
+* CLI extraction with custom output paths and an option to keep the folder closed
 * (Windows) .GMA file type association for quick extraction
+
+## Command line
+
+Run `nwmpublisher` without arguments to launch the GUI. The CLI supports extraction,
+help, and version information:
+
+```sh
+nwmpublisher --help
+nwmpublisher --version
+nwmpublisher --extract "addon.gma"
+nwmpublisher --extract "addon.gma" --out "extracted-addon" --no-open
+```
+
+`-e` and `-o` are aliases for `--extract` and `--out`. Output goes directly into
+`--out`, creating the directory if needed and overwriting matching files. Without
+`--out`, extraction uses an addon-named folder in the application's configured
+temporary directory (by default, `nwmpublisher` inside the system temporary directory).
+This default destination follows the application's overwrite/recycle setting.
+
+Successful extraction prints the output path. The folder opens according to the
+application's **Open folder after extraction** preference; `--no-open` always suppresses
+opening it for that invocation. Use `--no-open` for scripts or environments without a desktop.
+
+Exit codes are `0` for success (including help and version), `1` for archive,
+extraction, or folder-opening failures, and `2` for invalid arguments. Failures print
+details to standard error. A folder-opening failure leaves the extracted files available.
+
+In Windows PowerShell scripts, wait for the GUI-subsystem executable and read its exit code:
+
+```powershell
+$cliProcess = Start-Process -FilePath .\nwmpublisher.exe -ArgumentList '--extract "addon.gma" --out "extracted-addon" --no-open' -NoNewWindow -Wait -PassThru
+$cliProcess.ExitCode
+```
+
+Publishing and updating Workshop items are currently available only in the GUI.
 
 ## Languages
 
@@ -117,33 +137,27 @@ To move them yourself instead, copy `settings.json` from the old `gmpublisher` f
 ## Supported Platforms
 
 * Windows
-* macOS (universal Intel / Apple Silicon package; interactive testing pending)
-* Linux (x86_64 AppImage, DEB and RPM; interactive testing pending)
+* macOS
+* Linux
 
-Windows is the primary development and testing platform. The release workflow checks Linux package
-contents and command-line startup, plus macOS architectures, signatures and command-line startup.
-These checks do not replace testing the GUI and Steam Workshop operations on each platform.
+Windows is the primary development and testing platform.
 
 ## Media
 
-![Screenshot](https://user-images.githubusercontent.com/14863743/115953601-5f1a7400-a4e4-11eb-831c-d6a924afbf33.png)
+![Screenshot](public\screenshots\MyWorkshop.png)
 
-![Screenshot](https://user-images.githubusercontent.com/14863743/115953605-63469180-a4e4-11eb-9f96-90b992cbffc4.png)
+![Screenshot](public\screenshots\Publish.png)
 
-![Screenshot](https://user-images.githubusercontent.com/14863743/115954341-5b88ec00-a4e8-11eb-8f27-c03d43df165a.png)
+![Screenshot](public\screenshots\Update.png)
 
-![Screenshot](https://user-images.githubusercontent.com/14863743/115953616-7c4f4280-a4e4-11eb-95c0-add80b1d41bd.png)
+![Screenshot](public\screenshots\DescriptionEditor.png)
 
-![Screenshot](https://user-images.githubusercontent.com/14863743/115953639-9db02e80-a4e4-11eb-935d-bad41cd30bde.png)
+![Screenshot](public\screenshots\Installed.png)
 
-![Screenshot](https://user-images.githubusercontent.com/14863743/115958825-00afbe80-a501-11eb-81da-6d53a94eddbf.png)
+![Screenshot](public\screenshots\Extract.png)
 
-![Screenshot](https://user-images.githubusercontent.com/14863743/115953801-845bb200-a4e5-11eb-8fc2-8b142f2be237.png)
+![Screenshot](public\screenshots\Size.png)
 
-![Screenshot](https://user-images.githubusercontent.com/14863743/115953820-99d0dc00-a4e5-11eb-93a4-36e8b2248e87.png)
-
-![Screenshot](https://user-images.githubusercontent.com/14863743/115953827-a35a4400-a4e5-11eb-9691-48e520eb9bb1.png)
-
-![Screenshot](https://user-images.githubusercontent.com/14863743/115953670-bb7d9380-a4e4-11eb-8f54-f43fcd153d90.png)
+![Screenshot](public\screenshots\Settings.png)
 
 <p align="center"><img src="https://i.imgur.com/Un4akZe.gif"/></p>

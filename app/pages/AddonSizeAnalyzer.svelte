@@ -1,11 +1,11 @@
 <script>
 	import { afterUpdate, onDestroy, onMount } from 'svelte';
 	import { writable } from 'svelte/store';
-	import { _ } from 'svelte-i18n';
+	import { _, locale } from 'svelte-i18n';
 	import { invoke } from '@tauri-apps/api/core';
 	import { Transaction } from '../transactions.js';
 	import tippy from 'tippy.js';
-	import filesize from 'filesize';
+	import { formatSize } from '../format.js';
 	import Loading from '../components/Loading.svelte';
 	import Dead from '../components/Dead.svelte';
 	import { Steam } from '../steam';
@@ -410,6 +410,14 @@
 	let popperName;
 	let popperType;
 	let popperSize;
+	let popperBytes;
+
+	function updatePopperSize(selectedLocale) {
+		if (!popperSize || popperBytes == null) return;
+		popperSize.textContent = formatSize(popperBytes, selectedLocale);
+		popper._tippy.setContent(popperContent.innerHTML);
+	}
+	$: updatePopperSize($locale);
 
 	onMount(() => {
 		tippy(popper, {
@@ -442,7 +450,7 @@
 			let workshopData = workshopDataPromises[workshopDataIDIndex[addon.installed.id ?? -1] ?? -1];
 
 			popperName.textContent = ((workshopData && typeof workshopData === 'object' ? workshopData.dead : true) ? (addon.installed.title ?? addon.installed.extractedName) : workshopData.title) ?? addon.installed.id;
-			popperSize.textContent = filesize(Number(addon.installed.size));
+			popperBytes = Number(addon.installed.size);
 
 			const tagName = lookupTagName(addon.tagId);
 			updateTagCanvas(tagName);
@@ -455,7 +463,7 @@
 			popper.style.width = addon.w + 'px';
 			popper.style.height = addon.h + 'px';
 
-			popper._tippy.setContent(popperContent.innerHTML);
+			updatePopperSize($locale);
 			popper._tippy.show();
 
 		}

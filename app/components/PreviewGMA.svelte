@@ -1,7 +1,7 @@
 <script>
 	import { Steam } from '../steam.js';
-	import { _ } from 'svelte-i18n';
-	import filesize from 'filesize';
+	import { _, locale } from 'svelte-i18n';
+	import { formatSize } from '../format.js';
 	import Dead from './Dead.svelte';
 	import SteamID from 'steamid';
 	import LinkOut from '@lucide/svelte/icons/external-link';
@@ -33,8 +33,8 @@
 			.then(transactionId => new Transaction(transactionId, transaction => {
 				return $_('extracting_progress', { values: {
 					pct: transaction.progress,
-					data: filesize((transaction.progress / 100) * gmaSize),
-					dataTotal: filesize(gmaSize)
+					data: formatSize((transaction.progress / 100) * gmaSize),
+					dataTotal: formatSize(gmaSize)
 				}});
 			}));
 	}
@@ -47,8 +47,8 @@
 			.then(transactionId => new Transaction(transactionId, transaction => {
 				return $_('extracting_progress', { values: {
 					pct: transaction.progress,
-					data: filesize((transaction.progress / 100) * gmaSize),
-					dataTotal: filesize(gmaSize)
+					data: formatSize((transaction.progress / 100) * gmaSize),
+					dataTotal: formatSize(gmaSize)
 				}});
 			}));
 	}
@@ -147,12 +147,12 @@
 								{#if gma && gma.size > 0}
 									<tr>
 										<th>{$_('size')}</th>
-										<td>{filesize(gma.size)}</td>
+										<td>{formatSize(gma.size, $locale)}</td>
 									</tr>
 								{:else if workshop && workshop.size > 0}
 									<tr>
 										<th>{$_('size')}</th>
-										<td>{filesize(workshop.size)}</td>
+										<td>{formatSize(workshop.size, $locale)}</td>
 									</tr>
 								{/if}
 								{#if workshop}

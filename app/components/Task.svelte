@@ -68,10 +68,10 @@
 		transaction.cancel();
 	}
 
-	function currentStatus() {
+	function currentStatus(translate) {
 		if (cancelError) return translateError(cancelError);
-		if (transaction.state === 'cancelling') return $_('cancelling');
-		if (transaction.cancelPending) return $_('cancel_pending');
+		if (transaction.state === 'cancelling') return translate('cancelling');
+		if (transaction.cancelPending) return translate('cancel_pending');
 		return statusTextFn(transaction);
 	}
 
@@ -108,7 +108,7 @@
 				}
 
 				if (!finished && !cancelled && statusText) {
-					statusText.textContent = currentStatus();
+					statusText.textContent = currentStatus($_);
 				}
 			});
 		}
@@ -138,7 +138,7 @@
 					{statusTextFn}
 				{/if}
 			{:else if transaction}
-				<span bind:this={statusText} role={cancelError ? 'alert' : undefined}>{currentStatus()}</span>
+				<span bind:this={statusText} role={cancelError ? 'alert' : undefined}>{currentStatus($_)}</span>
 			{/if}
 		</div>
 		{#if error}

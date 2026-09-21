@@ -1,7 +1,7 @@
 <script>
 	import { getFileTypeInfo } from '../steam.js';
-	import { _ } from 'svelte-i18n';
-	import filesize from 'filesize';
+	import { _, locale } from 'svelte-i18n';
+	import { formatSize } from '../format.js';
 	import { tippyFollow } from '../tippy.js';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import Copy from '@lucide/svelte/icons/copy';
@@ -243,7 +243,7 @@
 									{/if}
 								</td>
 								<td><span>{entries.total_files === 1 ? $_('items_one') : $_('items_num', { values: { n: entries.total_files } })}</span></td>
-								<td><span>{filesize(entries.size)}</span></td>
+								<td><span>{formatSize(entries.size, $locale)}</span></td>
 							</tr>
 						{/if}
 					{/each}
@@ -252,7 +252,7 @@
 							<td><img class="icon" use:tippyFollow={entry.typeTip} src="/img/silkicons/{entry.icon}" alt=""/></td>
 							<td><span>{entry.name}</span></td>
 							<td><span>{entry.typeTip}</span></td>
-							<td><span>{filesize(entry.size)}</span></td>
+							<td><span>{formatSize(entry.size, $locale)}</span></td>
 						</tr>
 					{/each}
 				</tbody>
@@ -261,7 +261,7 @@
 	</div>
 
 	<div id="ribbon">
-		{browsing.total_files === 1 ? $_('items_one') : $_('items_num', { values: { n: browsing.total_files } })}&nbsp;&nbsp;∣&nbsp;&nbsp;{$_('items_shown', { values: { n: browsing.files.length + countDirs(browsing.dirs) } })}&nbsp;&nbsp;∣&nbsp;&nbsp;{filesize(browsing.size)}
+		{browsing.total_files === 1 ? $_('items_one') : $_('items_num', { values: { n: browsing.total_files } })}&nbsp;&nbsp;∣&nbsp;&nbsp;{$_('items_shown', { values: { n: browsing.files.length + countDirs(browsing.dirs) } })}&nbsp;&nbsp;∣&nbsp;&nbsp;{formatSize(browsing.size, $locale)}
 	</div>
 </main>
 
