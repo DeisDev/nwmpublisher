@@ -131,7 +131,10 @@
 
 		"general": {
 			"general": "General",
-			"sounds": "Sounds"
+			"sounds": "Sounds",
+			"open_workshop_after_publish": "Open Workshop page after publishing",
+			"open_folder_after_extract": "Open folder after extraction",
+			"open_folder_after_extract_tooltip": "Automatically open the folder after extracting a single addon. Bulk extraction and downloads do not open folders automatically."
 		},
 
 		"resets": {

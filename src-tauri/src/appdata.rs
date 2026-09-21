@@ -103,12 +103,14 @@ pub struct Settings {
 	pub extract_destination: ExtractDestination,
 	pub destinations: Vec<PathBuf>,
 	pub create_folder_on_extract: bool,
+	pub open_folder_after_extract: bool,
 
 	pub ignore_globs: Vec<String>,
 
 	pub my_workshop_local_paths: HashMap<PublishedFileId, PathBuf>,
 	pub upscale_addon_icon: bool,
 	pub workshop_update_mode: WorkshopUpdateMode,
+	pub open_workshop_after_publish: bool,
 
 	pub language: Option<String>,
 
@@ -134,11 +136,13 @@ impl Default for Settings {
 
 			destinations: Vec::new(),
 			create_folder_on_extract: true,
+			open_folder_after_extract: true,
 
 			ignore_globs: Vec::new(),
 			my_workshop_local_paths: HashMap::new(),
 			upscale_addon_icon: true,
 			workshop_update_mode: WorkshopUpdateMode::Description,
+			open_workshop_after_publish: true,
 
 			language: None,
 
@@ -501,6 +505,45 @@ pub fn write_tauri_settings() -> Option<()> {
 #[cfg(test)]
 mod tests {
 	use super::{Settings, WorkshopUpdateMode};
+
+	#[test]
+	fn automatic_open_preferences_preserve_legacy_settings() {
+		let settings: Settings = serde_json::from_str(r#"{"sounds":false,"ignore_globs":["*.bak"],"create_folder_on_extract":false}"#).unwrap();
+		assert!(settings.open_workshop_after_publish);
+		assert!(settings.open_folder_after_extract);
+		assert!(!settings.sounds);
+		assert!(!settings.create_folder_on_extract);
+		assert_eq!(settings.ignore_globs, vec!["*.bak"]);
+	}
+
+	#[test]
+	fn automatic_open_preferences_round_trip_independently() {
+		for publish in [false, true] {
+			for extract in [false, true] {
+				let settings = Settings {
+					open_workshop_after_publish: publish,
+					open_folder_after_extract: extract,
+					..Settings::default()
+				};
+				let saved = serde_json::to_value(&settings).unwrap();
+				assert_eq!(saved["open_workshop_after_publish"], publish);
+				assert_eq!(saved["open_folder_after_extract"], extract);
+				let loaded: Settings = serde_json::from_value(saved).unwrap();
+				assert_eq!(loaded.open_workshop_after_publish, publish);
+				assert_eq!(loaded.open_folder_after_extract, extract);
+			}
+		}
+	}
+
+	#[test]
+	fn missing_automatic_open_preference_does_not_reset_the_other() {
+		let settings: Settings = serde_json::from_str(r#"{"open_workshop_after_publish":false}"#).unwrap();
+		assert!(!settings.open_workshop_after_publish);
+		assert!(settings.open_folder_after_extract);
+		let settings: Settings = serde_json::from_str(r#"{"open_folder_after_extract":false}"#).unwrap();
+		assert!(settings.open_workshop_after_publish);
+		assert!(!settings.open_folder_after_extract);
+	}
 
 	#[test]
 	fn workshop_update_mode_defaults_without_resetting_existing_settings() {

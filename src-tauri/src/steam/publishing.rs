@@ -777,7 +777,9 @@ pub fn publish(request: PublishRequest) -> u32 {
 					if legal_agreement {
 						crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
 					}
-					crate::path::open(format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id.0));
+					if app_data!().settings.read().open_workshop_after_publish {
+						crate::path::open(format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id.0));
+					}
 					transaction.finished(turbonone!());
 				}
 

@@ -250,7 +250,7 @@ impl ExtractGMAImmut for GMAFile {
 				return Err(GMAError::Cancelled);
 			}
 			transaction.finished(dest_path.clone());
-			if open_after_extract {
+			if open_after_extract && app_data!().settings.read().open_folder_after_extract {
 				crate::path::open(&dest_path);
 			}
 			Ok(dest_path)

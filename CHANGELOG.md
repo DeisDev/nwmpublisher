@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Choose separately whether to open Workshop pages after publishing and folders after single-addon extraction. Existing behavior is preserved by default; required Steam agreement prompts and explicit Open actions remain available.
 - Copy per-job diagnostics from failed publishing, downloading, and extraction jobs.
 - Update an existing addon's description without selecting or uploading addon files, and open its previous change notes on Steam from the Changelog tab.
 - Undo and redo typing, pasting, and BBCode formatting in both editors, using buttons or Ctrl/Cmd+Z, Ctrl+Y, and Ctrl/Cmd+Shift+Z. Each editor keeps its history across tab and fullscreen changes.
