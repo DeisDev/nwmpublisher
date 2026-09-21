@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-21
+
 ### Added
 
 - Add `--no-open` to CLI extraction to suppress opening the output folder for that invocation.
