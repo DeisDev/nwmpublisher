@@ -2,6 +2,7 @@
 	import { Cross, LinkChain } from "akar-icons-svelte";
 	import Dead from "./Dead.svelte";
 	import { _ } from 'svelte-i18n';
+	import { translateError } from '../i18n';
 	import { Steam } from '../steam';
 	import filesize from 'filesize';
 	import { tippyFollow } from '../tippy';
@@ -86,7 +87,7 @@
 			<div class="pct">{$_('open').toLocaleUpperCase()}</div>
 		</td>
 	{:else if job.transaction.error}
-		<td class="progress" use:tippyFollow={$_(job.transaction.error[0], { values: { error: job.transaction.error[1] ? job.transaction.error[1] : undefined }})}>
+		<td class="progress" use:tippyFollow={translateError(...job.transaction.error)}>
 			<div class="progress error" style="width: calc(100% - .6rem)"></div>
 			<div class="pct">{$_('error')}</div>
 		</td>

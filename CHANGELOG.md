@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Show Steam error details in downloader tooltips for both separate error data and combined `KEY:details` messages.
 - Keep the publishing details and upload button visible at the default window size by adapting the image preview height and tightening spacing.
 - Replaced the old logo in the Windows installer's header banner.
 
