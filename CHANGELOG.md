@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix the file browser showing "No files found" or a previous addon's files after loading an addon.
 - Fix macOS release verification failing after disk image creation because the architecture check passed arguments in the wrong order.
 - Match Workshop details and settings to the publisher's existing controls, neutral colours, and configured action colours.
 

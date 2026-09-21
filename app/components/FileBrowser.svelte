@@ -29,7 +29,7 @@
 		total_files: 0,
 	};
 
-	function initBrowser() {
+	function initBrowser(fileEntries) {
 		const entries = {
 			dirs: Object.create(null),
 			files: [],
@@ -38,8 +38,8 @@
 			total_files: 0,
 		};
 
-		for (let i = 0; i < $entriesList.length; i++) {
-			const entry = $entriesList[i];
+		for (let i = 0; i < fileEntries.length; i++) {
+			const entry = fileEntries[i];
 			const components = entry.path.split('/');
 			let path = entries;
 			let path_str = '';
@@ -187,7 +187,6 @@
 		return count;
 	}
 
-	if (browsePath) initBrowser();
 	if (entriesList && entriesList.subscribe) {
 		onDestroy(entriesList.subscribe(initBrowser));
 	}
