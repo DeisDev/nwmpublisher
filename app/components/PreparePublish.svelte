@@ -6,12 +6,13 @@
 <script>
 	import { _ } from 'svelte-i18n';
 	import Modal from '../components/Modal.svelte';
-	import { CloudUpload, Cross, Folder, LinkOut } from 'akar-icons-svelte';
+	import { ChevronRight, CloudUpload, Cross, Folder, LinkOut } from 'akar-icons-svelte';
 	import { tippyFollow, tippy } from '../tippy';
 	import * as dialog from '@tauri-apps/api/dialog';
 	import { invoke } from '@tauri-apps/api/tauri';
 	import { playSound } from '../sounds';
 	import FileBrowser from './FileBrowser.svelte';
+	import BBCodeEditor from './BBCodeEditor.svelte';
 	import { writable } from 'svelte/store';
 	import { Transaction } from '../transactions';
 	import filesize from 'filesize';
@@ -37,32 +38,23 @@
 
 	let titleInput;
 	let addonTypeInput;
-	let changeLog;
+	let changes = '';
 	let gmaNameInput;
 	let gmaNameTouched = false;
 	let description = '';
-	let descriptionInput;
 	let descriptionTouched = false;
 	let descriptionError = null;
 	const descriptionMaxBytes = 7999;
 	const descriptionEncoder = new TextEncoder();
-	const bbcodeFormats = [
-		{ tag: 'b', label: 'B' },
-		{ tag: 'i', label: 'I' },
-		{ tag: 'u', label: 'U' },
-		{ tag: 'strike', label: 'S' },
-		{ tag: 'h1', label: 'H1' },
-		{ tag: 'h2', label: 'H2' },
-		{ tag: 'h3', label: 'H3' },
-		{ tag: 'spoiler' },
-		{ tag: 'url' },
-		{ tag: 'list' },
-		{ tag: 'olist' },
-		{ tag: 'code' },
-	];
+	let activeTab = 'files';
+	let descriptionFormattingOpen = false;
+	let changesFormattingOpen = false;
+	let ignoreOpen = false;
+	const tabs = ['files', 'description', 'changelog'];
 	$: descriptionBytes = descriptionEncoder.encode(description).length;
 
-	function onDescriptionInput() {
+	function onDescriptionInput(event) {
+		description = event.detail;
 		descriptionTouched = true;
 		descriptionError = descriptionEncoder.encode(description).length > descriptionMaxBytes
 			? 'ERR_DESCRIPTION_TOO_LONG'
@@ -70,31 +62,16 @@
 		checkForm();
 	}
 
-	function formatText(input, tag) {
-		if ($isPublishing) return;
-
-		const start = input.selectionStart;
-		const end = input.selectionEnd;
-		let text = input.value.slice(start, end) || $_(tag === 'url' ? 'bbcode.link_text' : 'bbcode.text');
-		let opening = tag === 'url' ? '[url=https://]' : `[${tag}]`;
-		let closing = `[/${tag}]`;
-		if (tag === 'list' || tag === 'olist') {
-			opening += '\n';
-			closing = '\n' + closing;
-			text = text.split('\n').map(line => '[*]' + line).join('\n');
-		}
-
-		input.setRangeText(opening + text + closing, start, end, 'select');
-		if (input === descriptionInput) {
-			description = input.value;
-			onDescriptionInput();
-		}
-		input.focus();
-		if (tag === 'url') {
-			input.setSelectionRange(start + '[url='.length, start + opening.length - 1);
-		} else {
-			input.setSelectionRange(start + opening.length, start + opening.length + text.length);
-		}
+	function onTabKeydown(event, index) {
+		let next;
+		if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+		else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+		else if (event.key === 'Home') next = 0;
+		else if (event.key === 'End') next = tabs.length - 1;
+		else return;
+		event.preventDefault();
+		activeTab = tabs[next];
+		event.currentTarget.parentElement.children[next].focus();
 	}
 
 	let upscale;
@@ -289,7 +266,7 @@
 			upscale: canUpscale && upscale.checked,
 
 			updateId: publishingAddon?.id,
-			changes: changeLog.value || null,
+			changes: changes || null,
 
 		}).then(transactionId => {
 			const transaction = new Transaction(transactionId, transaction => {
@@ -353,7 +330,11 @@
 
 	const tagSearchMax = Math.max(addonTypes.length, addonTags.length);
 	onMount(() => updatingAddon.subscribe(async updatingAddon => {
-		if (changeLog) changeLog.value = '';
+		changes = '';
+		activeTab = 'files';
+		descriptionFormattingOpen = false;
+		changesFormattingOpen = false;
+		ignoreOpen = false;
 		description = updatingAddon?.description ?? '';
 		descriptionTouched = false;
 		descriptionError = null;
@@ -574,45 +555,34 @@
 		{/if}
 	</div>
 
-	<div id="middle-column">
-		<FileBrowser fileSelect={path => onPathChanged(path)} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} {openEntry} open={openAddon} size={gmaSize}/>
-
-		<div id="description-container">
-			<label for="description">{$_('workshop_description')}</label>
-			<div class="bbcode-toolbar" role="group" aria-label={$_('bbcode.toolbar')} aria-controls="description">
-				{#each bbcodeFormats as format}
-					<button type="button" data-format={format.tag} title={$_('bbcode.' + format.tag)} aria-label={$_('bbcode.' + format.tag)} disabled={$isPublishing} on:click={() => formatText(descriptionInput, format.tag)}>{format.label ?? $_('bbcode.' + format.tag)}</button>
-				{/each}
-			</div>
-			<textarea id="description" bind:this={descriptionInput} bind:value={description} on:input={onDescriptionInput} disabled={$isPublishing} class:error={descriptionError !== null} aria-invalid={descriptionError !== null} aria-describedby="description-help description-size description-error"></textarea>
-			<p id="description-help">{$_('workshop_description_help')}</p>
-			<p id="description-size">{$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })}</p>
-			{#if descriptionError}
-				<p id="description-error" role="alert">{$_(descriptionError)}</p>
-			{/if}
-		</div>
-
-		<div id="changes-container">
-			<label for="changes">{$_('changelog_optional')}</label>
-			<div class="bbcode-toolbar" role="group" aria-label={$_('bbcode.toolbar')} aria-controls="changes">
-				{#each bbcodeFormats as format}
-					<button type="button" data-format={format.tag} title={$_('bbcode.' + format.tag)} aria-label={$_('bbcode.' + format.tag)} disabled={$isPublishing} on:click={() => formatText(changeLog, format.tag)}>{format.label ?? $_('bbcode.' + format.tag)}</button>
-				{/each}
-			</div>
-			<textarea id="changes" bind:this={changeLog} disabled={$isPublishing}></textarea>
-		</div>
-	</div>
-
-	<div id="ignore">
-		<div class="title">{$_('ignored_file_patterns')}</div>
-		<input type="text" placeholder={$_('add_ellipsis')} on:keypress={ignoreKeyPress}/>
-		<div class="hide-scroll">
-			{#each ignoreGlobs as ignore}
-				<div on:click={removeIgnore}>{ignore}</div>
+	<div id="publish-workspace">
+		<div class="workspace-tabs" role="tablist" aria-label={$_('publish_tabs.label')}>
+			{#each tabs as tab, index}
+				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={tab === 'description' && descriptionError !== null} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}</button>
 			{/each}
-			{#each window.DEFAULT_IGNORE_GLOBS as ignore}
-				<div class="default" use:tippyFollow={$_('ignored_for_convenience')}>{ignore}</div>
-			{/each}
+		</div>
+		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
+			<FileBrowser fileSelect={path => onPathChanged(path)} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} {openEntry} open={openAddon} size={gmaSize}/>
+			<details id="ignore" bind:open={ignoreOpen}>
+				<summary><span class="ignore-chevron"><ChevronRight size=".85rem"/></span>{$_('ignored_file_patterns')}</summary>
+				<div class="ignore-content">
+					<input type="text" aria-label={$_('ignored_file_patterns')} placeholder={$_('add_ellipsis')} on:keypress={ignoreKeyPress}/>
+					<div class="ignore-patterns">
+						{#each ignoreGlobs as ignore}
+							<button type="button" on:click={removeIgnore}>{ignore}</button>
+						{/each}
+						{#each window.DEFAULT_IGNORE_GLOBS as ignore}
+							<div class="default" use:tippyFollow={$_('ignored_for_convenience')}>{ignore}</div>
+						{/each}
+					</div>
+				</div>
+			</details>
+		</div>
+		<div id="publish-panel-description" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-description" tabindex="0" hidden={activeTab !== 'description'}>
+			<BBCodeEditor id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen}/>
+		</div>
+		<div id="publish-panel-changelog" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-changelog" tabindex="0" hidden={activeTab !== 'changelog'}>
+			<BBCodeEditor id="changes" label={$_('changelog_optional')} bind:value={changes} disabled={$isPublishing} bind:formattingOpen={changesFormattingOpen}/>
 		</div>
 	</div>
 </Modal>
@@ -622,7 +592,7 @@
 		display: flex;
 		width: 70rem;
 		min-height: 0;
-		height: min-content;
+		height: 50rem;
 		padding: 1.5rem;
 	}
 	@media (max-width: 70rem), (max-height: 44rem) {
@@ -636,23 +606,70 @@
 	}
 	#details-container {
 		width: 18rem;
+		flex-shrink: 0;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
 	}
-	#middle-column {
+	#details-container > * {
+		flex-shrink: 0;
+	}
+	#publish-workspace {
 		flex: 1;
 		margin-left: 1.5rem;
-		margin-right: 1.5rem;
 		display: flex;
 		flex-direction: column;
-		min-width: 13rem;
+		min-width: 0;
+		min-height: 0;
+		gap: 1rem;
 	}
-
-	#middle-column > :global(#file-browser) {
+	.workspace-tabs {
+		display: flex;
+		border-bottom: 1px solid #414141;
+	}
+	.workspace-tabs button {
+		flex: 1;
+		padding: .7rem;
+		font: inherit;
+		color: #aaa;
+		border: 0;
+		border-bottom: 2px solid transparent;
+		background: transparent;
+		cursor: pointer;
+	}
+	.workspace-tabs button[aria-selected='true'] {
+		color: #fff;
+		background: #252525;
+		border-bottom-color: #fff;
+	}
+	.workspace-tabs button:hover {
+		background: #313131;
+	}
+	.workspace-tabs button.invalid {
+		color: #ff7777;
+	}
+	.workspace-tabs button:focus-visible, summary:focus-visible, .workspace-panel:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: -2px;
+	}
+	.workspace-panel {
+		flex: 1;
+		min-height: 0;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		overflow: auto;
+	}
+	.workspace-panel[hidden] {
+		display: none;
+	}
+	.files-panel {
+		gap: .75rem;
+	}
+	.files-panel > :global(#file-browser) {
 		border-radius: .4rem;
 		overflow: hidden;
-		flex: 1;
-		flex-basis: 0;
+		flex: 1 0 12rem;
 	}
 
 	input[type='text'] {
@@ -847,38 +864,62 @@
 	}
 
 	#ignore {
+		flex-shrink: 0;
+	}
+	#ignore summary {
 		display: flex;
-		flex-direction: column;
-		width: 14rem;
+		align-items: center;
+		gap: .5rem;
+		list-style: none;
+		padding: .7rem;
+		border-radius: 4px;
+		background: #313131;
+		cursor: pointer;
+		font-size: .85em;
 	}
-	#ignore > .title {
-		text-align: center;
-		margin-bottom: 1rem;
+	#ignore summary::-webkit-details-marker {
+		display: none;
 	}
-	#ignore > .hide-scroll {
-		flex: 1;
-		flex-basis: 0;
+	.ignore-chevron {
+		display: inline-flex;
+		transition: transform .15s;
+	}
+	#ignore[open] .ignore-chevron {
+		transform: rotate(90deg);
+	}
+	.ignore-content {
+		padding-top: .75rem;
+	}
+	.ignore-patterns {
 		overflow: auto;
-		margin-top: 1rem;
+		max-height: 10rem;
+		margin-top: .75rem;
 		background-color: #292929;
 		box-shadow: inset 0 0 6px 2px rgb(0 0 0 / 20%);
 		border: 1px solid #101010;
 		border-radius: .4rem;
 	}
-	#ignore > .hide-scroll > div {
+	.ignore-patterns > * {
+		display: block;
+		width: 100%;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		color: #fff;
+		font: inherit;
 		padding: .6rem;
 		font-size: .9em;
 		text-align: left;
 		transition: background-color .1s;
 		word-break: break-all;
 	}
-	#ignore > .hide-scroll > div:not(.default) {
+	.ignore-patterns > button {
 		cursor: pointer;
 	}
-	#ignore > .hide-scroll > div.default {
+	.ignore-patterns > .default {
 		color: rgba(255,255,255,.5);
 	}
-	#ignore > .hide-scroll > div:nth-child(2n-1) {
+	.ignore-patterns > :nth-child(2n-1) {
 		background-color: rgb(0, 0, 0, .12);
 	}
 
@@ -915,87 +956,10 @@
 		margin-right: .5rem;
 	}
 
-	#changes, #description {
-		appearance: none;
-		font: inherit;
-		border-radius: 4px;
-		border: none;
-		background: rgba(255,255,255,.1);
-		box-shadow: 0px 0px 2px 0px rgb(0 0 0 / 40%);
-		padding: .7rem;
-		color: #fff;
-		font-size: .85em;
-		width: 100%;
-		resize: none;
-		z-index: 1;
-		display: block;
-	}
-	#changes {
-		min-height: 12.35rem;
-		height: 12.35rem;
-		max-height: 12.35rem;
-		margin-top: .5rem;
-	}
-	#changes:focus, #description:focus {
-		box-shadow: inset 0 0 0px 1.5px #127cff;
-		outline: none;
-	}
-	#description-container, #changes-container {
-		margin-top: 1.5rem;
-	}
-	.bbcode-toolbar {
-		display: flex;
-		flex-wrap: wrap;
-		gap: .3rem;
-		margin-top: .5rem;
-	}
-	.bbcode-toolbar button {
-		font: inherit;
-		font-size: .8em;
-		min-width: 2rem;
-		padding: .35rem .5rem;
-		border: 1px solid #414141;
-		border-radius: 4px;
-		background: #313131;
-		color: #fff;
-		cursor: pointer;
-	}
-	.bbcode-toolbar button:hover:not(:disabled) {
-		background: #414141;
-	}
-	.bbcode-toolbar button:focus-visible {
-		outline: 2px solid #127cff;
-		outline-offset: 1px;
-	}
-	.bbcode-toolbar button:disabled {
-		opacity: .5;
-		cursor: default;
-	}
-	.bbcode-toolbar [data-format='b'] {
-		font-weight: bold;
-	}
-	.bbcode-toolbar [data-format='i'] {
-		font-style: italic;
-	}
-	.bbcode-toolbar [data-format='u'] {
-		text-decoration: underline;
-	}
-	.bbcode-toolbar [data-format='strike'] {
-		text-decoration: line-through;
-	}
-	#description {
-		height: 9rem;
-		margin-top: .5rem;
-	}
-	#description-container p {
-		font-size: .8em;
-		margin: .4rem 0 0;
-	}
-	#description.error {
-		box-shadow: inset 0 0 0 1.5px var(--error);
-	}
-	#description-error {
-		color: var(--error);
+	@media (prefers-reduced-motion: reduce) {
+		.ignore-chevron {
+			transition: none;
+		}
 	}
 
 	#ws-link {

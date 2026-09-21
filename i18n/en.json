@@ -194,8 +194,20 @@
 	"workshop_description": "Workshop description (optional)",
 	"workshop_description_help": "Enter plain text or Steam BBCode, such as [b]bold[/b]. An untouched description is left unchanged. Editing it and leaving it empty clears the description.",
 	"workshop_description_size": "{bytes} / {max} bytes (UTF-8)",
+	"publish_tabs": {
+		"label": "Addon content",
+		"files": "Files",
+		"description": "Description",
+		"changelog": "Changelog"
+	},
 	"bbcode": {
 		"toolbar": "Steam BBCode formatting",
+		"formatting": "Formatting",
+		"preview": "Preview",
+		"live": "Live",
+		"preview_empty": "Your formatted text will appear here.",
+		"image_invalid": "Enter a valid http:// or https:// image URL.",
+		"image_failed": "Could not load image. Check the URL and your connection.",
 		"b": "Bold",
 		"i": "Italic",
 		"u": "Underline",
@@ -205,6 +217,7 @@
 		"h3": "Heading 3",
 		"spoiler": "Spoiler",
 		"url": "Link",
+		"img": "Image",
 		"list": "Bullet list",
 		"olist": "Numbered list",
 		"code": "Code",
