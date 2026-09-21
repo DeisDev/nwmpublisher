@@ -6,7 +6,7 @@
 <script>
 	import { _ } from 'svelte-i18n';
 	import Modal from '../components/Modal.svelte';
-	import { ChevronRight, CloudUpload, Cross, Folder, LinkOut } from 'akar-icons-svelte';
+	import { ChevronDown, ChevronRight, CloudUpload, Cross, Folder, LinkOut } from 'akar-icons-svelte';
 	import { tippyFollow, tippy } from '../tippy';
 	import * as dialog from '@tauri-apps/api/dialog';
 	import { invoke } from '@tauri-apps/api/tauri';
@@ -45,7 +45,11 @@
 	let description = '';
 	let descriptionTouched = false;
 	let descriptionError = null;
-	let updatingDescription = false;
+	let publishMode = AppSettings.workshop_update_mode;
+	let savingPublishMode = false;
+	let publishModeOpen = false;
+	let publishActions;
+	let publishModeButton;
 	const descriptionMaxBytes = 7999;
 	const descriptionEncoder = new TextEncoder();
 	let activeTab = 'files';
@@ -57,6 +61,42 @@
 	$: descriptionBytes = descriptionEncoder.encode(description).length;
 	$: canUpdateDescription = !!$updatingAddon && descriptionTouched && descriptionError === null
 		&& description !== ($updatingAddon.description ?? '');
+	$: descriptionOnly = !!$updatingAddon && publishMode === 'description';
+	$: canSubmit = !savingPublishMode && (descriptionOnly ? canUpdateDescription : readyForPublish);
+	$: publishLabel = descriptionOnly ? $_('update_description') : $_($updatingAddon ? 'package_update' : 'package_publish');
+	$: publishHelp = descriptionOnly ? $_('update_description_help') : $_($updatingAddon ? 'package_update_help' : 'package_publish_help');
+	$: if (!$preparePublish || $isPublishing) publishModeOpen = false;
+	$: if ($preparePublish) publishMode = AppSettings.workshop_update_mode;
+
+	async function selectPublishMode(mode) {
+		if ($isPublishing || savingPublishMode) return;
+		publishMode = mode;
+		publishModeOpen = false;
+		publishModeButton.focus();
+		if (mode === AppSettings.workshop_update_mode) return;
+		savingPublishMode = true;
+		try {
+			await invoke('update_settings', { settings: { ...AppSettings, workshop_update_mode: mode } });
+			AppSettings.workshop_update_mode = mode;
+		} catch (error) {
+			await dialog.message($_('remember_update_mode_error', { values: { error: String(error) } }), { type: 'error' });
+		} finally {
+			savingPublishMode = false;
+		}
+	}
+
+	function dismissPublishMode(event) {
+		if (publishModeOpen && !publishActions.contains(event.target)) publishModeOpen = false;
+	}
+
+	function onPublishModeKeydown(event) {
+		if (publishModeOpen && event.key === 'Escape') {
+			event.preventDefault();
+			event.stopPropagation();
+			publishModeOpen = false;
+			publishModeButton.focus();
+		}
+	}
 
 	function onDescriptionInput(event) {
 		description = event.detail;
@@ -250,6 +290,8 @@
 	}
 
 	async function publish() {
+		if (savingPublishMode) return;
+		if (descriptionOnly) return publishDescription();
 		if (!readyForPublish || $isPublishing) return;
 		const publishingAddon = $updatingAddon;
 		const descriptionUpdate = descriptionTouched ? description : null;
@@ -304,7 +346,7 @@
 		const publishingAddon = $updatingAddon;
 		const descriptionUpdate = description;
 		const historyKey = editorHistoryKey;
-		$isPublishing = updatingDescription = true;
+		$isPublishing = true;
 
 		try {
 			const transactionId = await invoke('publish_description', {
@@ -321,10 +363,10 @@
 					Steam.MyWorkshop = [];
 					playSound('success');
 				}
-				if (event.finished || event.error) $isPublishing = updatingDescription = false;
+				if (event.finished || event.error) $isPublishing = false;
 			});
 		} catch (error) {
-			$isPublishing = updatingDescription = false;
+			$isPublishing = false;
 			await dialog.message(translateError(String(error)), { type: 'error' });
 		}
 	}
@@ -482,6 +524,8 @@
 	}
 </script>
 
+<svelte:window on:click={dismissPublishMode} on:focusin={dismissPublishMode} on:keydown|capture={onPublishModeKeydown}/>
+
 <Modal id="prepare-publish" active={$preparePublish} cancel={togglePreparePublish}>
 	<div id="details-container" class="hide-scroll">
 		{#if $updatingAddon}
@@ -580,23 +624,26 @@
 			</select>
 		</div>
 
-		{#if $updatingAddon}
-			<div id="publish-btn" on:click={publish} class:disabled={!readyForPublish || $isPublishing} use:tippyFollow={$_('update_warning', { values: { title: $updatingAddon.title, id: $updatingAddon.id } })}>
+		<div id="publish-actions" bind:this={publishActions}>
+			<button type="button" id="publish-btn" on:click={publish} disabled={!canSubmit || $isPublishing} aria-describedby="publish-help">
 				{#if $isPublishing}
 					<Loading size="1.1rem"/>
 				{:else}
-					<CloudUpload size="1.1rem"/>{$_('update_exclamation')}
+					<CloudUpload size="1.1rem"/>
 				{/if}
-			</div>
-		{:else}
-			<div id="publish-btn" on:click={publish} class:disabled={!readyForPublish || $isPublishing}>
-				{#if $isPublishing}
-					<Loading size="1.1rem"/>
-				{:else}
-					<CloudUpload size="1.1rem"/>{$_('publish_exclamation')}
-				{/if}
-			</div>
-		{/if}
+				<span>{publishLabel}</span>
+			</button>
+			{#if $updatingAddon}
+				<button type="button" id="publish-mode-button" bind:this={publishModeButton} on:click={() => publishModeOpen = !publishModeOpen} disabled={$isPublishing || savingPublishMode} aria-label={$_('choose_update_mode')} aria-expanded={publishModeOpen} aria-controls="publish-modes">
+					<ChevronDown size="1rem"/>
+				</button>
+				<div id="publish-modes" role="group" aria-label={$_('choose_update_mode')} hidden={!publishModeOpen}>
+					<button type="button" aria-pressed={publishMode === 'description'} on:click={() => selectPublishMode('description')} disabled={$isPublishing || savingPublishMode}>{$_('description_only')}</button>
+					<button type="button" aria-pressed={publishMode === 'package'} on:click={() => selectPublishMode('package')} disabled={$isPublishing || savingPublishMode}>{$_('package_update')}</button>
+				</div>
+			{/if}
+		</div>
+		<p id="publish-help" aria-live="polite">{publishHelp}</p>
 	</div>
 
 	<div id="publish-workspace">
@@ -624,15 +671,6 @@
 		</div>
 		<div id="publish-panel-description" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-description" tabindex="0" hidden={activeTab !== 'description'}>
 			<BBCodeEditor id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'} historyKey={editorHistoryKey}/>
-			{#if $updatingAddon}
-				<div class="editor-footer">
-					<span>{$_('update_description_help')}</span>
-					<button type="button" on:click={publishDescription} disabled={!canUpdateDescription || $isPublishing}>
-						{#if updatingDescription}<Loading size="1rem"/>{:else}<CloudUpload size="1rem"/>{/if}
-						{$_('update_description')}
-					</button>
-				</div>
-			{/if}
 		</div>
 		<div id="publish-panel-changelog" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-changelog" tabindex="0" hidden={activeTab !== 'changelog'}>
 			<BBCodeEditor id="changes" label={$_('changelog_optional')} bind:value={changes} disabled={$isPublishing} bind:formattingOpen={changesFormattingOpen} active={$preparePublish && activeTab === 'changelog'} historyKey={editorHistoryKey}/>
@@ -735,11 +773,7 @@
 		flex-shrink: 0;
 		font-size: .8em;
 	}
-	.editor-footer > span {
-		flex: 1 1 10rem;
-		color: #aaa;
-	}
-	.editor-footer button, .editor-footer a {
+	.editor-footer a {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -753,16 +787,12 @@
 		text-decoration: none;
 		cursor: pointer;
 	}
-	.editor-footer button:hover:not(:disabled), .editor-footer a:hover {
+	.editor-footer a:hover {
 		background: #414141;
 	}
-	.editor-footer button:focus-visible, .editor-footer a:focus-visible {
+	.editor-footer a:focus-visible {
 		outline: 2px solid #127cff;
 		outline-offset: 1px;
-	}
-	.editor-footer button:disabled {
-		opacity: .5;
-		cursor: default;
 	}
 	.files-panel {
 		gap: .75rem;
@@ -1025,23 +1055,84 @@
 		background-color: rgb(0, 0, 0, .12);
 	}
 
-	#publish-btn {
+	#publish-actions {
+		display: flex;
+		position: relative;
+	}
+	#publish-actions button {
+		font: inherit;
+		color: #fff;
+		border: 0;
+		cursor: pointer;
+	}
+	#publish-btn, #publish-mode-button {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: .4rem;
 		padding: .7rem;
 		text-align: center;
 		background-color: var(--neutral);
-		z-index: 3;
 		box-shadow: 0 0 5px rgba(0, 0, 0, .1);
-		cursor: pointer;
 		text-shadow: 0px 1px 0px rgba(0, 0, 0, .6);
-		line-height: 1;
+		line-height: 1.2;
 		border-radius: 4px;
 		transition: background-color .5s;
 	}
-	#publish-btn.disabled {
-		background-color: #313131;
+	#publish-btn {
+		flex: 1;
+		min-width: 0;
 	}
-	#publish-btn > :global(.icon) {
-		margin-right: .25rem;
+	#publish-btn:not(:last-child) {
+		border-radius: 4px 0 0 4px;
+	}
+	#publish-mode-button {
+		flex-shrink: 0;
+		border-radius: 0 4px 4px 0;
+	}
+	#publish-actions #publish-mode-button {
+		border-left: 1px solid rgba(0, 0, 0, .3);
+	}
+	#publish-actions button:disabled {
+		background-color: #313131;
+		color: #aaa;
+		cursor: default;
+	}
+	#publish-actions button:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: -2px;
+	}
+	#publish-modes {
+		position: absolute;
+		bottom: calc(100% + .4rem);
+		left: 0;
+		right: 0;
+		z-index: 4;
+		padding: .25rem;
+		border: 1px solid #555;
+		border-radius: 4px;
+		background: #252525;
+		box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
+	}
+	#publish-modes button {
+		display: block;
+		width: 100%;
+		padding: .7rem;
+		text-align: left;
+		border-radius: 2px;
+		background: transparent;
+	}
+	#publish-modes button[aria-pressed='true'] {
+		background: #414141;
+		box-shadow: inset 3px 0 var(--neutral);
+	}
+	#publish-modes button:hover {
+		background: #505050;
+	}
+	#publish-help {
+		font-size: .8em;
+		color: #aaa;
+		text-align: left;
 	}
 
 	#upscale-container > label.disabled {

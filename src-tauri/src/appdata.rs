@@ -80,6 +80,13 @@ impl serde::Serialize for OpenCount {
 	}
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum WorkshopUpdateMode {
+	Description,
+	Package,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Settings {
@@ -101,6 +108,7 @@ pub struct Settings {
 
 	pub my_workshop_local_paths: HashMap<PublishedFileId, PathBuf>,
 	pub upscale_addon_icon: bool,
+	pub workshop_update_mode: WorkshopUpdateMode,
 
 	pub language: Option<String>,
 
@@ -130,6 +138,7 @@ impl Default for Settings {
 			ignore_globs: Vec::new(),
 			my_workshop_local_paths: HashMap::new(),
 			upscale_addon_icon: true,
+			workshop_update_mode: WorkshopUpdateMode::Description,
 
 			language: None,
 
@@ -361,10 +370,10 @@ impl<R: tauri::Runtime> tauri::plugin::Plugin<R> for Plugin {
 }
 
 #[tauri::command]
-pub fn update_settings(mut settings: Settings) -> bool {
+pub fn update_settings(mut settings: Settings) -> Result<bool, String> {
 	settings.sanitize();
 
-	ignore! { settings.save() };
+	settings.save().map_err(|error| format!("Failed to save settings: {}", error))?;
 
 	let rediscover_addons = app_data!().settings.read().gmod != settings.gmod;
 
@@ -377,7 +386,7 @@ pub fn update_settings(mut settings: Settings) -> bool {
 
 	webview_emit!("UpdateAppData", &*crate::APP_DATA);
 
-	true
+	Ok(true)
 }
 
 /// Whether there are settings from an older gmpublisher installation to import.
@@ -492,4 +501,29 @@ pub fn write_tauri_settings() -> Option<()> {
 	}
 
 	Some(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{Settings, WorkshopUpdateMode};
+
+	#[test]
+	fn workshop_update_mode_defaults_without_resetting_existing_settings() {
+		let settings: Settings = serde_json::from_str(r#"{"sounds":false,"ignore_globs":["*.bak"]}"#).unwrap();
+		assert_eq!(settings.workshop_update_mode, WorkshopUpdateMode::Description);
+		assert!(!settings.sounds);
+		assert_eq!(settings.ignore_globs, vec!["*.bak"]);
+	}
+
+	#[test]
+	fn workshop_update_mode_is_preserved_in_settings() {
+		for mode in ["description", "package"] {
+			let settings: Settings = serde_json::from_value(serde_json::json!({"workshop_update_mode": mode})).unwrap();
+			let saved = serde_json::to_value(&settings).unwrap();
+			assert_eq!(saved["workshop_update_mode"], mode);
+			let loaded: Settings = serde_json::from_value(saved).unwrap();
+			assert_eq!(loaded.workshop_update_mode, settings.workshop_update_mode);
+		}
+		assert!(serde_json::from_value::<Settings>(serde_json::json!({"workshop_update_mode": "invalid"})).is_err());
+	}
 }
