@@ -28,7 +28,7 @@ jobs:
         sudo apt-get install -y libwebkit2gtk-4.1-dev \
             build-essential curl wget file libssl-dev libgtk-3-dev \
             libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
-            patchelf libfuse2 rpm cpio desktop-file-utils
+            patchelf libfuse2 rpm desktop-file-utils
 
     - name: Install NPM dependencies
       run: npm install --global npm@12.0.2 && npm ci
@@ -56,9 +56,11 @@ jobs:
         dpkg-deb --info "${debs[0]}"
         dpkg-deb --extract "${debs[0]}" "$RUNNER_TEMP/deb"
         rpm --query --package --requires "${rpms[0]}"
+        rpm --checksig "${rpms[0]}"
         mkdir "$RUNNER_TEMP/rpm"
         cd "$RUNNER_TEMP/rpm"
-        rpm2cpio "${rpms[0]}" | cpio -idm
+        # Ubuntu 22.04's rpm2cpio rejects packages without legacy archive-size tags.
+        rpm2archive - < "${rpms[0]}" | tar -xz
 
         # Launch away from the build tree without a library-path override.
         cd "$RUNNER_TEMP"
