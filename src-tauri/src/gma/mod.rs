@@ -26,6 +26,10 @@ pub enum GMAError {
 	EntryNotFound,
 	LZMA(String),
 	Cancelled,
+	NotWhitelisted(Vec<String>),
+	NoEntries,
+	DuplicateEntry(String),
+	InvalidContentPath,
 }
 impl Display for GMAError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -38,6 +42,10 @@ impl Display for GMAError {
 			EntryNotFound => write!(f, "ERR_GMA_ENTRY_NOT_FOUND"),
 			LZMA(error) => write!(f, "ERR_LZMA:{}", error),
 			Cancelled => write!(f, "ERR_CANCELLED"),
+			NotWhitelisted(paths) => write!(f, "ERR_WHITELIST:{}", paths.join("\n")),
+			NoEntries => write!(f, "ERR_NO_ENTRIES"),
+			DuplicateEntry(path) => write!(f, "ERR_DUPLICATE_ENTRIES:{}", path),
+			InvalidContentPath => write!(f, "ERR_INVALID_CONTENT_PATH"),
 		}
 	}
 }
@@ -97,13 +105,6 @@ impl GMAMetadata {
 	pub fn tags(&self) -> Option<&Vec<String>> {
 		match &self {
 			GMAMetadata::Standard { tags, .. } => Some(tags),
-			_ => None,
-		}
-	}
-
-	pub fn ignore(&self) -> Option<&Vec<String>> {
-		match &self {
-			GMAMetadata::Standard { ignore, .. } => Some(ignore),
 			_ => None,
 		}
 	}
@@ -324,6 +325,8 @@ pub mod read;
 pub use read::*;
 
 pub mod write;
+
+pub mod manifest;
 
 pub mod preview;
 

@@ -232,8 +232,10 @@ pub fn check(str: &str) -> bool {
 }
 
 pub fn filter_default_ignored(str: &str) -> bool {
-	for glob in DEFAULT_IGNORE {
-		if globber(glob, str) {
+	static NORMALIZED_IGNORE: LazyLock<Vec<String>> = LazyLock::new(|| DEFAULT_IGNORE.iter().map(|glob| glob.to_lowercase()).collect());
+	let path = str.to_lowercase();
+	for glob in NORMALIZED_IGNORE.iter() {
+		if globber(glob, &path) {
 			return false;
 		}
 	}

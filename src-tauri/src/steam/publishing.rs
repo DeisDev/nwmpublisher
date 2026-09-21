@@ -1,10 +1,9 @@
 use crate::{
-	gma::{GMAEntry, GMAFile, GMAFilePointers, GMAMetadata},
+	gma::{manifest::ContentManifest, GMAEntry, GMAError, GMAFile, GMAFilePointers, GMAMetadata},
 	Transaction, GMOD_APP_ID,
 };
 use image::{DynamicImage, GenericImageView, ImageError, ImageFormat};
 use parking_lot::Mutex;
-use path_slash::PathExt;
 use std::{
 	fs::File,
 	io::{BufReader, BufWriter, Write},
@@ -12,17 +11,11 @@ use std::{
 	sync::Arc,
 };
 use steamworks::{PublishedFileId, SteamError};
-use walkdir::WalkDir;
-
-#[cfg(not(target_os = "windows"))]
-use std::collections::HashSet;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PublishError {
 	Cancelled,
-	NotWhitelisted(Vec<String>),
 	NoEntries,
-	DuplicateEntry(String),
 	InvalidContentPath,
 	MultipleGMAs,
 	IconTooLarge,
@@ -43,9 +36,7 @@ impl std::fmt::Display for PublishError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			PublishError::Cancelled => write!(f, "ERR_CANCELLED"),
-			PublishError::NotWhitelisted(whitelisted) => write!(f, "ERR_WHITELIST:{}", whitelisted.join("\n")),
 			PublishError::NoEntries => write!(f, "ERR_NO_ENTRIES"),
-			PublishError::DuplicateEntry(path) => write!(f, "ERR_DUPLICATE_ENTRIES:{}", path),
 			PublishError::InvalidContentPath => write!(f, "ERR_INVALID_CONTENT_PATH"),
 			PublishError::MultipleGMAs => write!(f, "ERR_MULTIPLE_GMAS"),
 			PublishError::IconTooLarge => write!(f, "ERR_ICON_TOO_LARGE"),
@@ -513,92 +504,9 @@ impl Steam {
 }
 
 #[tauri::command]
-pub fn verify_whitelist(path: PathBuf) -> Result<(Vec<GMAEntry>, u64), PublishError> {
-	if !path.is_absolute()
-		|| !path
-			.metadata()
-			.map_err(|error| PublishError::io("read content metadata", &path, error))?
-			.is_dir()
-	{
-		return Err(PublishError::InvalidContentPath);
-	}
-
-	let content_root = path.clone();
-
+pub fn verify_whitelist(path: PathBuf) -> Result<(Vec<GMAEntry>, u64), GMAError> {
 	let ignore = app_data!().settings.read().ignore_globs.clone();
-
-	let mut size = 0;
-	let mut failed_extra = false;
-	let mut failed = Vec::with_capacity(10);
-	let mut files = Vec::new();
-
-	#[cfg(not(target_os = "windows"))]
-	let mut dedup: HashSet<String> = HashSet::new();
-
-	for entry in WalkDir::new(&path).follow_links(false).contents_first(true) {
-		let entry = entry.map_err(|error| {
-			let path = error.path().unwrap_or(&content_root).to_owned();
-			PublishError::io("read content directory", &path, error.into())
-		})?;
-		if entry.path_is_symlink() || entry.file_type().is_dir() {
-			continue;
-		}
-		let path = entry.into_path();
-		let relative_path = path
-			.strip_prefix(&content_root)
-			.map_err(|_| PublishError::InvalidContentPath)?
-			.to_slash_lossy()
-			.to_string();
-		if !crate::gma::whitelist::filter_default_ignored(&relative_path) || crate::gma::whitelist::is_ignored(&relative_path, &ignore) {
-			continue;
-		}
-
-		#[cfg(not(target_os = "windows"))]
-		{
-			if !dedup.insert(relative_path.to_owned()) {
-				return Err(PublishError::DuplicateEntry(relative_path));
-			}
-		}
-
-		if !crate::gma::whitelist::check(&relative_path) {
-			if failed.len() == 9 {
-				failed_extra = true;
-				break;
-			} else {
-				failed.push(relative_path);
-			}
-		} else if failed.is_empty() {
-			let entry_size = path
-				.metadata()
-				.map_err(|error| PublishError::io("read source metadata", &path, error))?
-				.len();
-			size += entry_size;
-			files.push(GMAEntry {
-				path: relative_path,
-				size: entry_size,
-				crc: 0,
-				index: 0,
-			});
-		}
-	}
-
-	// TODO some tasks shouldnt be cancelable (i.e. showing the cross button)
-
-	if failed.is_empty() {
-		if files.is_empty() {
-			Err(PublishError::NoEntries)
-		} else {
-			Ok((files, size))
-		}
-	} else {
-		failed.sort_unstable();
-
-		if failed_extra {
-			failed.push("...".to_string());
-		}
-
-		Err(PublishError::NotWhitelisted(failed))
-	}
+	ContentManifest::build(&path, &ignore, || false).map(ContentManifest::into_preview)
 }
 
 #[tauri::command]
@@ -758,6 +666,13 @@ pub fn publish(request: PublishRequest) -> u32 {
 			if transaction.aborted() {
 				return Ok(None);
 			}
+			let ignore = app_data!().settings.read().ignore_globs.clone();
+			// The preview may be stale by the time this worker starts.
+			let manifest = match ContentManifest::build(&content_path_src, &ignore, || transaction.aborted()) {
+				Ok(manifest) => manifest,
+				Err(GMAError::Cancelled) => return Ok(None),
+				Err(error) => return Err(error.to_string()),
+			};
 
 			let preview = match icon_path {
 				Some(icon_path) => {
@@ -786,7 +701,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 					title: title.clone(),
 					addon_type: addon_type.clone(),
 					tags: tags.clone(),
-					ignore: app_data!().settings.read().ignore_globs.clone(),
+					ignore,
 				}),
 				entries: None,
 				pointers: GMAFilePointers::default(),
@@ -796,7 +711,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 				membuffer: None,
 			};
 
-			if let Err(error) = gma.create(&content_path_src, transaction.clone()) {
+			if let Err(error) = gma.create(manifest, transaction.clone()) {
 				if matches!(error, crate::gma::GMAError::Cancelled) {
 					return Ok(None);
 				}

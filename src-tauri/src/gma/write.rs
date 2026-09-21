@@ -9,12 +9,9 @@ use std::{
 	time::SystemTime,
 };
 
-use path_slash::PathExt;
-use walkdir::WalkDir;
-
 use crate::{transactions::Transaction, GMAFile, NTStringWriter};
 
-use super::{whitelist, GMAError, GMAMetadata};
+use super::{manifest::ContentManifest, GMAError, GMAMetadata};
 
 use super::GMA_HEADER;
 
@@ -69,17 +66,16 @@ impl GMAFile {
 		))
 	}
 
-	pub fn create<P: AsRef<Path>>(&self, src_path: P, transaction: Transaction) -> Result<(), GMAError> {
+	pub fn create(&self, manifest: ContentManifest, transaction: Transaction) -> Result<(), GMAError> {
 		// Wait for all packing workers before the caller cleans up and acknowledges cancellation.
-		THREAD_POOL.in_place_scope(|scope| self.create_scoped(src_path.as_ref(), transaction, scope))
+		THREAD_POOL.in_place_scope(|scope| self.create_scoped(manifest, transaction, scope))
 	}
 
-	fn create_scoped(&self, src_path: &Path, transaction: Transaction, scope: &rayon::Scope<'_>) -> Result<(), GMAError> {
+	fn create_scoped(&self, manifest: ContentManifest, transaction: Transaction, scope: &rayon::Scope<'_>) -> Result<(), GMAError> {
 		check_cancelled(&transaction)?;
 		let mut f = self.write()?;
 
 		let metadata = self.metadata.as_ref().expect("Expected metadata to be set");
-		let ignore = metadata.ignore().map(|ignore| ignore.to_vec().into_boxed_slice());
 
 		let (title, addon_json) = match metadata {
 			GMAMetadata::Legacy { title, .. } => (title.as_str(), None),
@@ -135,27 +131,11 @@ impl GMAFile {
 		let (rx, total) = {
 			let (tx, rx) = crossbeam::channel::unbounded();
 
-			let root_path_strip_len = src_path.to_string_lossy().len();
-
 			let mut total = 0.;
-			for entry in WalkDir::new(src_path).follow_links(false) {
+			for entry in manifest.into_entries() {
 				check_cancelled(&transaction)?;
-				let entry = entry.map_err(|error| {
-					let path = error.path().unwrap_or(src_path).to_owned();
-					GMAError::io("read content directory", &path, error.into())
-				})?;
-				if !entry.file_type().is_file() {
-					continue;
-				}
-				let path = entry.into_path();
-				let relative_path = path.to_slash_lossy()[root_path_strip_len..].trim_matches('/').to_lowercase();
-				if !whitelist::check(&relative_path) {
-					transaction.data(("ERR_WHITELIST", relative_path));
-					continue;
-				}
-				if ignore.as_ref().is_some_and(|ignore| whitelist::is_ignored(&relative_path, ignore)) {
-					continue;
-				}
+				let path = entry.source_path;
+				let relative_path = entry.archive_path;
 
 				file_list.insert(relative_path.clone(), (0, 0, Vec::new().into_boxed_slice()));
 
@@ -317,36 +297,44 @@ mod tests {
 			modified: None,
 			membuffer: None,
 		};
-		let transaction = transaction!();
 		let source = root.join("source");
-		let cancelled = crate::transactions::new_publish();
-		cancelled.cancel();
-		assert!(matches!(gma.create(&source, cancelled.clone()), Err(GMAError::Cancelled)));
-		assert!(!gma.path.exists());
-		cancelled.cancelled();
-		let error = gma.create(&source, transaction.clone()).unwrap_err();
-		assert!(error.to_string().contains("read content directory"));
+		let error = ContentManifest::build(&source, &[], || false).unwrap_err();
+		assert!(error.to_string().contains("read content metadata"));
 		assert!(error.to_string().contains("source"));
-		transaction.cancel();
+		assert!(!gma.path.exists());
 
-		fs::create_dir_all(source.join("lua")).unwrap();
-		let file = source.join("lua/test.lua");
+		fs::create_dir_all(source.join("LUA")).unwrap();
+		let file = source.join("LUA/Test.LUA");
 		fs::write(&file, b"print('test')").unwrap();
 		let large_file = vec![42; PACK_CHUNK_SIZE * 3 + 5];
-		fs::write(source.join("lua/large.lua"), &large_file).unwrap();
+		fs::write(source.join("LUA/large.lua"), &large_file).unwrap();
+		fs::write(source.join("LUA/skip.lua"), b"ignored").unwrap();
+		fs::write(source.join("README.md"), b"default ignored").unwrap();
+		fs::create_dir_all(source.join(".git/lua")).unwrap();
+		fs::write(source.join(".git/lua/ignored.lua"), b"default ignored").unwrap();
+		let ignore = vec!["lua/skip.lua".to_owned()];
+		let manifest = ContentManifest::build(&source, &ignore, || false).unwrap();
+		let cancelled = crate::transactions::new_publish();
+		cancelled.cancel();
+		assert!(matches!(gma.create(manifest, cancelled.clone()), Err(GMAError::Cancelled)));
+		assert!(!gma.path.exists());
+		cancelled.cancelled();
 		#[cfg(target_os = "windows")]
 		{
 			use std::os::windows::fs::OpenOptionsExt;
+			let manifest = ContentManifest::build(&source, &ignore, || false).unwrap();
 			let lock = fs::OpenOptions::new().read(true).share_mode(0).open(&file).unwrap();
 			let transaction = transaction!();
-			let error = gma.create(&source, transaction.clone()).unwrap_err();
+			let error = gma.create(manifest, transaction.clone()).unwrap_err();
 			assert!(error.to_string().contains("read source file"));
-			assert!(error.to_string().contains("test.lua"));
+			assert!(error.to_string().contains("Test.LUA"));
 			transaction.cancel();
 			drop(lock);
 		}
+		let (preview, preview_size) = ContentManifest::build(&source, &ignore, || false).unwrap().into_preview();
+		let manifest = ContentManifest::build(&source, &ignore, || false).unwrap();
 		let transaction = transaction!();
-		gma.create(&source, transaction.clone()).unwrap();
+		gma.create(manifest, transaction.clone()).unwrap();
 		transaction.cancel();
 		let mut packed = GMAFile::open(&gma.path).unwrap();
 		let transaction = transaction!();
@@ -354,12 +342,20 @@ mod tests {
 		packed
 			.extract(crate::gma::ExtractDestination::Directory(destination.clone()), &transaction, false, true)
 			.unwrap();
+		let entries = packed.entries.as_ref().unwrap();
+		assert_eq!(entries.len(), preview.len());
+		assert_eq!(entries.values().map(|entry| entry.size).sum::<u64>(), preview_size);
+		for entry in preview {
+			assert_eq!(entries[&entry.path].size, entry.size);
+		}
 		assert_eq!(fs::read(destination.join("lua/test.lua")).unwrap(), b"print('test')");
 		assert_eq!(fs::read(destination.join("lua/large.lua")).unwrap(), large_file);
+		assert!(!destination.join("lua/skip.lua").exists());
 
 		gma.path = root.join("missing/test.gma");
+		let manifest = ContentManifest::build(&source, &ignore, || false).unwrap();
 		let transaction = transaction!();
-		let error = gma.create(&source, transaction.clone()).unwrap_err();
+		let error = gma.create(manifest, transaction.clone()).unwrap_err();
 		assert!(error.to_string().contains("create archive"));
 		assert!(error.to_string().contains("test.gma"));
 		transaction.cancel();
