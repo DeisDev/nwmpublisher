@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix macOS release verification failing after disk image creation because the architecture check passed arguments in the wrong order.
+
 ## [3.1.0] - 2026-09-21
 
 ### Added
