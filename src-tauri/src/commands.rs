@@ -35,6 +35,7 @@ pub fn invoke_handler() -> impl Fn(tauri::Invoke<tauri::Wry>) + Send + Sync + 's
 		crate::steam::publishing::publish,
 		crate::steam::publishing::verify_icon,
 		crate::steam::publishing::publish_icon,
+		crate::steam::publishing::publish_description,
 		crate::steam::default_icon::default_workshop_icon,
 		crate::steam::subscriptions::browse_subscribed_addons,
 		crate::addon_size_analyzer::addon_size_analyzer,

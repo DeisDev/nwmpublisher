@@ -201,6 +201,8 @@
 		"changelog": "Changelog"
 	},
 	"bbcode": {
+		"undo": "Undo",
+		"redo": "Redo",
 		"toolbar": "Steam BBCode formatting",
 		"formatting": "Formatting",
 		"fullscreen": "Maximize editor",
@@ -274,6 +276,10 @@
 
 	"publish_exclamation": "Publish!",
 	"update_exclamation": "Update!",
+	"update_description": "Update description",
+	"update_description_help": "Publish only the description. No addon files required.",
+	"view_edit_change_notes": "View/edit previous change notes on Steam",
+	"PUBLISH_UPDATING_DESCRIPTION": "Updating Workshop description",
 	"add_ellipsis": "Add...",
 	"ignored_file_patterns": "Ignored File Patterns",
 	"show_more": "SHOW MORE",

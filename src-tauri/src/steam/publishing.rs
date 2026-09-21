@@ -226,6 +226,9 @@ fn validate_description(description: Option<&str>) -> Result<(), PublishError> {
 }
 
 pub enum WorkshopUpdateType {
+	Description {
+		description: String,
+	},
 	Creation {
 		title: String,
 		description: Option<String>,
@@ -253,6 +256,14 @@ impl Steam {
 		let result = Arc::new(Mutex::new(None));
 		let result_ref = result.clone();
 		let update_handle = match details {
+			Description { description } => self
+				.client()
+				.ugc()
+				.start_item_update(GMOD_APP_ID, id)
+				.description(&description)
+				.submit(None, move |result| {
+					*result_ref.lock() = Some(result);
+				}),
 			Creation {
 				title,
 				description,
@@ -552,6 +563,28 @@ pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId
 	id
 }
 
+#[tauri::command]
+pub fn publish_description(addon_id: PublishedFileId, description: String) -> Result<u32, PublishError> {
+	validate_description(Some(&description))?;
+	let transaction = transaction!();
+	let id = transaction.id;
+
+	rayon::spawn(move || {
+		transaction.status("PUBLISH_UPDATING_DESCRIPTION");
+		match steam!().update(addon_id, WorkshopUpdateType::Description { description }, &transaction) {
+			Ok(legal_agreement) => {
+				if legal_agreement {
+					crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
+				}
+				transaction.finished(turbonone!());
+			}
+			Err(error) => transaction.error(error.to_string(), turbonone!()),
+		}
+	});
+
+	Ok(id)
+}
+
 const DEFAULT_GMA_FILE_NAME: &str = "publishedaddon";
 const GMA_FILE_NAME_MAX_CHARS: usize = 120;
 
@@ -782,7 +815,20 @@ pub fn verify_icon(path: PathBuf) -> Result<(String, bool), Transaction> {
 
 #[cfg(test)]
 mod tests {
-	use super::{validate_description, PublishError, WORKSHOP_DESCRIPTION_MAX_BYTES};
+	use super::{publish_description, validate_description, PublishError, WORKSHOP_DESCRIPTION_MAX_BYTES};
+	use steamworks::PublishedFileId;
+
+	#[test]
+	fn description_update_rejects_invalid_input_before_starting() {
+		assert!(matches!(
+			publish_description(PublishedFileId(0), "a".repeat(WORKSHOP_DESCRIPTION_MAX_BYTES + 1)),
+			Err(PublishError::DescriptionTooLong)
+		));
+		assert!(matches!(
+			publish_description(PublishedFileId(0), "before\0after".to_owned()),
+			Err(PublishError::DescriptionContainsNul)
+		));
+	}
 
 	#[test]
 	fn description_can_be_omitted_or_explicitly_empty() {

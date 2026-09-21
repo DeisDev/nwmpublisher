@@ -44,7 +44,7 @@ function checkOrphanQueue(transaction, id) {
 const dedup = {};
 
 class Transaction {
-	constructor(id, TASK_statusTextFn) {
+	constructor(id, TASK_statusTextFn, cancellable = true) {
 		if (id === null || id == undefined) return;
 
 		if (id !== -1 && id in dedup) {
@@ -58,6 +58,7 @@ class Transaction {
 		this.progress = 0;
 		this.finished = false;
 		this.cancelled = false;
+		this.cancellable = cancellable;
 		this.unconsumedEvents = [];
 
 		transactions[id] = this;
@@ -99,7 +100,7 @@ class Transaction {
 	}
 
 	cancel(fromBackend) {
-		if (this.cancelled || this.finished) return;
+		if (this.cancelled || this.finished || (!this.cancellable && !fromBackend)) return;
 
 		this.cancelled = true;
 		this.emit({ cancelled: true });

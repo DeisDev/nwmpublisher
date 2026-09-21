@@ -61,7 +61,7 @@
 	}
 
 	function cancel() {
-		if (finished || cancelled || destroyed || expired) return;
+		if (finished || cancelled || destroyed || expired || !transaction.cancellable) return;
 		cancelled = true;
 		transaction.cancel();
 		finish();
@@ -122,7 +122,7 @@
 				<span bind:this={statusText}>{statusTextFn({ progress: 0 })}</span>
 			{/if}
 		</div>
-		{#if transaction && !finished && !cancelled && !expired}
+		{#if transaction && transaction.cancellable && !finished && !cancelled && !expired}
 			<div id="cancel" use:tippyFollow={$_('cancel')} on:click={cancel}><Cross id="cancel" stroke-width="3"/></div>
 		{/if}
 	</div>

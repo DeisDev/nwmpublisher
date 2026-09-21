@@ -14,6 +14,7 @@
 	export let size = '';
 	export let formattingOpen = false;
 	export let active = true;
+	export let historyKey = 0;
 
 	const dispatch = createEventDispatcher();
 	const formats = [
@@ -31,6 +32,14 @@
 	let fullscreenDialog;
 	let fullscreenButton;
 	let fullscreen = false;
+	let undoStack = [];
+	let redoStack = [];
+	let current = { value, selection: [0, 0, 'none'], scrollTop: 0, scrollLeft: 0 };
+	let previousHistoryKey = historyKey;
+	let beforeInput = null;
+	let composition = null;
+	let lastEdit = null;
+	$: syncHistory(value, historyKey);
 	$: nodes = parseBBCode(value);
 	$: describedBy = [help && `${id}-help`, size && `${id}-size`, error && `${id}-error`].filter(Boolean).join(' ') || undefined;
 	$: if (!active && fullscreen) closeFullscreen(false);
@@ -72,8 +81,16 @@
 	}
 
 	function onKeydown(event) {
-		if (disabled || event.isComposing || event.keyCode === 229 || event.altKey || !(event.ctrlKey || event.metaKey)) return;
+		if (disabled || composition || event.isComposing || event.keyCode === 229) return;
+		if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) lastEdit = null;
+		if (event.altKey || !(event.ctrlKey || event.metaKey)) return;
 		const key = /^Digit\d$/.test(event.code) ? event.code.slice(-1) : event.key.toLowerCase();
+		if (key === 'z' || (key === 'y' && event.ctrlKey && !event.shiftKey)) {
+			event.preventDefault();
+			event.stopPropagation();
+			restoreHistory(key === 'y' || event.shiftKey);
+			return;
+		}
 		const format = formats.find(format => format.key === key && !!format.shift === event.shiftKey);
 		if (!format) return;
 		event.preventDefault();
@@ -82,12 +99,93 @@
 	}
 
 	function changed() {
-		value = input.value;
+		current = snapshot();
+		value = current.value;
 		dispatch('input', value);
 	}
 
+	function snapshot() {
+		return {
+			value: input.value,
+			selection: [input.selectionStart, input.selectionEnd, input.selectionDirection],
+			scrollTop: input.scrollTop,
+			scrollLeft: input.scrollLeft,
+		};
+	}
+
+	function syncHistory(nextValue, nextKey) {
+		if (nextValue === current.value && nextKey === previousHistoryKey) return;
+		// Loading another addon starts fresh, even when its text matches this one.
+		current = { value: nextValue, selection: [0, 0, 'none'], scrollTop: 0, scrollLeft: 0 };
+		previousHistoryKey = nextKey;
+		undoStack = [];
+		redoStack = [];
+		beforeInput = composition = lastEdit = null;
+	}
+
+	function recordChange(before, inputType) {
+		beforeInput = null;
+		if (before.value === input.value) return;
+		const time = Date.now();
+		const groupable = ['insertText', 'deleteContentBackward', 'deleteContentForward'].includes(inputType);
+		const continuing = groupable && lastEdit?.type === inputType && time - lastEdit.time < 1000
+			&& before.selection[0] === before.selection[1] && before.selection[0] === lastEdit.end;
+		if (!continuing) undoStack = [...undoStack, before].slice(-100);
+		redoStack = [];
+		lastEdit = groupable ? { type: inputType, time, end: input.selectionEnd } : null;
+		changed();
+	}
+
+	function restoreHistory(redo = false) {
+		if (disabled || composition) return;
+		lastEdit = beforeInput = null;
+		const stack = redo ? redoStack : undoStack;
+		if (!stack.length) return;
+		const state = stack[stack.length - 1];
+		if (redo) {
+			undoStack = [...undoStack, snapshot()];
+			redoStack = redoStack.slice(0, -1);
+		} else {
+			redoStack = [...redoStack, snapshot()];
+			undoStack = undoStack.slice(0, -1);
+		}
+		input.value = state.value;
+		input.focus({ preventScroll: true });
+		input.setSelectionRange(...state.selection);
+		input.scrollTop = state.scrollTop;
+		input.scrollLeft = state.scrollLeft;
+		changed();
+	}
+
+	function onBeforeInput(event) {
+		if (disabled || composition) return;
+		if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
+			event.preventDefault();
+			restoreHistory(event.inputType === 'historyRedo');
+		} else {
+			beforeInput = snapshot();
+		}
+	}
+
+	function onInput(event) {
+		if (composition) changed();
+		else recordChange(beforeInput ?? current, event.inputType);
+	}
+
+	function onCompositionStart() {
+		composition = snapshot();
+		beforeInput = lastEdit = null;
+	}
+
+	function onCompositionEnd() {
+		const before = composition;
+		composition = null;
+		if (before) recordChange(before);
+	}
+
 	function formatText(tag) {
-		if (disabled) return;
+		if (disabled || composition) return;
+		const before = snapshot();
 		const start = input.selectionStart;
 		let end = input.selectionEnd;
 		let text = input.value.slice(start, end) || (tag === 'img' ? 'https://' : $_(tag === 'url' ? 'bbcode.link_text' : 'bbcode.text'));
@@ -111,10 +209,10 @@
 			text = text.split('\n').map(line => '[*]' + line).join('\n');
 		}
 		input.setRangeText(opening + text + closing, start, end, 'select');
-		changed();
 		input.focus();
 		if (tag === 'url' || tag === 'quote') input.setSelectionRange(start + tag.length + 2, start + opening.length - 1);
 		else input.setSelectionRange(start + opening.length, start + opening.length + text.length);
+		recordChange(before);
 	}
 </script>
 
@@ -131,6 +229,12 @@
 				<label for={id}>{label}</label>
 			</div>
 			<div class="editor-actions">
+				<button type="button" title={`${$_('bbcode.undo')} (Ctrl/Cmd+Z)`} aria-label={$_('bbcode.undo')} aria-keyshortcuts="Control+Z Meta+Z" disabled={disabled || !!composition || !undoStack.length} on:click={() => restoreHistory()}>
+					<span aria-hidden="true">↶</span>
+				</button>
+				<button type="button" title={`${$_('bbcode.redo')} (Ctrl+Y / Ctrl/Cmd+Shift+Z)`} aria-label={$_('bbcode.redo')} aria-keyshortcuts="Control+Y Control+Shift+Z Meta+Shift+Z" disabled={disabled || !!composition || !redoStack.length} on:click={() => restoreHistory(true)}>
+					<span aria-hidden="true">↷</span>
+				</button>
 				<button type="button" class="formatting-toggle" aria-expanded={formattingOpen} aria-controls={`${id}-toolbar`} on:click={() => formattingOpen = !formattingOpen}>
 					<span class="chevron" class:expanded={formattingOpen}><ChevronRight size=".85rem"/></span>{$_('bbcode.formatting')}
 				</button>
@@ -146,7 +250,12 @@
 				<button type="button" data-format={format.tag} title={`${$_('bbcode.' + format.tag)} (Ctrl/Cmd+${shortcut(format)})`} aria-label={$_('bbcode.' + format.tag)} aria-keyshortcuts={`Control+${shortcut(format)} Meta+${shortcut(format)}`} {disabled} on:click={() => formatText(format.tag)}>{format.label ?? $_('bbcode.' + format.tag)}</button>
 			{/each}
 		</div>
-		<textarea {id} bind:this={input} value={value} on:input={changed} on:keydown={onKeydown} {disabled} class:error={error !== null} aria-invalid={error !== null} aria-describedby={describedBy}></textarea>
+		<textarea {id} bind:this={input} value={value} {disabled}
+			on:beforeinput={onBeforeInput} on:input={onInput} on:keydown={onKeydown}
+			on:compositionstart={onCompositionStart} on:compositionend={onCompositionEnd}
+			on:pointerdown={() => lastEdit = null} on:blur={() => lastEdit = null}
+			class:error={error !== null} aria-invalid={error !== null} aria-describedby={describedBy}
+		></textarea>
 		{#if help}<p id={`${id}-help`}>{help}</p>{/if}
 		{#if size}<p id={`${id}-size`}>{size}</p>{/if}
 		{#if error}<p id={`${id}-error`} class="error-message" role="alert">{$_(error)}</p>{/if}

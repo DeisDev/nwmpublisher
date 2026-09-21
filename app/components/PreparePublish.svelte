@@ -10,6 +10,7 @@
 	import { tippyFollow, tippy } from '../tippy';
 	import * as dialog from '@tauri-apps/api/dialog';
 	import { invoke } from '@tauri-apps/api/tauri';
+	import { open } from '@tauri-apps/api/shell';
 	import { playSound } from '../sounds';
 	import FileBrowser from './FileBrowser.svelte';
 	import BBCodeEditor from './BBCodeEditor.svelte';
@@ -44,14 +45,18 @@
 	let description = '';
 	let descriptionTouched = false;
 	let descriptionError = null;
+	let updatingDescription = false;
 	const descriptionMaxBytes = 7999;
 	const descriptionEncoder = new TextEncoder();
 	let activeTab = 'files';
 	let descriptionFormattingOpen = false;
 	let changesFormattingOpen = false;
+	let editorHistoryKey = 0;
 	let ignoreOpen = false;
 	const tabs = ['files', 'description', 'changelog'];
 	$: descriptionBytes = descriptionEncoder.encode(description).length;
+	$: canUpdateDescription = !!$updatingAddon && descriptionTouched && descriptionError === null
+		&& description !== ($updatingAddon.description ?? '');
 
 	function onDescriptionInput(event) {
 		description = event.detail;
@@ -294,6 +299,44 @@
 		});
 	}
 
+	async function publishDescription() {
+		if (!canUpdateDescription || $isPublishing) return;
+		const publishingAddon = $updatingAddon;
+		const descriptionUpdate = description;
+		const historyKey = editorHistoryKey;
+		$isPublishing = updatingDescription = true;
+
+		try {
+			const transactionId = await invoke('publish_description', {
+				addonId: publishingAddon.id,
+				description: descriptionUpdate,
+			});
+			// Steam submissions cannot be cancelled once started.
+			const transaction = new Transaction(transactionId, () => $_('PUBLISH_UPDATING_DESCRIPTION'), false);
+			transaction.listen(event => {
+				if (event.finished) {
+					publishingAddon.description = descriptionUpdate;
+					if ($updatingAddon === publishingAddon && editorHistoryKey === historyKey && description === descriptionUpdate) descriptionTouched = false;
+					$remountAddonScroller = true;
+					Steam.MyWorkshop = [];
+					playSound('success');
+				}
+				if (event.finished || event.error) $isPublishing = updatingDescription = false;
+			});
+		} catch (error) {
+			$isPublishing = updatingDescription = false;
+			await dialog.message(translateError(String(error)), { type: 'error' });
+		}
+	}
+
+	async function openChangeNotes(event) {
+		try {
+			await open(event.currentTarget.href);
+		} catch (error) {
+			await dialog.message(String(error), { type: 'error' });
+		}
+	}
+
 	function isFormValid() {
 		if (descriptionError) return false;
 		if (pathValue.length === 0 || pathFailMessage !== null) return false;
@@ -330,6 +373,7 @@
 
 	const tagSearchMax = Math.max(addonTypes.length, addonTags.length);
 	onMount(() => updatingAddon.subscribe(async updatingAddon => {
+		editorHistoryKey += 1;
 		changes = '';
 		activeTab = 'files';
 		descriptionFormattingOpen = false;
@@ -579,10 +623,24 @@
 			</details>
 		</div>
 		<div id="publish-panel-description" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-description" tabindex="0" hidden={activeTab !== 'description'}>
-			<BBCodeEditor id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'}/>
+			<BBCodeEditor id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'} historyKey={editorHistoryKey}/>
+			{#if $updatingAddon}
+				<div class="editor-footer">
+					<span>{$_('update_description_help')}</span>
+					<button type="button" on:click={publishDescription} disabled={!canUpdateDescription || $isPublishing}>
+						{#if updatingDescription}<Loading size="1rem"/>{:else}<CloudUpload size="1rem"/>{/if}
+						{$_('update_description')}
+					</button>
+				</div>
+			{/if}
 		</div>
 		<div id="publish-panel-changelog" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-changelog" tabindex="0" hidden={activeTab !== 'changelog'}>
-			<BBCodeEditor id="changes" label={$_('changelog_optional')} bind:value={changes} disabled={$isPublishing} bind:formattingOpen={changesFormattingOpen} active={$preparePublish && activeTab === 'changelog'}/>
+			<BBCodeEditor id="changes" label={$_('changelog_optional')} bind:value={changes} disabled={$isPublishing} bind:formattingOpen={changesFormattingOpen} active={$preparePublish && activeTab === 'changelog'} historyKey={editorHistoryKey}/>
+			{#if $updatingAddon}
+				<div class="editor-footer">
+					<a href={`https://steamcommunity.com/sharedfiles/filedetails/changelog/${$updatingAddon.id}`} on:click|preventDefault={openChangeNotes}>{$_('view_edit_change_notes')}<LinkOut size=".85rem"/></a>
+				</div>
+			{/if}
 		</div>
 	</div>
 </Modal>
@@ -666,6 +724,45 @@
 	}
 	.workspace-panel[hidden] {
 		display: none;
+	}
+	.editor-footer {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		flex-wrap: wrap;
+		gap: .5rem;
+		padding-top: .75rem;
+		flex-shrink: 0;
+		font-size: .8em;
+	}
+	.editor-footer > span {
+		flex: 1 1 10rem;
+		color: #aaa;
+	}
+	.editor-footer button, .editor-footer a {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: .5rem;
+		padding: .6rem .75rem;
+		border: 1px solid #414141;
+		border-radius: 4px;
+		background: #313131;
+		color: #fff;
+		font: inherit;
+		text-decoration: none;
+		cursor: pointer;
+	}
+	.editor-footer button:hover:not(:disabled), .editor-footer a:hover {
+		background: #414141;
+	}
+	.editor-footer button:focus-visible, .editor-footer a:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: 1px;
+	}
+	.editor-footer button:disabled {
+		opacity: .5;
+		cursor: default;
 	}
 	.files-panel {
 		gap: .75rem;
