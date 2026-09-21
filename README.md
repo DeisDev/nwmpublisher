@@ -16,8 +16,8 @@ Maintained by [DeisDev](https://github.com/DeisDev) ("CatSniffer").
 * **Your GMA files are named by you.** The packed file follows the addon title you type in the
   publish window, can be renamed to whatever you like, and falls back to `publishedaddon.gma` when
   left empty. No more `gmpublisher.gma`.
-* **The default Workshop preview icon is your own Steam avatar**, cropped to a circle with a white
-  outline, instead of the gmpublisher logo.
+* **The default Workshop preview icon is your own Steam avatar**, kept square without borders or
+  shadows, instead of the gmpublisher logo.
 * **Nothing you publish mentions gmpublisher** — not the item description, and not your Steam status,
   which reads "In the Workshop".
 

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Keep the default Workshop preview image square, without circular cropping, borders, or shadows.
 - Give the publishing file browser its own full-height tab, alongside Description and Changelog. Formatting toolbars and ignored-file patterns start collapsed.
 - Use the new logo throughout the app, favicon, and packaged application icons.
 
