@@ -144,20 +144,20 @@ Windows is the primary development and testing platform.
 
 ## Media
 
-![Screenshot](public\screenshots\MyWorkshop.png)
+![Screenshot](public/screenshots/MyWorkshop.png)
 
-![Screenshot](public\screenshots\Publish.png)
+![Screenshot](public/screenshots/Publish.png)
 
-![Screenshot](public\screenshots\Update.png)
+![Screenshot](public/screenshots/Update.png)
 
-![Screenshot](public\screenshots\DescriptionEditor.png)
+![Screenshot](public/screenshots/DescriptionEditor.png)
 
-![Screenshot](public\screenshots\Installed.png)
+![Screenshot](public/screenshots/Installed.png)
 
-![Screenshot](public\screenshots\Extract.png)
+![Screenshot](public/screenshots/Extract.png)
 
-![Screenshot](public\screenshots\Size.png)
+![Screenshot](public/screenshots/Size.png)
 
-![Screenshot](public\screenshots\Settings.png)
+![Screenshot](public/screenshots/Settings.png)
 
 <p align="center"><img src="https://i.imgur.com/Un4akZe.gif"/></p>
