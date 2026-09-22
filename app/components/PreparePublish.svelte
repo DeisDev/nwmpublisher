@@ -19,6 +19,8 @@
 	import { playSound } from '../sounds';
 	import FileBrowser from './FileBrowser.svelte';
 	import BBCodeEditor from './BBCodeEditor.svelte';
+	import ChangelogEditor from './ChangelogEditor.svelte';
+	import ChangelogDefaults from './ChangelogDefaults.svelte';
 	import { writable } from 'svelte/store';
 	import { Transaction } from '../transactions';
 	import { formatSize } from '../format.js';
@@ -36,10 +38,19 @@
 	let settingsDirty = false;
 	let workshopInfo = null;
 	let workshopSettings;
+	let changelogEditor;
+	let changelogBusy = false;
+	let changelogSettingsBusy = false;
 
 	async function togglePreparePublish() {
-		if (settingsBusy) return;
+		if (settingsBusy || changelogSettingsBusy) return;
 		if ($preparePublish && settingsDirty && !await dialog.confirm($_('workshop_discard_confirm'), { title: $_('workshop_settings'), kind: 'warning' })) return;
+		try {
+			await changelogEditor.flush();
+		} catch (error) {
+			await dialog.message(String(error), { kind: 'error' });
+			return;
+		}
 		$preparePublish = !$preparePublish;
 	}
 
@@ -73,15 +84,14 @@
 	const descriptionEncoder = new TextEncoder();
 	let activeTab = 'files';
 	let descriptionFormattingOpen = false;
-	let changesFormattingOpen = false;
 	let editorHistoryKey = 0;
 	let ignoreOpen = false;
-	$: tabs = $updatingAddon ? ['files', 'description', 'changelog', 'workshop'] : ['files', 'description', 'changelog'];
+	const tabs = ['files', 'description', 'changelog', 'settings'];
 	$: descriptionBytes = descriptionEncoder.encode(description).length;
 	$: canUpdateDescription = !!$updatingAddon && descriptionTouched && descriptionError === null
 		&& description !== ($updatingAddon.description ?? '');
 	$: descriptionOnly = !!$updatingAddon && publishMode === 'description';
-	$: canSubmit = !savingPublishMode && (descriptionOnly ? canUpdateDescription : readyForPublish);
+	$: canSubmit = !savingPublishMode && !changelogSettingsBusy && (descriptionOnly ? canUpdateDescription : readyForPublish && !changelogBusy);
 	$: publishLabel = descriptionOnly ? $_('update_description') : $_($updatingAddon ? 'package_update' : 'package_publish');
 	$: publishHelp = descriptionOnly ? $_('update_description_help') : $_($updatingAddon ? 'package_update_help' : 'package_publish_help');
 	$: if (!$preparePublish || $isPublishing) publishModeOpen = false;
@@ -312,9 +322,9 @@
 	}
 
 	async function publish() {
-		if (savingPublishMode || settingsBusy) return;
+		if (savingPublishMode || settingsBusy || changelogSettingsBusy) return;
 		if (descriptionOnly) return publishDescription();
-		if (!readyForPublish || $isPublishing) return;
+		if (!readyForPublish || $isPublishing || changelogBusy) return;
 		const publishingAddon = $updatingAddon;
 		const descriptionUpdate = descriptionTouched ? description : null;
 		$isPublishing = true;
@@ -351,6 +361,7 @@
 					$remountAddonScroller = true;
 					Steam.MyWorkshop = [];
 					if (publishingAddon && $updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
+					if (event.data?.settingsError) dialog.message($_('changelog_defaults.published_save_error', { values: { error: event.data.settingsError } }), { kind: 'error' });
 				}
 
 				if (event.finished || event.error || event.cancelled) {
@@ -364,7 +375,7 @@
 	}
 
 	async function publishDescription() {
-		if (!canUpdateDescription || $isPublishing || settingsBusy) return;
+		if (!canUpdateDescription || $isPublishing || settingsBusy || changelogSettingsBusy) return;
 		const publishingAddon = $updatingAddon;
 		const descriptionUpdate = description;
 		const historyKey = editorHistoryKey;
@@ -439,10 +450,8 @@
 	onMount(() => updatingAddon.subscribe(async updatingAddon => {
 		workshopInfo = updatingAddon;
 		editorHistoryKey += 1;
-		changes = '';
 		activeTab = 'files';
 		descriptionFormattingOpen = false;
-		changesFormattingOpen = false;
 		ignoreOpen = false;
 		description = updatingAddon?.description ?? '';
 		descriptionTouched = false;
@@ -514,7 +523,7 @@
 	}));
 
 	async function publishIcon() {
-		if ($isPublishing || settingsBusy || !gmaIconPath || !$updatingAddon) return;
+		if ($isPublishing || settingsBusy || changelogSettingsBusy || !gmaIconPath || !$updatingAddon) return;
 		const publishingAddon = $updatingAddon;
 		$isPublishing = true;
 		playSound('success');
@@ -678,7 +687,7 @@
 		{#if $updatingAddon}<WorkshopStats item={workshopInfo} estimatedSize={pathValue ? gmaSize : null}/>{/if}
 		<div class="workspace-tabs" role="tablist" aria-label={$_('publish_tabs.label')}>
 			{#each tabs as tab, index}
-				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={tab === 'description' && descriptionError !== null} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'workshop' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
+				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={tab === 'description' && descriptionError !== null} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'settings' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
 			{/each}
 		</div>
 		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
@@ -702,18 +711,24 @@
 			<BBCodeEditor id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'} historyKey={editorHistoryKey}/>
 		</div>
 		<div id="publish-panel-changelog" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-changelog" tabindex="0" hidden={activeTab !== 'changelog'}>
-			<BBCodeEditor id="changes" label={$_('changelog_optional')} bind:value={changes} disabled={$isPublishing} bind:formattingOpen={changesFormattingOpen} active={$preparePublish && activeTab === 'changelog'} historyKey={editorHistoryKey}/>
+			<ChangelogEditor bind:this={changelogEditor} addonId={$updatingAddon?.id ?? null} contentPath={pathValue || null} bind:value={changes} bind:busy={changelogBusy} disabled={$isPublishing} active={$preparePublish} editorActive={activeTab === 'changelog'}/>
 			{#if $updatingAddon}
 				<div class="editor-footer">
 					<a href={`https://steamcommunity.com/sharedfiles/filedetails/changelog/${$updatingAddon.id}`} on:click|preventDefault={openChangeNotes}>{$_('view_edit_change_notes')}<LinkOut class="icon" size=".85rem"/></a>
 				</div>
 			{/if}
 		</div>
-		{#if $updatingAddon}
-			<div id="publish-panel-workshop" class="workspace-panel workshop-panel" role="tabpanel" aria-labelledby="publish-tab-workshop" tabindex="0" hidden={activeTab !== 'workshop'}>
-				<WorkshopSettings bind:this={workshopSettings} item={$updatingAddon} active={$preparePublish} disabled={$isPublishing} bind:busy={settingsBusy} bind:dirty={settingsDirty} on:details={event => workshopInfo = event.detail} on:saved={workshopSettingsSaved}/>
-			</div>
-		{/if}
+		<div id="publish-panel-settings" class="workspace-panel workshop-panel" role="tabpanel" aria-labelledby="publish-tab-settings" tabindex="0" hidden={activeTab !== 'settings'}>
+			{#if $updatingAddon}
+				<WorkshopSettings bind:this={workshopSettings} item={$updatingAddon} active={$preparePublish} disabled={$isPublishing || changelogSettingsBusy} bind:busy={settingsBusy} bind:dirty={settingsDirty} on:details={event => workshopInfo = event.detail} on:saved={workshopSettingsSaved}>
+					<ChangelogDefaults id="addon-changelog" addonId={$updatingAddon.id} addonTitle={$updatingAddon.title} active={$preparePublish} disabled={$isPublishing || settingsBusy} bind:busy={changelogSettingsBusy} currentChangelog={changes} beforeSave={() => changelogEditor.flush()} on:saved={event => changelogEditor.applyDefaults(event.detail)}/>
+				</WorkshopSettings>
+			{:else}
+				<div class="local-settings">
+					<ChangelogDefaults id="new-addon-changelog" contentPath={pathValue || null} active={$preparePublish} disabled={$isPublishing} bind:busy={changelogSettingsBusy} currentChangelog={changes} beforeSave={() => changelogEditor.flush()} on:saved={event => changelogEditor.applyDefaults(event.detail)}/>
+				</div>
+			{/if}
+		</div>
 	</div>
 </Modal>
 
@@ -759,6 +774,7 @@
 	}
 	.workspace-tabs {
 		display: flex;
+		flex-shrink: 0;
 		border-bottom: 1px solid #414141;
 	}
 	.workspace-tabs button {
@@ -797,6 +813,7 @@
 	.workspace-panel[hidden] {
 		display: none;
 	}
+	.local-settings { flex: 1; min-height: 0; overflow: auto; padding: .25rem; }
 	.editor-footer {
 		display: flex;
 		align-items: center;

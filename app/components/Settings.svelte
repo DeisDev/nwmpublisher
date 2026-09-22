@@ -7,6 +7,7 @@
 	import { writable } from 'svelte/store';
 	import SidebarItem from './SidebarItem.svelte';
 	import Setting from './Setting.svelte';
+	import ChangelogDefaults from './ChangelogDefaults.svelte';
 	import { playSound } from '../sounds';
 	import { invoke } from '@tauri-apps/api/core';
 	import { switchLanguage } from '../i18n';
@@ -87,6 +88,7 @@
 	<Sidebar id="settings-sidebar">
 
 		<SidebarItem {activeItem} id="general">{$_('settings.general.general')}</SidebarItem>
+		<SidebarItem {activeItem} id="changelog">{$_('changelog_defaults.nav')}</SidebarItem>
 		<SidebarItem {activeItem} id="paths">{$_('settings.paths.paths')}</SidebarItem>
 		<SidebarItem {activeItem} id="accessibility">{$_('settings.accessibility.accessibility')}</SidebarItem>
 		<!-- TODO <SidebarItem {activeItem} id="resets">{$_('settings.resets.resets')}</SidebarItem>-->
@@ -105,6 +107,8 @@
 				</div>
 				<div>{$_('open_count', { values: { count: AppData.open_count } })}</div>
 			</div>
+		{:else if $activeItem === 'changelog'}
+			<ChangelogDefaults id="global-changelog" global active={active}/>
 		{:else if $activeItem === 'paths'}
 			<Setting {afterChange} id="gmod" type="directory" initial={AppData.gmod_dir ?? $_('ERR_UNKNOWN')} value={AppSettings.gmod} beforeChange={validateGmod}>{$_('settings.paths.gmod')}</Setting>
 			<Setting {afterChange} id="downloads" type="directory" initial={AppData.downloads_dir} value={AppSettings.downloads}>{$_('settings.paths.downloads')}</Setting>
@@ -135,6 +139,9 @@
 	}
 	#content {
 		flex: 1;
+		min-width: 0;
+		min-height: 0;
+		overflow: auto;
 		display: flex;
 		flex-direction: column;
 		padding: 1.5rem;

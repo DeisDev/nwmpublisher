@@ -190,6 +190,7 @@
 </script>
 
 <div class="settings">
+	<slot></slot>
 	<header>
 		<div><h2>{$_('workshop_settings')}</h2><p>{$_('workshop_settings_help')}</p></div>
 		<button type="button" class="refresh" disabled={loading || busy || disabled} on:click={() => load(true)} aria-label={$_('workshop_reload')} title={$_('workshop_reload')}><RefreshCw size="1rem"/></button>
@@ -256,28 +257,28 @@
 <span class="sr-only" role="status">{announcement}</span>
 
 <style>
-	.settings { overflow: auto; flex: 1; min-height: 0; padding: .25rem .25rem 1rem; }
+	.settings { overflow: auto; flex: 1; min-height: 0; padding: 1rem 1rem 1.5rem; }
 	header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 	h2 { margin: 0; font-size: 1em; }
-	h3 { margin: 0 0 .4rem; font-size: .9em; }
-	p { margin: .4rem 0 .8rem; color: #aaa; line-height: 1.5; font-size: .85em; }
-	button, select, input { font: inherit; font-size: .85em; border: 0; border-radius: 4px; color: #fff; padding: .7rem; }
-	button { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; cursor: pointer; flex-shrink: 0; background: #313131; line-height: 1.2; transition: background-color .1s; }
+	h3 { margin: 0 0 .5rem; font-size: .9em; }
+	p { margin: .5rem 0 1rem; color: #aaa; line-height: 1.5; font-size: .85em; }
+	button, select, input { font: inherit; font-size: .85em; border: 0; border-radius: 4px; color: #fff; padding: .8rem 1rem; }
+	button { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; cursor: pointer; flex-shrink: 0; background: #313131; line-height: 1.2; transition: background-color .1s; }
 	button:hover:enabled { background: #414141; }
 	button:disabled { background: #313131; color: #aaa; cursor: default; }
 	button:focus-visible, a:focus-visible { outline: 2px solid #127cff; outline-offset: 1px; }
 	input, select { background: rgba(255,255,255,.1); box-shadow: 0 0 2px rgba(0,0,0,.4); }
 	input:focus, select:focus { outline: none; box-shadow: inset 0 0 0 1.5px #127cff; }
 	input:disabled, select:disabled { color: #aaa; cursor: default; }
-	.refresh, .icon-button { padding: .7rem; }
-	.visibility { border-bottom: 1px solid #414141; padding-bottom: 1rem; margin: 1rem 0; }
-	label { display: block; font-size: .9em; font-weight: 600; margin-bottom: .55rem; }
+	.refresh, .icon-button { padding: .8rem; }
+	.visibility { border-bottom: 1px solid #414141; padding-bottom: 1.5rem; margin: 1.5rem 0; }
+	label { display: block; font-size: .9em; font-weight: 600; margin-bottom: .75rem; }
 	select { width: 100%; cursor: pointer; }
 	option { background: #313131; color: #fff; }
 	.visibility p { margin-bottom: 0; }
 	.count { color: #aaa; background: #313131; border-radius: 4px; padding: .1rem .4rem; font-size: .85em; margin-left: .3rem; }
-	.addon-list { list-style: none; margin: .7rem 0; padding: 0; }
-	li { display: flex; align-items: center; gap: .65rem; padding: .65rem; border-left: 3px solid transparent; background: #292929; border-radius: 4px; margin-bottom: .5rem; }
+	.addon-list { list-style: none; margin: 1rem 0; padding: 0; }
+	li { display: flex; align-items: center; gap: 1rem; padding: 1rem; border-left: 3px solid transparent; background: #292929; border-radius: 4px; margin-bottom: .75rem; }
 	li.pending { border-left-color: var(--neutral); }
 	li img, .image-placeholder { width: 2.6rem; height: 2.6rem; border-radius: 4px; flex-shrink: 0; object-fit: cover; background: #313131; }
 	.image-placeholder { display: grid; place-items: center; color: #aaa; }
@@ -286,20 +287,20 @@
 	a:hover { text-decoration: underline; }
 	small { display: block; color: #aaa; font-size: .8em; margin-top: .25rem; overflow-wrap: anywhere; }
 	.pending-label { color: #fff; }
-	.empty { border-radius: 4px; padding: 1rem; background: #292929; color: #aaa; text-align: center; font-size: .85em; }
-	.removed { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; padding: .6rem 0; color: #aaa; font-size: .85em; }
-	.removed button { font-size: inherit; padding: .35rem .5rem; }
-	form { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #414141; }
-	.search-input { display: flex; gap: .5rem; }
+	.empty { border-radius: 4px; padding: 1.25rem; background: #292929; color: #aaa; text-align: center; font-size: .85em; }
+	.removed { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .75rem 0; color: #aaa; font-size: .85em; }
+	.removed button { font-size: inherit; padding: .5rem .75rem; }
+	form { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid #414141; }
+	.search-input { display: flex; gap: .75rem; }
 	input { min-width: 0; flex: 1; }
-	.search-results { margin-top: .5rem; }
-	.error { background: var(--error-dark); color: #fff; padding: .7rem; border-radius: 4px; overflow-wrap: anywhere; }
+	.search-results { margin-top: 1rem; }
+	.error { background: var(--error-dark); color: #fff; padding: 1rem; border-radius: 4px; overflow-wrap: anywhere; }
 	.error p { color: inherit; }
-	.success { background: var(--success-dark); color: #fff; padding: .7rem; border-radius: 4px; }
+	.success { background: var(--success-dark); color: #fff; padding: 1rem; border-radius: 4px; }
 	.notice { display: flex; gap: .5rem; align-items: center; }
-	footer { flex-shrink: 0; border-top: 1px solid #414141; padding: .75rem 0 0; }
-	.save-status { color: #aaa; font-size: .8em; margin-bottom: .6rem; }
-	.save-actions { display: flex; justify-content: flex-end; gap: .6rem; flex-wrap: wrap; }
+	footer { flex-shrink: 0; border-top: 1px solid #414141; padding: 1rem; }
+	.save-status { color: #aaa; font-size: .8em; margin-bottom: .75rem; }
+	.save-actions { display: flex; justify-content: flex-end; gap: .75rem; flex-wrap: wrap; }
 	.primary { background: var(--neutral); text-shadow: 0 1px rgba(0,0,0,.6); }
 	.primary:hover:enabled { background: var(--neutral-dark); }
 	.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

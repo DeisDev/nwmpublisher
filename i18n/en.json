@@ -1,6 +1,42 @@
 {
 	"LANGUAGE_NAME": "English",
 
+	"changelog_defaults": {
+		"nav": "Changelog",
+		"global_title": "Default for all addons",
+		"addon_title": "Changelog for this addon",
+		"global_help": "Choose how changelogs start when you publish or update an addon. Individual addons can override this in the publisher's Settings tab.",
+		"addon_help": "These local preferences apply only to this addon. The app-wide default is in Settings → Changelog.",
+		"select_folder": "Select an addon folder in the Files tab before saving preferences for this addon.",
+		"prefill": "When opening the changelog",
+		"mode_inherit": "Use the app default",
+		"inherit_help": "Currently: {mode}. This addon follows changes to the app default.",
+		"mode_blank": "Start empty",
+		"help_blank": "Open with an empty changelog each time.",
+		"mode_template": "Use a saved template",
+		"help_template": "Start with the template below. Editing the upload's changelog does not change the template.",
+		"mode_last_entered": "Remember the last draft",
+		"help_last_entered": "Restore this addon's last entered text, including drafts from cancelled uploads. Each addon remembers its own text.",
+		"global_template": "Template for addons using the app default",
+		"addon_template": "Template for this addon only",
+		"template_help": "Enter the starting text for future changelogs. Plain text and Steam BBCode are supported.",
+		"copy_current": "Copy this upload's changelog into the template",
+		"help": "Saved on this computer. Text you have already edited for the current upload is kept.",
+		"save_global": "Save app default",
+		"save_addon": "Save for this addon",
+		"saving": "Saving...",
+		"global_saved": "App default saved",
+		"addon_saved": "Addon preferences saved",
+		"remember_help": "Draft remembered for this addon, including cancelled uploads.",
+		"saving_draft": "Saving changelog draft...",
+		"unsaved_draft": "Changelog draft has not been saved.",
+		"error": "Could not load or save changelog preferences: {error}",
+		"draft_error": "Could not remember your changelog: {error}",
+		"reload": "Reload changelog preferences",
+		"retry": "Retry saving draft",
+		"published_save_error": "Your addon was published, but its local settings could not be saved: {error}"
+	},
+
 	"my_workshop": "My Workshop",
 	"workshop_details": "Workshop details",
 	"workshop_banned": "Banned by Steam",
@@ -288,7 +324,7 @@
 		"files": "Files",
 		"description": "Description",
 		"changelog": "Changelog",
-		"workshop": "Workshop"
+		"settings": "Settings"
 	},
 	"bbcode": {
 		"undo": "Undo",

@@ -660,6 +660,17 @@ pub fn publish(request: PublishRequest) -> u32 {
 	let is_updating = update_id.is_some();
 
 	rayon::spawn(move || {
+		let source_key = if is_updating {
+			None
+		} else {
+			match crate::appdata::changelog_key(None, Some(content_path_src.clone())) {
+				Ok(key) => Some(key),
+				Err(error) => {
+					transaction.error(error, turbonone!());
+					return;
+				}
+			}
+		};
 		let temp_dir = app_data!().temp_dir().to_owned();
 		let result = with_publish_staging(&temp_dir, |root, content| {
 			validate_description(description.as_deref()).map_err(|error| error.to_string())?;
@@ -773,6 +784,15 @@ pub fn publish(request: PublishRequest) -> u32 {
 
 		match result {
 			Ok(Some((id, legal_agreement))) => {
+				let settings_error = {
+					let mut settings = app_data!().settings.write();
+					settings.my_workshop_local_paths.insert(id, content_path_src);
+					if let Some(key) = source_key {
+						settings.changelogs.published(&key, id);
+					}
+					settings.save().err().map(|error| error.to_string())
+				};
+				app_data!().send();
 				if !transaction.aborted() {
 					if legal_agreement {
 						crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
@@ -780,12 +800,8 @@ pub fn publish(request: PublishRequest) -> u32 {
 					if app_data!().settings.read().open_workshop_after_publish {
 						crate::path::open(format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id.0));
 					}
-					transaction.finished(turbonone!());
+					transaction.finished(serde_json::json!({ "settingsError": settings_error }));
 				}
-
-				app_data!().settings.write().my_workshop_local_paths.insert(id, content_path_src);
-				ignore! { app_data!().settings.read().save() };
-				app_data!().send();
 			}
 			Ok(None) => transaction.cancelled(),
 			Err(error) => transaction.error(error, turbonone!()),

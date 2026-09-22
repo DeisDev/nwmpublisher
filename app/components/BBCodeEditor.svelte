@@ -296,12 +296,18 @@
 		flex: 1;
 		min-height: 0;
 		min-width: 0;
+		overflow: auto;
+		padding: 2px;
 	}
 	.editor-heading, .preview-heading {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: .75rem;
+		flex-shrink: 0;
+	}
+	.editor-heading {
+		flex-wrap: wrap;
 	}
 	.editor-actions {
 		display: flex;
@@ -363,6 +369,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: .3rem;
+		flex-shrink: 0;
 	}
 	.bbcode-toolbar[hidden] {
 		display: none;
@@ -405,6 +412,7 @@
 	}
 	p {
 		margin: 0;
+		flex-shrink: 0;
 		font-size: .8em;
 		line-height: 1.5;
 		text-align: center;
