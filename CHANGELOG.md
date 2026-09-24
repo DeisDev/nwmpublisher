@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-09-24
+
 ### Added
 
 - Add a checked-by-default option to launch nwmpublisher when the Windows installer finishes.
