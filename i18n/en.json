@@ -70,7 +70,7 @@
 		"saving": "Saving...",
 		"global_saved": "App default saved",
 		"addon_saved": "Addon preferences saved",
-		"remember_help": "Draft remembered for this addon, including cancelled uploads.",
+		"remember_help": "Drafts are remembered for this addon, including cancelled uploads.",
 		"saving_draft": "Saving changelog draft...",
 		"unsaved_draft": "Changelog draft has not been saved.",
 		"error": "Could not load or save changelog preferences: {error}",

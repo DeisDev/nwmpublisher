@@ -362,21 +362,22 @@
 		const publishingAddon = $updatingAddon;
 		const descriptionUpdate = descriptionTouched ? description : null;
 		$isPublishing = true;
-		playSound('success');
 
-		invoke('publish', {
-			request: {
-				contentPathSrc: pathValue,
-				title: titleInput.value.trim(),
-				description: descriptionUpdate,
-				tags: chosenAddonTags.filter(tag => !!tag),
-				addonType: addonTypeInput.value,
-				gmaName: gmaNameInput.value.trim(),
-				iconPath: gmaIconPath,
-				upscale: canUpscale && upscale.checked,
-				updateId: publishingAddon?.id,
-				changes: changes || null,
-			},
+		const request = {
+			contentPathSrc: pathValue,
+			title: titleInput.value.trim(),
+			description: descriptionUpdate,
+			tags: chosenAddonTags.filter(tag => !!tag),
+			addonType: addonTypeInput.value,
+			gmaName: gmaNameInput.value.trim(),
+			iconPath: gmaIconPath,
+			upscale: canUpscale && upscale.checked,
+			updateId: publishingAddon?.id,
+			changes: changes || null,
+		};
+		changelogEditor.flush().then(() => {
+			playSound('success');
+			return invoke('publish', { request });
 		}).then(transactionId => {
 			const transaction = new Transaction(transactionId, transaction => {
 				return $_(transaction.status ?? 'PUBLISH_PACKING', { values: {

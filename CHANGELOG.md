@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix the draft hint and publish button flickering while typing a changelog.
+- Fix release builds failing to install frontend dependencies.
+
 ## [3.1.1] - 2026-09-24
 
 ### Added

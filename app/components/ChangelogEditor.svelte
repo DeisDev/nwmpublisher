@@ -26,7 +26,7 @@
 	let formattingOpen = false;
 
 	$: syncSession(active, addonId, addonId ? null : contentPath);
-	$: busy = loading || pendingDrafts > 0 || !!error || !!draftError;
+	$: busy = loading || !!error || !!draftError;
 
 	function syncSession(open, id, path) {
 		const next = JSON.stringify([id, path]);
@@ -114,7 +114,7 @@
 		<div class="error" role="alert">{$_('changelog_defaults.draft_error', { values: { error: draftError } })}<button type="button" disabled={pendingDrafts > 0} on:click={remember}>{$_('changelog_defaults.retry')}</button></div>
 	{/if}
 	<BBCodeEditor id="changes" label={$_('changelog_optional')} {value} on:input={onInput} disabled={disabled || loading || !!error || !state} bind:formattingOpen active={active && editorActive} {historyKey}/>
-	{#if state?.mode === 'last_entered'}<p class="draft-status" role="status">{$_(pendingDrafts ? 'changelog_defaults.saving_draft' : draftError ? 'changelog_defaults.unsaved_draft' : 'changelog_defaults.remember_help')}</p>{/if}
+	{#if state?.mode === 'last_entered'}<p class="draft-status" role="status">{$_(draftError ? 'changelog_defaults.unsaved_draft' : 'changelog_defaults.remember_help')}</p>{/if}
 </div>
 
 <style>
