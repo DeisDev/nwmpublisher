@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add a checked-by-default option to launch nwmpublisher when the Windows installer finishes.
 - Pre-fill changelogs with a reusable template or the last entered draft. Set the app default in Settings > Changelog and per-addon overrides in the publisher's Settings tab. Remember drafts even when an upload is cancelled, and keep folder-specific defaults after the first publish.
 - Manage required addons by searching Garry's Mod Workshop items or pasting an item link or ID. Review additions and removals, then save separately from uploads, with conflict detection and partial-save feedback.
 - Change published addons between Public, Friends only, Private, and Unlisted visibility from Workshop settings.

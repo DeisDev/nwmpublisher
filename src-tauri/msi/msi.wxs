@@ -161,7 +161,13 @@
 
 		<UI>
 			<UIRef Id='WixUI_FeatureTree'/>
+			<Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed</Publish>
 		</UI>
+
+		<Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="!(loc.LaunchApp)" />
+		<Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+		<Property Id="WixShellExecTarget" Value="[#EXE]" />
+		<CustomAction Id="LaunchApplication" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" />
 
 		<WixVariable Id='WixUILicenseRtf' Value='..\..\..\..\msi\License.rtf'/>
 
