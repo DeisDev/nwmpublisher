@@ -1,5 +1,5 @@
 use std::{
-	io::{BufRead, ErrorKind, Seek, SeekFrom, Write},
+	io::{BufRead, ErrorKind, Read, Seek, SeekFrom, Write},
 	sync::Arc,
 };
 
@@ -47,7 +47,8 @@ pub fn stream_bytes<R: BufRead + ?Sized, W: Write>(r: &mut R, w: &mut W, mut byt
 pub trait NTStringReader: BufRead + Seek {
 	fn read_nt_string(&mut self) -> Result<String, std::io::Error> {
 		let mut buf = vec![];
-		let bytes_read = self.read_until(0, &mut buf)?;
+		let bytes_read = (&mut *self).take(1024 * 1024 + 1).read_until(0, &mut buf)?;
+		if bytes_read > 1024 * 1024 { return Err(std::io::Error::new(ErrorKind::InvalidData, "archive string exceeds 1 MiB")); }
 		if bytes_read == 0 || buf.last() != Some(&0) {
 			return Err(std::io::Error::new(ErrorKind::UnexpectedEof, "unterminated archive string"));
 		}
@@ -69,7 +70,8 @@ pub trait NTStringReader: BufRead + Seek {
 
 	fn skip_nt_string(&mut self) -> Result<usize, std::io::Error> {
 		let mut buf = vec![];
-		let bytes = self.read_until(0, &mut buf)?;
+		let bytes = (&mut *self).take(1024 * 1024 + 1).read_until(0, &mut buf)?;
+		if bytes > 1024 * 1024 { return Err(std::io::Error::new(ErrorKind::InvalidData, "archive string exceeds 1 MiB")); }
 		if buf.last() != Some(&0) {
 			return Err(std::io::Error::new(ErrorKind::UnexpectedEof, "unterminated archive string"));
 		}

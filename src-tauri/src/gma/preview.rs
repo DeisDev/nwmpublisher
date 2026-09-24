@@ -30,7 +30,7 @@ pub fn preview_gma(path: Option<PathBuf>) -> Result<Option<Vec<GMAEntry>>, GMAEr
 pub fn extract_preview_entry(gma_path: PathBuf, entry_path: String) -> Option<u32> {
 	let mut lock = PREVIEW_GMA.lock();
 	if let Some(gma) = lock.as_mut() {
-		let transaction = transaction!();
+		let transaction = crate::transactions::new_extraction();
 		let id = transaction.id;
 		if *gma.path != gma_path {
 			let loaded = GMAFile::open(gma_path).and_then(|mut gma| {
@@ -61,7 +61,7 @@ pub fn extract_preview_entry(gma_path: PathBuf, entry_path: String) -> Option<u3
 pub fn extract_preview_gma(gma_path: PathBuf, dest: ExtractDestination) -> Option<u32> {
 	let mut lock = PREVIEW_GMA.lock();
 	if let Some(gma) = lock.as_mut() {
-		let transaction = transaction!();
+		let transaction = crate::transactions::new_extraction();
 		let id = transaction.id;
 		if *gma.path != gma_path {
 			let loaded = GMAFile::open(gma_path).and_then(|mut gma| {

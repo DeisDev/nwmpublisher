@@ -13,6 +13,7 @@
 	import LinkChain from '@lucide/svelte/icons/link';
 	import { _ } from 'svelte-i18n';
 	import { invoke } from '@tauri-apps/api/core';
+	import { saveSettings } from '../settings.js';
 	import { listen } from '@tauri-apps/api/event';
 	import DestinationSelect from '../components/DestinationSelect.svelte';
 	import { Transaction } from '../transactions';
@@ -22,6 +23,7 @@
 	import DownloaderJob from '../components/DownloaderJob.svelte';
 	import { Steam } from '../steam';
 	import { writable } from 'svelte/store';
+	import { onMount } from 'svelte';
 
 	let extractingJobs = [];
 	let downloadingJobs = [];
@@ -30,6 +32,7 @@
 	let downloadingWorkers = 0;
 
 	function pushTransaction(jobType, args) {
+		if ([...extractingJobs, ...downloadingJobs].some(job => job.transaction.id === args[0].id)) return;
 		const timestamp = new Date().getTime();
 		var incrWorkers = true;
 
@@ -42,7 +45,10 @@
 					transaction,
 					timestamp,
 					type: JOB_TYPE_DOWNLOAD,
+					ws_id: transaction.context?.workshopId,
 				};
+				downloadingJobs.push(job);
+				downloadingJobs = downloadingJobs;
 				transaction.listen(event => {
 					if (event.finished || event.cancelled) {
 						if (incrWorkers) {
@@ -57,7 +63,7 @@
 						const [tag, data] = event.data;
 						if (tag === 0) {
 							job.ws_id = data;
-							downloadingJobs.push(job);
+							if (!downloadingJobs.includes(job)) downloadingJobs.push(job);
 						} else if (tag === 1) {
 							job.size = data;
 						}
@@ -184,7 +190,7 @@
 		destinationModal = false;
 		AppSettings.extract_destination = extractDestination;
 
-		invoke('update_settings', { settings: AppSettings });
+		saveSettings({ extract_destination: AppSettings.extract_destination }).catch(() => {});
 	}
 	let destinationModal = false;
 	function openDestination() {
@@ -193,6 +199,19 @@
 	function cancelDestination() {
 		destinationModal = false;
 	}
+
+	onMount(() => {
+		const recover = ({ detail: snapshot }) => {
+			if (!['download', 'extract'].includes(snapshot.context?.kind)) return;
+			const transaction = new Transaction(snapshot.id);
+			transaction.context = snapshot.context;
+			if (snapshot.context.kind === 'download') pushTransaction(JOB_TYPE_DOWNLOAD, [transaction]);
+			else if (snapshot.context.kind === 'extract') pushTransaction(JOB_TYPE_EXTRACT, [transaction, snapshot.context.sourcePath, snapshot.context.fileName, snapshot.context.workshopId]);
+			transaction.applySnapshot(snapshot);
+		};
+		window.addEventListener('recovered-job', recover);
+		return () => window.removeEventListener('recovered-job', recover);
+	});
 
 	listen('ExtractionStarted', ({ payload: [transaction_id, srcPath, fileName, ws_id] }) => {
 		pushTransaction(JOB_TYPE_EXTRACT, [new Transaction(transaction_id), srcPath, fileName, ws_id]);

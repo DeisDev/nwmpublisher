@@ -42,9 +42,9 @@ function resized() {
 	window.__TAURI__.core.invoke("window_resized", {
 		width: window.innerWidth,
 		height: window.innerHeight
-	});
+	}).catch(error => window.dispatchEvent(new CustomEvent('settings-save-error', { detail: error })));
 }
 window.addEventListener('resize', e => {
 	clearTimeout(resizeTimeout);
-	resizeTimeout = setTimeout(resized, 100, e);
+	resizeTimeout = setTimeout(resized, 400, e);
 });

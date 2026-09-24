@@ -3,8 +3,8 @@ use std::{
 	cell::Cell,
 	collections::HashMap,
 	fs::{self, File, OpenOptions},
-	io::{Seek, SeekFrom},
-	path::PathBuf,
+	io::{Seek, SeekFrom, Write},
+	path::{Path, PathBuf},
 	sync::atomic::{AtomicBool, Ordering},
 };
 
@@ -16,7 +16,7 @@ use crate::{
 
 use crate::GMOD_APP_ID;
 use lazy_static::lazy_static;
-use parking_lot::{RwLock, RwLockReadGuard};
+use parking_lot::{Mutex, RwLock, RwLockReadGuard};
 use serde::{Deserialize, Serialize};
 use steamworks::PublishedFileId;
 
@@ -35,6 +35,8 @@ lazy_static! {
 	/// Whether nwmpublisher already had settings of its own when it started.
 	/// Evaluated before anything can write settings, so it stays true for the whole run.
 	static ref HAD_SETTINGS_FILE: bool = APP_SETTINGS_PATH.is_file();
+	static ref SETTINGS_COMMIT: Mutex<()> = Mutex::new(());
+	static ref SETTINGS_RECOVERY: RwLock<Option<String>> = RwLock::new(None);
 }
 
 /// Whether the legacy settings offer has been answered in this run.
@@ -291,7 +293,14 @@ impl Settings {
 
 		lazy_static::initialize(&HAD_SETTINGS_FILE);
 
-		Settings::load(&APP_SETTINGS_PATH, false).unwrap_or_default()
+		match Settings::load(&APP_SETTINGS_PATH, false) {
+			Ok(settings) => settings,
+			Err(error) if error.downcast_ref::<std::io::Error>().is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound) => Settings::default(),
+			Err(error) => {
+				*SETTINGS_RECOVERY.write() = Some(format!("{}: {}", APP_SETTINGS_PATH.display(), error));
+				Settings::default()
+			}
+		}
 	}
 
 	fn load(path: &std::path::Path, sanitize: bool) -> Result<Settings, anyhow::Error> {
@@ -303,12 +312,28 @@ impl Settings {
 		Ok(settings)
 	}
 
-	pub fn save(&self) -> Result<(), anyhow::Error> {
-		if let Some(parent) = APP_SETTINGS_PATH.parent() {
-			std::fs::create_dir_all(parent)?;
-		}
+	fn save(&self) -> Result<(), anyhow::Error> {
+		if SETTINGS_RECOVERY.read().is_some() { anyhow::bail!("ERR_SETTINGS_RECOVERY_REQUIRED"); }
+		self.save_to(&APP_SETTINGS_PATH)
+	}
 
-		Ok(serde_json::ser::to_writer(File::create(&*APP_SETTINGS_PATH)?, self)?)
+	fn save_to(&self, path: &Path) -> Result<(), anyhow::Error> {
+		let parent = path.parent().ok_or_else(|| anyhow::anyhow!("Settings path has no parent"))?;
+		fs::create_dir_all(parent)?;
+		let bytes = serde_json::to_vec(self)?;
+		match fs::read(path) {
+			Ok(previous) => {
+				if previous == bytes { return Ok(()); }
+				// Never replace the known-good backup with a damaged file.
+				if serde_json::from_slice::<Settings>(&previous).is_ok() {
+					atomic_settings_write(&path.with_extension("json.bak"), &previous)?;
+				}
+			}
+			Err(error) if error.kind() == std::io::ErrorKind::NotFound => {},
+			Err(error) => return Err(error.into()),
+		}
+		atomic_settings_write(path, &bytes)?;
+		Ok(())
 	}
 
 	pub fn sanitize(&mut self) {
@@ -499,27 +524,79 @@ impl<R: tauri::Runtime> tauri::plugin::Plugin<R> for Plugin {
 	}
 }
 
-#[tauri::command]
-pub fn update_settings(mut settings: Settings) -> Result<bool, String> {
-	settings.sanitize();
-	let rediscover_addons = {
-		let mut current = app_data!().settings.write();
-		// Changelog commands own these fields; an older frontend snapshot must not erase drafts.
-		settings.changelogs = current.changelogs.clone();
-		settings.save().map_err(|error| format!("Failed to save settings: {}", error))?;
-		let rediscover = current.gmod != settings.gmod;
-		*current = settings;
-		rediscover
-	};
+fn atomic_settings_write(path: &Path, bytes: &[u8]) -> Result<(), anyhow::Error> {
+	let parent = path.parent().ok_or_else(|| anyhow::anyhow!("Settings path has no parent"))?;
+	let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+	temporary.write_all(bytes)?;
+	temporary.as_file().sync_all()?;
+	temporary.persist(path).map_err(|error| error.error)?;
+	#[cfg(unix)]
+	File::open(parent)?.sync_all()?;
+	Ok(())
+}
 
+pub fn change_settings<T>(change: impl FnOnce(&mut Settings) -> Result<T, String>) -> Result<T, String> {
+	let _commit = SETTINGS_COMMIT.lock();
+	let mut next = app_data!().settings.read().clone();
+	let result = change(&mut next)?;
+	next.save().map_err(|error| format!("ERR_SETTINGS_SAVE:{}", error))?;
+	*app_data!().settings.write() = next;
+	Ok(result)
+}
+
+fn patched_settings(settings: &Settings, patch: serde_json::Map<String, serde_json::Value>) -> Result<Settings, String> {
+	let mut value = serde_json::to_value(settings).map_err(|error| error.to_string())?;
+	let fields = value.as_object_mut().unwrap();
+	for (key, value) in patch {
+		if !fields.contains_key(&key) || matches!(key.as_str(), "window_size" | "window_maximized" | "changelogs" | "my_workshop_local_paths") {
+			return Err(format!("ERR_SETTINGS_FIELD:{}", key));
+		}
+		fields.insert(key, value);
+	}
+	serde_json::from_value(value).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn update_settings(patch: serde_json::Map<String, serde_json::Value>) -> Result<bool, String> {
+	let rediscover_addons = change_settings(|settings| {
+		let old_gmod = settings.gmod.clone();
+		*settings = patched_settings(settings, patch)?;
+		let source_paths = settings.my_workshop_local_paths.clone();
+		settings.sanitize();
+		settings.my_workshop_local_paths = source_paths;
+		Ok(old_gmod != settings.gmod)
+	})?;
 	if rediscover_addons {
 		game_addons!().refresh();
 		webview_emit!("InstalledAddonsRefreshed");
 	}
-
-	webview_emit!("UpdateAppData", &*crate::APP_DATA);
-
+	app_data!().send();
 	Ok(true)
+}
+
+#[tauri::command]
+pub fn settings_recovery() -> Option<(String, bool)> {
+	SETTINGS_RECOVERY.read().clone().map(|error| (error, Settings::load(&APP_SETTINGS_PATH.with_extension("json.bak"), false).is_ok()))
+}
+
+#[tauri::command]
+pub fn recover_settings(use_backup: bool) -> Result<(), String> {
+	let _commit = SETTINGS_COMMIT.lock();
+	if SETTINGS_RECOVERY.read().is_none() { return Ok(()); }
+	let result = (|| -> Result<Settings, anyhow::Error> {
+		let settings = if use_backup { Settings::load(&APP_SETTINGS_PATH.with_extension("json.bak"), false)? } else { Settings::default() };
+		let parent = APP_SETTINGS_PATH.parent().unwrap();
+		let mut damaged = tempfile::Builder::new().prefix("settings-damaged-").suffix(".json").tempfile_in(parent)?;
+		std::io::copy(&mut File::open(&*APP_SETTINGS_PATH)?, &mut damaged)?;
+		damaged.as_file().sync_all()?;
+		damaged.keep().map_err(|error| error.error)?;
+		settings.save_to(&APP_SETTINGS_PATH)?;
+		Ok(settings)
+	})();
+	let settings = result.map_err(|error| format!("ERR_SETTINGS_SAVE:{}", error))?;
+	*app_data!().settings.write() = settings;
+	*SETTINGS_RECOVERY.write() = None;
+	Ok(())
 }
 
 #[tauri::command]
@@ -531,33 +608,24 @@ pub fn get_changelog(addon_id: Option<PublishedFileId>, content_path: Option<Pat
 #[tauri::command]
 pub fn save_changelog_defaults(key: String, global: bool, preferences: Option<ChangelogDefaults>) -> Result<ChangelogEditorState, String> {
 	validate_changelog_key(&key)?;
-	let mut current = app_data!().settings.write();
-	let mut next = current.clone();
-	if global {
-		next.changelogs.defaults = preferences.ok_or("Global changelog defaults are required")?;
-	} else if key == "new" {
-		return Err("Select an addon folder before setting addon defaults".into());
-	} else if let Some(preferences) = preferences {
-		next.changelogs.addons.insert(key.clone(), preferences);
-	} else {
-		next.changelogs.addons.remove(&key);
-	}
-	let editor = next.changelogs.editor(key);
-	next.save().map_err(|error| format!("Failed to save changelog defaults: {}", error))?;
-	*current = next;
-	Ok(editor)
+	change_settings(|next| {
+		if global {
+			next.changelogs.defaults = preferences.ok_or("Global changelog defaults are required")?;
+		} else if key == "new" {
+			return Err("Select an addon folder before setting addon defaults".into());
+		} else if let Some(preferences) = preferences {
+			next.changelogs.addons.insert(key.clone(), preferences);
+		} else {
+			next.changelogs.addons.remove(&key);
+		}
+		Ok(next.changelogs.editor(key))
+	})
 }
 
 #[tauri::command]
 pub fn remember_changelog(key: String, text: String) -> Result<(), String> {
 	validate_changelog_key(&key)?;
-	let mut current = app_data!().settings.write();
-	let mut next = current.clone();
-	if next.changelogs.remember(key, text) {
-		next.save().map_err(|error| format!("Failed to save changelog draft: {}", error))?;
-		*current = next;
-	}
-	Ok(())
+	change_settings(|next| { next.changelogs.remember(key, text); Ok(()) })
 }
 
 /// Whether there are settings from an older gmpublisher installation to import.
@@ -572,11 +640,11 @@ pub fn legacy_settings_pending() -> bool {
 pub fn migrate_legacy_settings() -> Result<(), String> {
 	let settings = Settings::load(&LEGACY_APP_SETTINGS_PATH, true)
 		.map_err(|error| format!("Failed to read gmpublisher settings: {}", error))?;
-	settings.save().map_err(|error| format!("Failed to save imported settings: {}", error))?;
-
-	let rediscover_addons = app_data!().settings.read().gmod != settings.gmod;
-
-	*app_data!().settings.write() = settings;
+	let rediscover_addons = change_settings(|current| {
+		let changed = current.gmod != settings.gmod;
+		*current = settings;
+		Ok(changed)
+	})?;
 	MIGRATION_RESOLVED.store(true, Ordering::Relaxed);
 
 	if rediscover_addons {
@@ -593,7 +661,7 @@ pub fn migrate_legacy_settings() -> Result<(), String> {
 /// the user isn't asked to migrate again on the next launch.
 #[tauri::command]
 pub fn dismiss_legacy_settings() -> Result<(), String> {
-	app_data!().settings.read().save().map_err(|error| format!("Failed to save settings: {}", error))?;
+	change_settings(|_| Ok(()))?;
 	MIGRATION_RESOLVED.store(true, Ordering::Relaxed);
 	Ok(())
 }
@@ -606,19 +674,16 @@ pub fn validate_gmod(mut path: PathBuf) -> bool {
 }
 
 #[tauri::command]
-pub fn window_resized(window: tauri::Window, width: f64, height: f64) {
-	{
-		let mut settings = app_data!().settings.write();
-
-		settings.window_size = window
-			.outer_size()
-			.and_then(|size| Ok(size.to_logical(window.scale_factor()?)))
-			.map(|size| (size.width, size.height))
-			.unwrap_or((width, height));
-
-		settings.window_maximized = webview!().window().is_maximized().unwrap_or(false);
-	}
-	ignore! { app_data!().settings.read().save() };
+pub fn window_resized(window: tauri::Window, width: f64, height: f64) -> Result<(), String> {
+	let size = window.outer_size().and_then(|size| Ok(size.to_logical(window.scale_factor()?)))
+		.map(|size| (size.width, size.height)).map_err(|error| error.to_string())?;
+	if !width.is_finite() || !height.is_finite() || width <= 0. || height <= 0. { return Err("ERR_SETTINGS_WINDOW_SIZE".into()); }
+	let maximized = window.is_maximized().map_err(|error| error.to_string())?;
+	change_settings(|settings| {
+		if !maximized { settings.window_size = size; }
+		settings.window_maximized = maximized;
+		Ok(())
+	})
 }
 
 fn serde_gmod_dir<S>(_: &Option<PathBuf>, serializer: S) -> Result<S::Ok, S::Error>
@@ -676,6 +741,39 @@ pub fn write_tauri_settings() -> Option<()> {
 
 #[cfg(test)]
 mod tests {
+	#[test]
+	fn atomic_saves_keep_a_valid_backup_and_preserve_the_live_file_on_failure() {
+		let root = tempfile::tempdir().unwrap();
+		let path = root.path().join("settings.json");
+		let mut settings = super::Settings::default();
+		settings.save_to(&path).unwrap();
+		let original = std::fs::read(&path).unwrap();
+		settings.sounds = false;
+		settings.save_to(&path).unwrap();
+		assert_eq!(std::fs::read(path.with_extension("json.bak")).unwrap(), original);
+		let current = std::fs::read(&path).unwrap();
+		std::fs::remove_file(path.with_extension("json.bak")).unwrap();
+		std::fs::create_dir(path.with_extension("json.bak")).unwrap();
+		settings.sounds = true;
+		assert!(settings.save_to(&path).is_err());
+		assert_eq!(std::fs::read(&path).unwrap(), current);
+	}
+
+	#[test]
+	fn field_patches_preserve_newer_window_state_paths_and_drafts() {
+		let mut settings = super::Settings::default();
+		settings.window_size = (1280., 720.);
+		settings.my_workshop_local_paths.insert(steamworks::PublishedFileId(7), std::path::PathBuf::from("source"));
+		settings.changelogs.drafts.insert("workshop:7".into(), "draft".into());
+		let patch = serde_json::json!({ "sounds": false }).as_object().unwrap().clone();
+		let result = super::patched_settings(&settings, patch).unwrap();
+		assert!(!result.sounds);
+		assert_eq!(result.window_size, settings.window_size);
+		assert_eq!(result.my_workshop_local_paths, settings.my_workshop_local_paths);
+		assert_eq!(result.changelogs.drafts, settings.changelogs.drafts);
+		let patch = serde_json::json!({ "my_workshop_local_paths": {} }).as_object().unwrap().clone();
+		assert!(super::patched_settings(&settings, patch).is_err());
+	}
 	use super::{
 		changelog_key, validate_changelog_key, ChangelogDefaults, ChangelogMode, ChangelogSettings, Settings, WorkshopSort, WorkshopUpdateMode,
 		WorkshopVisibility,

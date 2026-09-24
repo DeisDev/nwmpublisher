@@ -6,6 +6,7 @@
 	import Download from '@lucide/svelte/icons/download';
 	import FolderAdd from '@lucide/svelte/icons/folder-plus';
 	import { invoke } from '@tauri-apps/api/core';
+	import { saveSettings } from '../settings.js';
 	import Modal from './Modal.svelte';
 	import * as dialog from '@tauri-apps/plugin-dialog';
 	import GmodLogo from './GmodLogo.svelte';
@@ -103,7 +104,7 @@
 	function createFolderUpdated() {
 		AppSettings.create_folder_on_extract = this.checked;
 		extractPath = [extractPath[0], extractPath[1], this.checked];
-		invoke('update_settings', { settings: AppSettings });
+		saveSettings({ create_folder_on_extract: AppSettings.create_folder_on_extract }).catch(() => {});
 	}
 
 	function doCallback() {

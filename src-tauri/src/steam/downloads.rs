@@ -1,13 +1,14 @@
-use parking_lot::{Condvar, Mutex, MutexGuard};
+use parking_lot::{Condvar, Mutex};
 use rayon::ThreadPool;
 
 use std::{
-	collections::HashSet,
+	collections::{HashMap, HashSet, VecDeque},
 	path::PathBuf,
-	sync::{atomic::AtomicBool, Arc},
+	sync::{atomic::{AtomicBool, Ordering}, Arc},
+	time::{Duration, Instant},
 };
 
-use steamworks::{ClientManager, ItemState, PublishedFileId, QueryResults, UGC};
+use steamworks::{ItemState, PublishedFileId, QueryResults};
 
 use crate::{
 	gma::{ExtractDestination, ExtractGMAMut},
@@ -17,7 +18,7 @@ use crate::{
 
 lazy_static! {
 	pub static ref DOWNLOADS: Downloads = Downloads::init();
-	static ref THREAD_POOL: ThreadPool = thread_pool!();
+	static ref THREAD_POOL: ThreadPool = thread_pool!(2);
 }
 
 #[derive(Debug)]
@@ -25,6 +26,7 @@ pub struct DownloadInner {
 	item: PublishedFileId,
 	transaction: Transaction,
 	sent_total: AtomicBool,
+	progress: Mutex<(u64, Instant)>,
 	extract_destination: ExtractDestination,
 }
 impl std::hash::Hash for DownloadInner {
@@ -65,26 +67,50 @@ impl From<Vec<PublishedFileId>> for IDList {
 	}
 }
 
+struct Scheduler {
+	pending: VecDeque<Download>,
+	active: HashMap<PublishedFileId, Download>,
+}
+
 pub struct Downloads {
-	pending: Mutex<Vec<Download>>, // TODO consider using VecDeque?
-	downloading: Mutex<Vec<Download>>,
+	queue: Mutex<Scheduler>,
 	watchdog: Condvar,
 }
 impl Downloads {
 	fn init() -> Self {
-		Self {
-			pending: Mutex::new(Vec::new()),
-			downloading: Mutex::new(Vec::new()),
-			watchdog: Condvar::new(),
+		Self { queue: Mutex::new(Scheduler { pending: VecDeque::new(), active: HashMap::new() }), watchdog: Condvar::new() }
+	}
+
+	fn admit_ready(&self, slots: usize) -> Vec<Download> {
+		let mut queue = self.queue.lock();
+		while queue.pending.is_empty() && queue.active.is_empty() { self.watchdog.wait(&mut queue); }
+		let mut admitted = Vec::new();
+		while queue.active.len() < slots {
+			let Some(job) = queue.pending.pop_front() else { break; };
+			if job.transaction.aborted() { continue; }
+			*job.progress.lock() = (0, Instant::now());
+			queue.active.insert(job.item, job.clone());
+			admitted.push(job);
 		}
+		admitted
+	}
+
+	fn failure(item: PublishedFileId, message: &str, detail: String) {
+		let transaction = transaction!();
+		transaction.context(serde_json::json!({ "kind": "download", "workshopId": item }));
+		webview_emit!("DownloadStarted", transaction.id);
+		transaction.data((0, item));
+		transaction.error(message, detail);
 	}
 
 	fn extract(folder: PathBuf, item: PublishedFileId, extract_destination: ExtractDestination) {
+		let transaction = crate::transactions::new_extraction();
+		transaction.context(serde_json::json!({ "kind": "extract", "workshopId": item, "sourcePath": folder }));
+		transaction.status("queued");
+		webview_emit!("ExtractionStarted", (transaction.id, turbonone!(), turbonone!(), Some(item)));
 		THREAD_POOL.spawn(move || {
-			let transaction = transaction!();
+			if transaction.aborted() { return transaction.cancelled(); }
 			transaction.status("locating");
-
-			webview_emit!("ExtractionStarted", (transaction.id, turbonone!(), turbonone!(), Some(item)));
 
 			let mut gma = if folder.is_dir() {
 				let mut gma_path = None;
@@ -126,6 +152,7 @@ impl Downloads {
 								transaction.progress_reset();
 								gma
 							}
+							Err(crate::GMAError::Cancelled) => return transaction.cancelled(),
 							Err(err) => return transaction.error(err.to_string(), turbonone!()),
 						}
 					}
@@ -144,251 +171,167 @@ impl Downloads {
 		});
 	}
 
-	fn push_download(
-		ugc: &UGC<ClientManager>,
-		pending: &mut MutexGuard<Vec<Arc<DownloadInner>>>,
-		extract_destination: &Arc<ExtractDestination>,
-		item: PublishedFileId,
-	) {
-		let state = ugc.item_state(item);
-		if state.intersects(ItemState::INSTALLED) && !state.intersects(ItemState::NEEDS_UPDATE) {
-			if let Some(info) = ugc.item_install_info(item) {
-				Downloads::extract(PathBuf::from(info.folder), item, (**extract_destination).clone());
-			} else {
-				let transaction = transaction!();
-				webview_emit!("DownloadStarted", transaction.id);
-				transaction.data((0, item));
-				transaction.error("ERR_DOWNLOAD_MISSING", turbonone!());
-			}
-		} else {
-			let download = Arc::new(DownloadInner {
-				item,
-				sent_total: AtomicBool::new(false),
-				transaction: transaction!(),
-				extract_destination: (**extract_destination).clone(),
-			});
-
-			webview_emit!("DownloadStarted", download.transaction.id);
-			download.transaction.data((0, item));
-
-			pending.push(download);
+	fn push_download(item: PublishedFileId, destination: &ExtractDestination) {
+		let mut queue = downloads!().queue.lock();
+		if queue.active.contains_key(&item) || queue.pending.iter().any(|job| job.item == item) {
+			drop(queue);
+			Self::failure(item, "ERR_DOWNLOAD_DUPLICATE", item.0.to_string());
+			return;
 		}
+		let transaction = transaction!();
+		transaction.context(serde_json::json!({ "kind": "download", "workshopId": item }));
+		webview_emit!("DownloadStarted", transaction.id);
+		transaction.data((0, item));
+		queue.pending.push_back(Arc::new(DownloadInner {
+			item, transaction, sent_total: AtomicBool::new(false), progress: Mutex::new((0, Instant::now())), extract_destination: destination.clone(),
+		}));
+		downloads!().watchdog.notify_one();
 	}
 
 	pub fn download<IDs: Into<IDList>>(&self, ids: IDs) {
-		let mut ids: Vec<PublishedFileId> = ids.into().into();
-		let extract_destination = Arc::new(app_data!().settings.read().extract_destination.to_owned());
-
-		struct PossibleCollectionsState {
-			queue: Vec<PublishedFileId>,
-			downloaded: HashSet<PublishedFileId>,
-		}
-		impl PossibleCollectionsState {
-			fn new(queue: Vec<PublishedFileId>) -> Self {
-				Self {
-					downloaded: HashSet::from_iter(queue.iter().copied()),
-					queue,
+		let ids: Vec<PublishedFileId> = ids.into().into();
+		let destination = app_data!().settings.read().extract_destination.clone();
+		std::thread::spawn(move || {
+			let mut seen = HashSet::new();
+			let mut pending: VecDeque<_> = ids.into_iter().filter(|id| seen.insert(*id)).collect();
+			while !pending.is_empty() {
+				let batch: Vec<_> = pending.drain(..pending.len().min(50)).collect();
+				if !steam!().connected() {
+					for id in batch { Self::failure(id, "ERR_STEAM_ERROR", "Steam is disconnected".into()); }
+					continue;
 				}
-			}
-		}
-
-		let possible_collections: Arc<Mutex<PossibleCollectionsState>> = Arc::new(Mutex::new(PossibleCollectionsState::new({
-			if let Some(workshop) = steam!().workshop.try_read_for(std::time::Duration::from_millis(51)) {
-				let workshop_cache = &workshop.0;
-				let mut possible_collections = Vec::with_capacity(ids.len());
-				ids.retain(|id| {
-					if workshop_cache.contains(id) {
-						true
-					} else {
-						possible_collections.push(*id);
-						false
-					}
+				let query = match steam!().client().ugc().query_items(batch.clone()) {
+					Ok(query) => query,
+					Err(error) => { for id in batch { Self::failure(id, "ERR_STEAM_ERROR", error.to_string()); } continue; }
+				};
+				let reply = Arc::new(Mutex::new(None));
+				let callback = reply.clone();
+				let expected = batch.clone();
+				query.include_children(true).fetch(move |result: Result<QueryResults<'_>, steamworks::SteamError>| {
+					let result = result.map_err(|error| error.to_string()).map(|results| {
+						expected.iter().enumerate().map(|(index, id)| {
+							let item = results.get(index as u32).ok_or_else(|| "ERR_ITEM_NOT_FOUND".to_owned())?;
+							if item.file_type == steamworks::FileType::Collection {
+								Ok((*id, Some(results.get_children(index as u32).ok_or_else(|| "ERR_COLLECTION_EXPANSION".to_owned())?)))
+							} else { Ok((*id, None)) }
+						}).collect::<Vec<Result<(PublishedFileId, Option<Vec<PublishedFileId>>), String>>>()
+					});
+					*callback.lock() = Some(result);
 				});
-				possible_collections
-			} else {
-				std::mem::take(&mut ids)
-			}
-		})));
-
-		loop {
-			let possible_collections_len;
-			let possible_collections_query;
-			{
-				let mut possible_collections = possible_collections.lock();
-				if possible_collections.queue.is_empty() || !steam!().connected() {
-					break;
-				}
-
-				possible_collections_len = possible_collections.queue.len();
-				possible_collections_query = core::mem::take(&mut possible_collections.queue);
-			}
-
-			let extract_destination = extract_destination.clone();
-			let possible_collections = possible_collections.clone();
-
-			let done = Arc::new(());
-
-			let done_ref = done.clone();
-			steam!()
-				.client()
-				.ugc()
-				.query_items(possible_collections_query.clone())
-				.unwrap()
-				.include_children(true)
-				.fetch(move |results: Result<QueryResults<'_>, steamworks::SteamError>| {
-					if let Ok(results) = results {
-						let mut possible_collections = possible_collections.lock();
-
-						let mut pending = downloads!().pending.lock();
-						pending.reserve(results.returned_results() as usize);
-
-						let mut not_collections = Vec::with_capacity(possible_collections_len);
-
-						let ugc = steam!().client().ugc();
-						for (i, item) in results.iter().enumerate() {
-							if let Some(item) = item {
-								if item.file_type == steamworks::FileType::Collection {
-									let children = results.get_children(i as u32).unwrap();
-									steam!().fetch_workshop_items(children.clone());
-									for item in children {
-										if possible_collections.downloaded.insert(item) {
-											possible_collections.queue.push(item);
-										}
-									}
-								} else {
-									not_collections.push(item.published_file_id);
-									Downloads::push_download(&ugc, &mut pending, &extract_destination, item.published_file_id);
-								}
-							} else {
-								let transaction = transaction!();
-								webview_emit!("DownloadStarted", transaction.id);
-								transaction.data((0, possible_collections_query[i]));
-								transaction.error("ERR_ITEM_NOT_FOUND", turbonone!());
-							}
+				let started = Instant::now();
+				let result = loop {
+					if let Some(reply) = reply.lock().take() { break reply; }
+					if started.elapsed() >= Duration::from_secs(120) { break Err("ERR_COLLECTION_STALLED".into()); }
+					steam!().run_callbacks();
+				};
+				match result {
+					Err(error) => for id in batch { Self::failure(id, "ERR_COLLECTION_EXPANSION", error.clone()); },
+					Ok(items) => for (index, item) in items.into_iter().enumerate() {
+						match item {
+							Ok((_, Some(children))) => for child in children { if seen.insert(child) { pending.push_back(child); } },
+							Ok((id, None)) => Self::push_download(id, &destination),
+							Err(error) => Self::failure(batch[index], "ERR_COLLECTION_EXPANSION", error),
 						}
-
-						if !not_collections.is_empty() {
-							steam!().fetch_workshop_items(not_collections);
-						}
-					}
-
-					drop(done_ref);
-				});
-
-			while Arc::strong_count(&done) > 1 {
-				sleep_ms!(25);
-			}
-		}
-
-		let mut pending = self.pending.lock();
-		pending.reserve(ids.len());
-
-		let ugc = steam!().client().ugc();
-		for item in ids {
-			Downloads::push_download(&ugc, &mut pending, &extract_destination, item);
-		}
-
-		if !pending.is_empty() {
-			drop(pending);
-			self.start();
-		}
-	}
-
-	pub fn start(&self) {
-		let mut downloading = self.downloading.lock();
-		downloading.append(&mut self.pending.lock());
-
-		self.watchdog.notify_one();
-	}
-
-	pub(super) fn watchdog() {
-		let in_progress: Arc<Mutex<Vec<Arc<DownloadInner>>>> = Arc::new(Mutex::new(vec![]));
-		let in_progress_ref = in_progress.clone();
-		let _cb = steam!().register_callback(move |result: steamworks::DownloadItemResult| {
-			if result.app_id == GMOD_APP_ID {
-				let mut in_progress = in_progress_ref.lock();
-				if let Ok(pos) = in_progress.binary_search_by_key(&result.published_file_id.0, |download| download.0) {
-					let download = in_progress.remove(pos);
-					if let Some(error) = result.error {
-						dprintln!("ISteamUGC Download ERROR: {:?}", download.item);
-						download.transaction.error("ERR_STEAM_ERROR", error);
-					} else if let Some(info) = steam!().client().ugc().item_install_info(result.published_file_id) {
-						dprintln!("ISteamUGC Download SUCCESS: {:?}", download.item);
-						download.transaction.finished(turbonone!());
-						Downloads::extract(
-							PathBuf::from(info.folder),
-							download.item,
-							Arc::try_unwrap(download).unwrap().extract_destination,
-						);
-					} else {
-						dprintln!("ISteamUGC Download MISSING: {:?}", download.item);
-						download.transaction.error("ERR_DOWNLOAD_MISSING", turbonone!());
-					}
-				} else {
-					dprintln!("ISteamUGC Download ???: {:?}", result.published_file_id);
+					},
 				}
 			}
 		});
+	}
 
+	fn complete(download: Download, error: Option<steamworks::SteamError>) {
+		if download.transaction.aborted() { return; }
+		if let Some(error) = error { download.transaction.error("ERR_STEAM_ERROR", error); }
+		else if let Some(info) = steam!().client().ugc().item_install_info(download.item) {
+			download.transaction.finished(turbonone!());
+			Self::extract(PathBuf::from(info.folder), download.item, download.extract_destination.clone());
+		} else { download.transaction.error("ERR_DOWNLOAD_MISSING", turbonone!()); }
+	}
+
+	pub(super) fn watchdog() {
+		const DOWNLOAD_SLOTS: usize = 4;
+		let _callback = steam!().register_callback(move |result: steamworks::DownloadItemResult| {
+			if result.app_id != GMOD_APP_ID { return; }
+			let download = downloads!().queue.lock().active.remove(&result.published_file_id);
+			if let Some(download) = download { Self::complete(download, result.error); }
+			downloads!().watchdog.notify_one();
+		});
 		loop {
-			let downloading = std::mem::take(&mut *DOWNLOADS.downloading.lock());
-			if downloading.is_empty() {
-				DOWNLOADS.watchdog.wait(&mut DOWNLOADS.downloading.lock());
-				continue;
-			}
-
+			let admitted = DOWNLOADS.admit_ready(DOWNLOAD_SLOTS);
 			let ugc = steam!().client().ugc();
-
-			{
-				let mut in_progress = in_progress.lock();
-				in_progress.reserve(downloading.len());
-
-				for download in downloading {
-					let pos = match in_progress.binary_search_by_key(&download.item, |x| x.item) {
-						Ok(_) => continue,
-						Err(pos) => pos,
-					};
-
-					if !ugc.download_item(download.item, true) {
-						download.transaction.error("ERR_DOWNLOAD_FAILED", turbonone!());
-						continue;
-					} else {
-						dprintln!("Starting ISteamUGC Download for {:?}", download.item);
-					}
-
-					in_progress.insert(pos, download);
+			for job in admitted {
+				let state = ugc.item_state(job.item);
+				if state.contains(ItemState::INSTALLED) && !state.intersects(ItemState::NEEDS_UPDATE) {
+					DOWNLOADS.queue.lock().active.remove(&job.item);
+					Self::complete(job, None);
+				} else if !ugc.download_item(job.item, true) {
+					DOWNLOADS.queue.lock().active.remove(&job.item);
+					job.transaction.error("ERR_DOWNLOAD_FAILED", turbonone!());
 				}
 			}
-
-			loop {
-				if let Some(mut in_progress) = in_progress.try_lock() {
-					if in_progress.is_empty() {
-						break;
-					} else {
-						let mut i = 0;
-						while i < in_progress.len() {
-							let download = &in_progress[i];
-							if download.transaction.aborted() {
-								in_progress.remove(i);
-							} else if let Some((current, total)) = ugc.item_download_info(download.item) {
-								if total > 0 {
-									if !download.sent_total.fetch_or(true, std::sync::atomic::Ordering::SeqCst) {
-										download.transaction.data((1, total));
-									}
-									download.transaction.progress(current as f64 / total as f64);
-								}
-							}
-							i += 1;
-						}
+			let active: Vec<_> = DOWNLOADS.queue.lock().active.values().cloned().collect();
+			for job in active {
+				if job.transaction.aborted() { DOWNLOADS.queue.lock().active.remove(&job.item); continue; }
+				if let Some((current, total)) = ugc.item_download_info(job.item) {
+					let mut progress = job.progress.lock();
+					if current != progress.0 { *progress = (current, Instant::now()); }
+					if total > 0 {
+						if !job.sent_total.swap(true, Ordering::Relaxed) { job.transaction.data((1, total)); }
+						job.transaction.progress(current as f64 / total as f64);
 					}
 				}
-				steam!().run_callbacks();
+				let state = ugc.item_state(job.item);
+				if state.contains(ItemState::INSTALLED) && !state.intersects(ItemState::NEEDS_UPDATE | ItemState::DOWNLOADING | ItemState::DOWNLOAD_PENDING) {
+					if DOWNLOADS.queue.lock().active.remove(&job.item).is_some() { Self::complete(job, None); }
+				} else if job.progress.lock().1.elapsed() >= Duration::from_secs(120) {
+					if DOWNLOADS.queue.lock().active.remove(&job.item).is_some() { job.transaction.error("ERR_DOWNLOAD_STALLED", job.item); }
+				}
 			}
+			steam!().run_callbacks();
 		}
 	}
+
 }
 
 #[tauri::command]
 pub fn workshop_download(ids: Vec<PublishedFileId>) {
 	downloads!().download(ids);
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	fn job(id: u64) -> Download {
+		Arc::new(DownloadInner {
+			item: PublishedFileId(id), transaction: crate::transactions::new(), sent_total: AtomicBool::new(false),
+			progress: Mutex::new((0, Instant::now())), extract_destination: ExtractDestination::Temp,
+		})
+	}
+
+	#[test]
+	fn available_slots_admit_work_without_waiting_for_the_previous_batch() {
+		let downloads = Downloads::init();
+		for id in 1..=6 { downloads.queue.lock().pending.push_back(job(id)); }
+		assert_eq!(downloads.admit_ready(4).len(), 4);
+		assert!(downloads.admit_ready(4).is_empty());
+		downloads.queue.lock().active.remove(&PublishedFileId(2)).unwrap().transaction.finished(());
+		let next = downloads.admit_ready(4);
+		assert_eq!(next.len(), 1);
+		assert_eq!(next[0].item, PublishedFileId(5));
+		let queue = downloads.queue.lock();
+		for job in queue.active.values().chain(queue.pending.iter()) { job.transaction.finished(()); }
+	}
+
+	#[test]
+	fn enqueued_work_survives_notification_before_the_consumer_waits() {
+		let downloads = Arc::new(Downloads::init());
+		let queued = job(7);
+		downloads.queue.lock().pending.push_back(queued.clone());
+		downloads.watchdog.notify_one();
+		let (sender, receiver) = std::sync::mpsc::channel();
+		let worker = downloads.clone();
+		let handle = std::thread::spawn(move || { sender.send(worker.admit_ready(4).len()).unwrap(); });
+		assert_eq!(receiver.recv_timeout(Duration::from_secs(2)).unwrap(), 1);
+		handle.join().unwrap();
+		queued.transaction.finished(());
+	}
 }

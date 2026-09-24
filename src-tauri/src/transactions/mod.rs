@@ -1,4 +1,5 @@
-mod websocket;
+pub(crate) mod snapshots;
+pub use snapshots::{transaction_snapshot, transaction_snapshots, transaction_data, acknowledge_transaction};
 
 use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
@@ -9,7 +10,7 @@ use std::sync::{
 	Arc, Weak,
 };
 
-use self::websocket::{TransactionMessage, TransactionServer};
+use self::snapshots::TransactionMessage;
 
 lazy_static! {
 	static ref TRANSACTIONS: Transactions = Transactions::init();
@@ -19,7 +20,6 @@ lazy_static! {
 pub struct Transactions {
 	inner: RwLock<Vec<TransactionRef>>,
 	id: AtomicU32,
-	websocket: Option<TransactionServer>,
 }
 impl std::ops::Deref for Transactions {
 	type Target = RwLock<Vec<TransactionRef>>;
@@ -32,7 +32,6 @@ impl Transactions {
 		Transactions {
 			inner: RwLock::new(Vec::new()),
 			id: AtomicU32::new(0),
-			websocket: if *crate::cli::CLI_MODE { None } else { TransactionServer::init().ok() },
 		}
 	}
 
@@ -80,7 +79,7 @@ fn progress_as_int(progress: f64) -> u16 {
 }
 
 pub type Transaction = Arc<TransactionInner>;
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum JobState {
 	Running,
@@ -88,6 +87,8 @@ pub enum JobState {
 	Packing,
 	Cancelling,
 	Submitting,
+	Unknown,
+	Committing,
 	Finished,
 	Failed,
 	Cancelled,
@@ -102,18 +103,22 @@ impl JobState {
 pub struct TransactionInner {
 	pub id: u32,
 	state: Mutex<JobState>,
+	cooperative: bool,
 }
 impl TransactionInner {
+	pub fn warning(&self, message: String) {
+		if *crate::cli::CLI_MODE { eprintln!("{}", message); return; }
+		self.emit(TransactionMessage::Warning(self.id, message));
+	}
+	pub fn context(&self, context: serde_json::Value) {
+		snapshots::context(self.id, context);
+	}
 	fn emit(&self, message: TransactionMessage) {
 		if *crate::cli::CLI_MODE {
 			return;
 		}
 
-		if let Some(ref websocket) = TRANSACTIONS.websocket {
-			websocket.send(message);
-		} else {
-			TransactionServer::send_tauri_event(message);
-		}
+		snapshots::record(message);
 	}
 
 	fn remove(&self) {
@@ -181,12 +186,12 @@ impl TransactionInner {
 	pub fn cancel(&self) -> JobState {
 		let mut state = self.state.lock();
 		match *state {
-			JobState::Running => {
+			JobState::Running if !self.cooperative => {
 				*state = JobState::Cancelled;
 				self.remove();
 				self.emit(TransactionMessage::Cancelled(self.id));
 			}
-			JobState::Preparing | JobState::Packing => {
+			JobState::Running | JobState::Preparing | JobState::Packing => {
 				*state = JobState::Cancelling;
 				self.emit(TransactionMessage::State(self.id, *state));
 			}
@@ -217,12 +222,28 @@ impl TransactionInner {
 	/// The same lock arbitrates cancellation and the irreversible Steam submission.
 	pub fn begin_submission(&self) -> bool {
 		let mut state = self.state.lock();
-		if !matches!(*state, JobState::Preparing | JobState::Packing) {
+		if !matches!(*state, JobState::Preparing | JobState::Packing | JobState::Unknown) {
 			return false;
 		}
 		*state = JobState::Submitting;
 		self.emit(TransactionMessage::State(self.id, *state));
 		true
+	}
+
+	pub fn begin_commit(&self) -> bool {
+		let mut state = self.state.lock();
+		if state.terminal() || *state == JobState::Cancelling { return false; }
+		*state = JobState::Committing;
+		self.emit(TransactionMessage::State(self.id, *state));
+		true
+	}
+
+	pub fn uncertain(&self) {
+		let mut state = self.state.lock();
+		if matches!(*state, JobState::Submitting | JobState::Preparing | JobState::Packing) {
+			*state = JobState::Unknown;
+			self.emit(TransactionMessage::State(self.id, *state));
+		}
 	}
 
 	pub fn aborted(&self) -> bool {
@@ -232,7 +253,11 @@ impl TransactionInner {
 }
 impl Drop for TransactionInner {
 	fn drop(&mut self) {
-		if !self.state.get_mut().terminal() {
+		if *self.state.get_mut() == JobState::Unknown {
+			self.remove();
+		} else if *self.state.get_mut() == JobState::Cancelling {
+			self.cancelled();
+		} else if !self.state.get_mut().terminal() {
 			self.error("ERR_UNKNOWN", turbonone!());
 
 			#[cfg(debug_assertions)]
@@ -251,23 +276,29 @@ impl serde::Serialize for TransactionInner {
 
 pub fn init() {
 	lazy_static::initialize(&TRANSACTIONS);
+	snapshots::init();
 }
 
 pub fn new() -> Transaction {
-	new_with_state(JobState::Running)
+	new_with_state(JobState::Running, false)
 }
 
 pub fn new_publish() -> Transaction {
-	let transaction = new_with_state(JobState::Preparing);
+	let transaction = new_with_state(JobState::Preparing, true);
 	transaction.emit(TransactionMessage::State(transaction.id, JobState::Preparing));
 	transaction
 }
 
-fn new_with_state(state: JobState) -> Transaction {
+pub fn new_extraction() -> Transaction {
+	new_with_state(JobState::Running, true)
+}
+
+fn new_with_state(state: JobState, cooperative: bool) -> Transaction {
 	let mut transactions = TRANSACTIONS.write();
 	let transaction = Arc::new(TransactionInner {
 		id: TRANSACTIONS.id.fetch_add(1, Ordering::SeqCst),
 		state: Mutex::new(state),
+		cooperative,
 	});
 
 	transactions.push(TransactionRef {
@@ -276,6 +307,7 @@ fn new_with_state(state: JobState) -> Transaction {
 	});
 	transactions.reserve(1);
 
+	snapshots::insert(transaction.id, state);
 	transaction
 }
 
@@ -294,15 +326,43 @@ pub fn cancel_transaction(id: u32) -> Result<JobState, String> {
 		.ok_or_else(|| "ERR_TRANSACTION_NOT_FOUND".to_owned())
 }
 
-#[tauri::command]
-pub fn websocket() -> Option<u16> {
-	TRANSACTIONS.websocket.as_ref().map(|socket| socket.port)
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use std::sync::Barrier;
+
+	#[test]
+	fn extraction_cancellation_is_acknowledged_by_the_worker() {
+		let job = new_extraction();
+		assert_eq!(job.cancel(), JobState::Cancelling);
+		assert!(!job.begin_commit());
+		assert_eq!(*job.state.lock(), JobState::Cancelling);
+		job.cancelled();
+		assert_eq!(*job.state.lock(), JobState::Cancelled);
+		let job = new_extraction();
+		assert!(job.begin_commit());
+		assert_eq!(job.cancel(), JobState::Committing);
+		job.finished(());
+	}
+
+	#[test]
+	fn snapshots_replay_spilled_data_before_the_terminal_result() {
+		let job = new();
+		for index in 0..400 { job.data(serde_json::json!([index, "entry"])); }
+		job.finished("done");
+		let mut snapshot = transaction_snapshot(job.id).unwrap().unwrap();
+		let mut received = Vec::new();
+		loop {
+			received.extend(snapshot.data.iter().map(|(_, value)| value[0].as_u64().unwrap()));
+			if !snapshot.data_more { break; }
+			let after = snapshot.data.back().unwrap().0;
+			snapshot = transaction_data(job.id, after).unwrap().unwrap();
+		}
+		assert_eq!(received, (0..400).collect::<Vec<_>>());
+		assert_eq!(snapshot.state, JobState::Finished);
+		assert_eq!(snapshot.result, Some(json!("done")));
+		acknowledge_transaction(job.id).unwrap();
+	}
 
 	#[test]
 	fn cancellation_prevents_submission_and_waits_for_cleanup() {

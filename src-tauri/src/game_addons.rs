@@ -367,14 +367,15 @@ pub fn get_installed_addon(path: PathBuf) -> Option<Arc<Addon>> {
 
 #[tauri::command]
 pub fn downloader_extract_gmas(paths: Vec<PathBuf>) {
-	let destination = &app_data!().settings.read().extract_destination;
+	let destination = app_data!().settings.read().extract_destination.clone();
 	for path in paths.into_iter() {
 		if match path.extension() {
 			Some(extension) => extension.to_string_lossy().eq_ignore_ascii_case("gma"),
 			None => false,
 		} {
-			let transaction = transaction!();
+			let transaction = crate::transactions::new_extraction();
 			let gma = GMAFile::open(&path);
+			transaction.context(serde_json::json!({ "kind": "extract", "sourcePath": path, "fileName": path.file_name().map(|name| name.to_string_lossy()), "workshopId": gma.as_ref().ok().and_then(|gma| gma.id) }));
 			webview_emit!(
 				"ExtractionStarted",
 				(
@@ -384,13 +385,14 @@ pub fn downloader_extract_gmas(paths: Vec<PathBuf>) {
 					gma.as_ref().ok().and_then(|gma| gma.id)
 				)
 			);
-			match gma {
+			let destination = destination.clone();
+			crate::gma::extract::THREAD_POOL.spawn(move || match gma {
 				Ok(mut gma) => {
 					transaction.data((turbonone!(), gma.size));
 					let _ = gma.extract(destination.clone(), &transaction, false, true);
 				}
 				Err(error) => transaction.error(error.to_string(), turbonone!()),
-			}
+			});
 		}
 	}
 }

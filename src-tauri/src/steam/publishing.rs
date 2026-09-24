@@ -14,6 +14,8 @@ use steamworks::{PublishedFileId, SteamError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PublishError {
+	Journal(String),
+	Unknown,
 	Cancelled,
 	NoEntries,
 	InvalidContentPath,
@@ -35,6 +37,8 @@ pub enum PublishError {
 impl std::fmt::Display for PublishError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
+			PublishError::Journal(error) => write!(f, "ERR_PUBLISH_JOURNAL:{}", error),
+			PublishError::Unknown => write!(f, "ERR_PUBLISH_OUTCOME_UNKNOWN"),
 			PublishError::Cancelled => write!(f, "ERR_CANCELLED"),
 			PublishError::NoEntries => write!(f, "ERR_NO_ENTRIES"),
 			PublishError::InvalidContentPath => write!(f, "ERR_INVALID_CONTENT_PATH"),
@@ -80,7 +84,7 @@ impl PublishError {
 	}
 }
 
-use super::Steam;
+use super::{Steam, publish_jobs::PublishJob};
 pub struct ContentPath(PathBuf);
 impl std::ops::Deref for ContentPath {
 	type Target = PathBuf;
@@ -132,7 +136,10 @@ impl ContentPath {
 	}
 }
 
-fn with_publish_staging<T>(parent: &Path, operation: impl FnOnce(&Path, &Path) -> Result<T, String>) -> Result<T, String> {
+#[derive(Debug)]
+struct StagingResult<T> { value: T, warnings: Vec<String> }
+
+fn with_publish_staging<T>(parent: &Path, operation: impl FnOnce(&Path, &Path) -> Result<T, String>) -> Result<StagingResult<T>, String> {
 	std::fs::create_dir_all(parent).map_err(|error| PublishError::io("create publishing parent directory", parent, error).to_string())?;
 	let staging = tempfile::Builder::new()
 		.prefix("nwmpublisher-publishing-")
@@ -144,14 +151,24 @@ fn with_publish_staging<T>(parent: &Path, operation: impl FnOnce(&Path, &Path) -
 		.map_err(|error| PublishError::io("create publishing content directory", &content, error).to_string())
 		.and_then(|()| operation(&root, &content));
 
+	if result.as_ref().is_err_and(|error| error == "ERR_PUBLISH_OUTCOME_UNKNOWN") {
+		let _retained = staging.into_path();
+		return Err("ERR_PUBLISH_OUTCOME_UNKNOWN".into());
+	}
+	let ownership = std::fs::read(root.join("operation-id")).ok();
 	// Steam's completion callback must have returned before the operation releases these files.
 	let cleanup = staging
 		.close()
 		.map_err(|error| PublishError::io("remove publishing staging directory", &root, error));
+	if cleanup.is_err() {
+		if let Some(ownership) = ownership {
+			if let Err(error) = std::fs::write(root.join("operation-id"), ownership) { eprintln!("Restore staging ownership {}: {}", root.display(), error); }
+		}
+	}
 	match (result, cleanup) {
-		(Ok(value), Ok(())) => Ok(value),
+		(Ok(value), Ok(())) => Ok(StagingResult { value, warnings: Vec::new() }),
 		(Err(error), Ok(())) => Err(error),
-		(Ok(_), Err(error)) => Err(format!("{} (operation completed; temporary-file cleanup failed)", error)),
+		(Ok(value), Err(error)) => Ok(StagingResult { value, warnings: vec![error.to_string()] }),
 		(Err(error), Err(cleanup)) => Err(format!("{}\nCleanup failed: {}", error, cleanup)),
 	}
 }
@@ -297,12 +314,13 @@ pub enum WorkshopUpdateType {
 }
 
 impl Steam {
-	pub fn update(&self, id: PublishedFileId, details: WorkshopUpdateType, transaction: &Transaction) -> Result<bool, PublishError> {
+	pub fn update(&self, id: PublishedFileId, details: WorkshopUpdateType, transaction: &Transaction, job: &PublishJob) -> Result<bool, PublishError> {
 		use WorkshopUpdateType::*;
 		if transaction.aborted() {
 			return Err(PublishError::Cancelled);
 		}
 
+		job.submitting().map_err(PublishError::Journal)?;
 		let result = Arc::new(Mutex::new(None));
 		let result_ref = result.clone();
 		let update_handle = match details {
@@ -340,7 +358,7 @@ impl Steam {
 					Some(description) => update.description(&description),
 					None => update,
 				};
-				if !transaction.begin_submission() {
+				if transaction.aborted() {
 					return Err(PublishError::Cancelled);
 				}
 				update.submit(changes.as_deref(), move |result| {
@@ -383,10 +401,13 @@ impl Steam {
 			}
 		};
 
-		let mut last_processed;
+		let mut last_progress = None;
+		let mut last_change = std::time::Instant::now();
 		let result = loop {
 			let (processed, progress, total) = update_handle.progress();
-			last_processed = processed;
+			let current = (processed, progress, total);
+			if last_progress != Some(current) { last_change = std::time::Instant::now(); }
+			if last_change.elapsed().as_secs() >= 120 { job.uncertain(transaction); }
 			if !matches!(processed, steamworks::UpdateStatus::Invalid) {
 				transaction.status(match processed {
 					steamworks::UpdateStatus::Invalid => unreachable!(),
@@ -397,15 +418,17 @@ impl Steam {
 					steamworks::UpdateStatus::CommittingChanges => "PUBLISH_COMMITTING_CHANGES",
 				});
 			}
-			if total == 0 || last_processed != processed {
+			if total == 0 || last_progress.is_none_or(|(previous, _, _)| previous != processed) {
 				transaction.progress_reset();
 			} else {
 				transaction.data(total);
 				transaction.progress(progress as f64 / total as f64);
 			}
 
-			if !result.is_locked() && result.lock().is_some() {
-				break Arc::try_unwrap(result).unwrap().into_inner().unwrap();
+			last_progress = Some(current);
+			let reply = result.lock().take();
+			if let Some(reply) = reply {
+				break reply;
 			} else {
 				self.run_callbacks();
 			}
@@ -416,16 +439,20 @@ impl Steam {
 				transaction.progress(1.);
 				Ok(legal_agreement)
 			}
+			Err(SteamError::Timeout | SteamError::IOFailure | SteamError::RemoteDisconnect) => { job.uncertain(transaction); Err(PublishError::Unknown) },
 			Err(error) => Err(PublishError::SteamError(error)),
 		}
 	}
 
-	pub fn publish(&self, details: WorkshopUpdateType, transaction: &Transaction) -> (Option<PublishedFileId>, Result<bool, PublishError>) {
+	pub fn publish(&self, details: WorkshopUpdateType, transaction: &Transaction, job: &PublishJob) -> (Option<PublishedFileId>, Result<bool, PublishError>) {
 		debug_assert!(matches!(details, WorkshopUpdateType::Creation { .. }));
 		if transaction.aborted() {
 			return (None, Err(PublishError::Cancelled));
 		}
 
+		if let Err(error) = job.submitting() { return (None, Err(PublishError::Journal(error))); }
+		if !transaction.begin_submission() { return (None, Err(PublishError::Cancelled)); }
+		let started = std::time::Instant::now();
 		let published = Arc::new(Mutex::new(None));
 		let published_ref = published.clone();
 		self.client()
@@ -434,27 +461,27 @@ impl Steam {
 				*published_ref.lock() = Some(result);
 			});
 
-		loop {
-			if let Some(published_ref) = published.try_lock() {
-				if published_ref.is_some() {
-					break;
-				}
-			}
+		let published = loop {
+			if started.elapsed().as_secs() >= 120 { job.uncertain(transaction); }
+			if let Some(reply) = published.lock().take() { break reply; }
 			self.run_callbacks();
-		}
+		};
 
-		let id = match Arc::try_unwrap(published).unwrap().into_inner().unwrap() {
+		let id = match published {
 			Ok((id, _)) => id,
+			Err(SteamError::Timeout | SteamError::IOFailure | SteamError::RemoteDisconnect) => { job.uncertain(transaction); return (None, Err(PublishError::Unknown)); },
 			Err(error) => return (None, Err(PublishError::SteamError(error))),
 		};
 
-		(Some(id), self.update(id, details, transaction))
+		job.created(id, transaction);
+		(Some(id), self.update(id, details, transaction, job))
 	}
 
-	pub fn update_icon(&self, addon_id: PublishedFileId, icon: PathBuf, transaction: &Transaction) -> Result<bool, PublishError> {
+	pub fn update_icon(&self, addon_id: PublishedFileId, icon: PathBuf, transaction: &Transaction, job: &PublishJob) -> Result<bool, PublishError> {
 		if transaction.aborted() {
 			return Err(PublishError::Cancelled);
 		}
+		job.submitting().map_err(PublishError::Journal)?;
 		let result = Arc::new(Mutex::new(None));
 		let result_ref = result.clone();
 		let update = self.client().ugc().start_item_update(GMOD_APP_ID, addon_id).preview_path(&icon);
@@ -465,10 +492,13 @@ impl Steam {
 			*result_ref.lock() = Some(result);
 		});
 
-		let mut last_processed;
+		let mut last_progress = None;
+		let mut last_change = std::time::Instant::now();
 		let result = loop {
 			let (processed, progress, total) = update_handle.progress();
-			last_processed = processed;
+			let current = (processed, progress, total);
+			if last_progress != Some(current) { last_change = std::time::Instant::now(); }
+			if last_change.elapsed().as_secs() >= 120 { job.uncertain(transaction); }
 			if !matches!(processed, steamworks::UpdateStatus::Invalid) {
 				transaction.status(match processed {
 					steamworks::UpdateStatus::Invalid => unreachable!(),
@@ -479,15 +509,17 @@ impl Steam {
 					steamworks::UpdateStatus::CommittingChanges => "PUBLISH_COMMITTING_CHANGES",
 				});
 			}
-			if total == 0 || last_processed != processed {
+			if total == 0 || last_progress.is_none_or(|(previous, _, _)| previous != processed) {
 				transaction.progress_reset();
 			} else {
 				transaction.data(total);
 				transaction.progress(progress as f64 / total as f64);
 			}
 
-			if !result.is_locked() && result.lock().is_some() {
-				break Arc::try_unwrap(result).unwrap().into_inner().unwrap();
+			last_progress = Some(current);
+			let reply = result.lock().take();
+			if let Some(reply) = reply {
+				break reply;
 			} else {
 				self.run_callbacks();
 			}
@@ -498,6 +530,7 @@ impl Steam {
 				transaction.progress(1.);
 				Ok(legal_agreement)
 			}
+			Err(SteamError::Timeout | SteamError::IOFailure | SteamError::RemoteDisconnect) => { job.uncertain(transaction); Err(PublishError::Unknown) },
 			Err(error) => Err(PublishError::SteamError(error)),
 		}
 	}
@@ -514,9 +547,11 @@ pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId
 	let transaction = crate::transactions::new_publish();
 	let id = transaction.id;
 
-	rayon::spawn(move || {
+	std::thread::spawn(move || {
+		let job = match PublishJob::new(&transaction, Some(addon_id), None) { Ok(job) => job, Err(error) => return transaction.error(error, turbonone!()) };
 		let temp_dir = app_data!().temp_dir().to_owned();
 		let result = with_publish_staging(&temp_dir, |root, _| {
+			job.staging(root)?;
 			if transaction.aborted() {
 				return Ok(None);
 			}
@@ -528,7 +563,7 @@ pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId
 			if transaction.aborted() {
 				return Ok(None);
 			}
-			match steam!().update_icon(addon_id, preview, &transaction) {
+			match steam!().update_icon(addon_id, preview, &transaction, &job) {
 				Ok(legal_agreement) => Ok(Some(legal_agreement)),
 				Err(PublishError::Cancelled) => Ok(None),
 				Err(error) => Err(error.to_string()),
@@ -536,15 +571,17 @@ pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId
 		});
 
 		match result {
-			Ok(Some(legal_agreement)) if !transaction.aborted() => {
+			Ok(StagingResult { value: Some(legal_agreement), warnings }) if !transaction.aborted() => {
 				if legal_agreement {
 					crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
 				}
-				transaction.finished(turbonone!());
+				transaction.finished(job.finish(&transaction, "published", warnings));
 			}
-			Ok(_) => transaction.cancelled(),
+			Ok(_) => { job.finish(&transaction, "cancelled", Vec::new()); transaction.cancelled(); },
+			Err(error) if error == "ERR_PUBLISH_OUTCOME_UNKNOWN" => job.uncertain(&transaction),
 			Err(error) => {
-				transaction.error(error, turbonone!());
+				let result = job.finish(&transaction, "failed", Vec::new());
+				transaction.error(error, result);
 			}
 		};
 	});
@@ -558,17 +595,19 @@ pub fn publish_description(addon_id: PublishedFileId, description: String) -> Re
 	let transaction = crate::transactions::new_publish();
 	let id = transaction.id;
 
-	rayon::spawn(move || {
+	std::thread::spawn(move || {
+		let job = match PublishJob::new(&transaction, Some(addon_id), None) { Ok(job) => job, Err(error) => return transaction.error(error, turbonone!()) };
 		transaction.status("PUBLISH_UPDATING_DESCRIPTION");
-		match steam!().update(addon_id, WorkshopUpdateType::Description { description }, &transaction) {
+		match steam!().update(addon_id, WorkshopUpdateType::Description { description }, &transaction, &job) {
 			Ok(legal_agreement) => {
 				if legal_agreement {
 					crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
 				}
-				transaction.finished(turbonone!());
+				transaction.finished(job.finish(&transaction, "published", Vec::new()));
 			}
-			Err(PublishError::Cancelled) => transaction.cancelled(),
-			Err(error) => transaction.error(error.to_string(), turbonone!()),
+			Err(PublishError::Cancelled) => { job.finish(&transaction, "cancelled", Vec::new()); transaction.cancelled(); },
+			Err(PublishError::Unknown) => job.uncertain(&transaction),
+			Err(error) => { transaction.error(error.to_string(), job.finish(&transaction, "failed", Vec::new())); },
 		}
 	});
 
@@ -659,20 +698,22 @@ pub fn publish(request: PublishRequest) -> u32 {
 
 	let is_updating = update_id.is_some();
 
-	rayon::spawn(move || {
+	std::thread::spawn(move || {
+		let job = match PublishJob::new(&transaction, update_id, Some(content_path_src.clone())) { Ok(job) => job, Err(error) => return transaction.error(error, turbonone!()) };
 		let source_key = if is_updating {
 			None
 		} else {
 			match crate::appdata::changelog_key(None, Some(content_path_src.clone())) {
 				Ok(key) => Some(key),
 				Err(error) => {
-					transaction.error(error, turbonone!());
+					transaction.error(error, job.finish(&transaction, "failed", Vec::new()));
 					return;
 				}
 			}
 		};
 		let temp_dir = app_data!().temp_dir().to_owned();
 		let result = with_publish_staging(&temp_dir, |root, content| {
+			job.staging(root)?;
 			validate_description(description.as_deref()).map_err(|error| error.to_string())?;
 			if transaction.aborted() {
 				return Ok(None);
@@ -720,6 +761,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 				extracted_name: String::new(),
 				modified: None,
 				membuffer: None,
+				spool: None,
 			};
 
 			if let Err(error) = gma.create(manifest, transaction.clone()) {
@@ -749,6 +791,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 							changes,
 						},
 						&transaction,
+						&job,
 					),
 				)
 			} else {
@@ -763,16 +806,12 @@ pub fn publish(request: PublishRequest) -> u32 {
 						changes,
 					},
 					&transaction,
+					&job,
 				)
 			};
 			match result {
 				Ok(legal_agreement) => Ok(Some((id.unwrap(), legal_agreement))),
 				Err(error) => {
-					if !is_updating {
-						if let Some(id) = id {
-							steam!().client().ugc().delete_item(id, |_| {});
-						}
-					}
 					if matches!(error, PublishError::Cancelled) {
 						Ok(None)
 					} else {
@@ -783,15 +822,12 @@ pub fn publish(request: PublishRequest) -> u32 {
 		});
 
 		match result {
-			Ok(Some((id, legal_agreement))) => {
-				let settings_error = {
-					let mut settings = app_data!().settings.write();
+			Ok(StagingResult { value: Some((id, legal_agreement)), warnings }) => {
+				let settings_error = crate::appdata::change_settings(|settings| {
 					settings.my_workshop_local_paths.insert(id, content_path_src);
-					if let Some(key) = source_key {
-						settings.changelogs.published(&key, id);
-					}
-					settings.save().err().map(|error| error.to_string())
-				};
+					if let Some(key) = source_key { settings.changelogs.published(&key, id); }
+					Ok(())
+				}).err();
 				app_data!().send();
 				if !transaction.aborted() {
 					if legal_agreement {
@@ -800,11 +836,14 @@ pub fn publish(request: PublishRequest) -> u32 {
 					if app_data!().settings.read().open_workshop_after_publish {
 						crate::path::open(format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id.0));
 					}
-					transaction.finished(serde_json::json!({ "settingsError": settings_error }));
+					let mut result = serde_json::to_value(job.finish(&transaction, "published", warnings)).unwrap();
+					result["settingsError"] = json!(settings_error);
+					transaction.finished(result);
 				}
 			}
-			Ok(None) => transaction.cancelled(),
-			Err(error) => transaction.error(error, turbonone!()),
+			Ok(StagingResult { value: None, .. }) => { job.finish(&transaction, "cancelled", Vec::new()); transaction.cancelled(); },
+			Err(error) if error == "ERR_PUBLISH_OUTCOME_UNKNOWN" => job.uncertain(&transaction),
+			Err(error) => transaction.error(error, job.finish(&transaction, "failed", Vec::new())),
 		};
 	});
 
@@ -869,13 +908,13 @@ mod tests {
 				assert_eq!(&**ContentPath::new(second_content.to_owned()).unwrap(), second_content);
 				Ok(second_root.to_owned())
 			})?;
-			assert!(!second_root.exists());
+			assert!(!second_root.value.exists());
 			assert!(archive.is_file());
 			assert!(first_icon.is_file());
 			Ok(first_root.to_owned())
 		})
 		.unwrap();
-		assert!(!first_root.exists());
+		assert!(!first_root.value.exists());
 		assert!(source.is_file());
 		parent.close().unwrap();
 	}
@@ -897,7 +936,7 @@ mod tests {
 			if failure {
 				assert_eq!(result.unwrap_err(), "ERR_STEAM_ERROR:upload failed");
 			} else {
-				assert_eq!(result.unwrap(), None);
+				assert_eq!(result.unwrap().value, None);
 			}
 			assert!(!staged_root.exists());
 		}
@@ -936,7 +975,7 @@ mod tests {
 		for failure in [true, false] {
 			let mut lock = None;
 			let mut staged_root = PathBuf::new();
-			let error = with_publish_staging(parent.path(), |root, content| {
+			let result = with_publish_staging(parent.path(), |root, content| {
 				staged_root = root.to_owned();
 				lock = Some(
 					fs::OpenOptions::new()
@@ -951,15 +990,15 @@ mod tests {
 				} else {
 					Ok(())
 				}
-			})
-			.unwrap_err();
+			});
+			let error = if failure { result.unwrap_err() } else {
+				let successful = result.unwrap();
+				assert_eq!(successful.value, ());
+				successful.warnings.join("\n")
+			};
 			assert!(error.contains("remove publishing staging directory"));
 			assert!(error.contains(staged_root.to_str().unwrap()));
-			assert!(error.contains(if failure {
-				"ERR_STEAM_ERROR:upload failed"
-			} else {
-				"operation completed"
-			}));
+			if failure { assert!(error.contains("ERR_STEAM_ERROR:upload failed")); }
 			drop(lock);
 		}
 		parent.close().unwrap();

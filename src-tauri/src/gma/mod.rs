@@ -30,6 +30,11 @@ pub enum GMAError {
 	NoEntries,
 	DuplicateEntry(String),
 	InvalidContentPath,
+	SourceChanged(PathBuf),
+	UnsafeEntry(String),
+	Checksum(String),
+	LimitExceeded(String),
+	NoSafeDestination(PathBuf),
 }
 impl Display for GMAError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -46,6 +51,11 @@ impl Display for GMAError {
 			NoEntries => write!(f, "ERR_NO_ENTRIES"),
 			DuplicateEntry(path) => write!(f, "ERR_DUPLICATE_ENTRIES:{}", path),
 			InvalidContentPath => write!(f, "ERR_INVALID_CONTENT_PATH"),
+			SourceChanged(path) => write!(f, "ERR_SOURCE_CHANGED:{}", path.display()),
+			UnsafeEntry(path) => write!(f, "ERR_UNSAFE_ENTRY:{}", path),
+			Checksum(path) => write!(f, "ERR_GMA_CHECKSUM:{}", path),
+			LimitExceeded(limit) => write!(f, "ERR_ARCHIVE_LIMIT:{}", limit),
+			NoSafeDestination(path) => write!(f, "ERR_NO_SAFE_DESTINATION:{}", path.display()),
 		}
 	}
 }
@@ -147,6 +157,9 @@ pub struct GMAFile {
 
 	#[serde(skip)]
 	pub membuffer: Option<ArcBytes>,
+
+	#[serde(skip)]
+	pub spool: Option<std::sync::Arc<tempfile::NamedTempFile>>,
 }
 impl std::fmt::Debug for GMAFile {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -193,6 +206,7 @@ impl GMAFile {
 			extracted_name: String::new(),
 			modified: None,
 			membuffer: None,
+			spool: None,
 		};
 
 		let mut header_buf = [0; 4];
@@ -203,6 +217,7 @@ impl GMAFile {
 		}
 
 		gma.version = f.read_u8().map_err(|error| GMAError::io("read version", &gma.path, error))?;
+		if !(1..=3).contains(&gma.version) { return Err(GMAError::FormatError); }
 
 		gma.pointers.metadata = f
 			.seek(SeekFrom::Current(0))
@@ -272,7 +287,7 @@ impl GMAFile {
 		if self.id.is_none() {
 			if let Some(file_name) = self.path.file_name() {
 				let _file_name = file_name.to_string_lossy().to_lowercase();
-				let file_name = &_file_name[..(_file_name.len() - 4)];
+				let file_name = _file_name.strip_suffix(".gma").unwrap_or(&_file_name);
 				let found_id = GameAddons::get_ws_id(file_name);
 				if found_id.is_some() {
 					self.id = found_id;
@@ -318,6 +333,8 @@ where
 pub mod whitelist;
 pub use whitelist::*;
 
+mod output;
+mod staging;
 pub mod extract;
 pub use extract::*;
 

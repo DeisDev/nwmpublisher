@@ -6,6 +6,7 @@
 	import PreparePublish, { remountAddonScroller } from '../components/PreparePublish.svelte';
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
+	import { saveSettings } from '../settings.js';
 	import Filter from '@lucide/svelte/icons/list-filter';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Loading from '../components/Loading.svelte';
@@ -88,11 +89,10 @@
 		saving = true;
 		saveError = null;
 		try {
-			await invoke('update_settings', { settings: {
-				...AppSettings,
+			await saveSettings({
 				my_workshop_visibility: nextVisibility,
 				my_workshop_sort: nextSort,
-			} });
+			});
 			AppSettings.my_workshop_visibility = nextVisibility;
 			AppSettings.my_workshop_sort = nextSort;
 		} catch (error) {

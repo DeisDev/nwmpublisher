@@ -20,6 +20,7 @@ use crate::{
 pub mod default_icon;
 pub mod downloads;
 pub mod publishing;
+pub mod publish_jobs;
 pub mod subscriptions;
 pub mod users;
 pub mod workshop;
@@ -123,6 +124,7 @@ impl Steam {
 	}
 
 	fn on_initialized() {
+		publish_jobs::janitor();
 		std::thread::spawn(Steam::watchdog);
 		std::thread::spawn(Steam::workshop_fetcher);
 

@@ -15,6 +15,7 @@
 	import { tippyFollow, tippy } from '../tippy';
 	import * as dialog from '@tauri-apps/plugin-dialog';
 	import { invoke } from '@tauri-apps/api/core';
+	import { saveSettings } from '../settings.js';
 	import { open } from '@tauri-apps/plugin-shell';
 	import { playSound } from '../sounds';
 	import FileBrowser from './FileBrowser.svelte';
@@ -29,7 +30,7 @@
 	import WorkshopSettings from './WorkshopSettings.svelte';
 	import { translateError } from '../i18n';
 	import { Steam } from '../steam';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 
 	export let updatingAddon = null;
 	export let preparePublish;
@@ -105,7 +106,7 @@
 		if (mode === AppSettings.workshop_update_mode) return;
 		savingPublishMode = true;
 		try {
-			await invoke('update_settings', { settings: { ...AppSettings, workshop_update_mode: mode } });
+			await saveSettings({ workshop_update_mode: mode });
 			AppSettings.workshop_update_mode = mode;
 		} catch (error) {
 			await dialog.message($_('remember_update_mode_error', { values: { error: String(error) } }), { kind: 'error' });
@@ -155,6 +156,12 @@
 	let pathInputContainer;
 	let pathValue = '';
 	let pathFailMessage = null;
+	let addonSession = 0;
+	let iconRequest = 0;
+	let pathRequest = 0;
+	let pathPending = false;
+	let validatedPath = null;
+	onDestroy(() => { addonSession++; pathRequest++; });
 
 	// The preview image the backend uploads when no icon is chosen: the user's Steam avatar
 	let defaultIconUrl = '/img/steam_anonymous.jpg';
@@ -169,14 +176,18 @@
 	refreshDefaultIcon();
 	$: if ($preparePublish) refreshDefaultIcon();
 	function browseAddon() {
+		const session = addonSession;
+		const request = pathRequest;
 		dialog.open({ directory: true }).then(path => {
-			if (path && path.length > 0) {
+			if (session === addonSession && request === pathRequest && path && path.length > 0) {
 				onPathChanged(path);
 			}
 		});
 	}
 
 	function browseIcon() {
+		const session = addonSession;
+		const request = ++iconRequest;
 		dialog.open({
 
 			filters: [{
@@ -185,8 +196,9 @@
 			}]
 
 		}).then(path => {
-			if (path) {
+			if (path && session === addonSession && request === iconRequest) {
 				invoke('verify_icon', { path }).then(([base64, can_upscale]) => {
+					if (session !== addonSession || request !== iconRequest) return;
 					canUpscale = can_upscale;
 					gmaIconPath = path;
 					gmaIconBase64 = base64;
@@ -195,13 +207,28 @@
 		});
 	}
 	function removeIcon() {
+		iconRequest++;
 		gmaIconPath = null;
 		gmaIconBase64 = null;
 		canUpscale = false;
 	}
 
 	function checkPath(path, successSound) {
+		const session = addonSession;
+		const request = ++pathRequest;
+		const current = () => session === addonSession && request === pathRequest && pathValue === path;
+		pathValue = path;
+		pathPending = true;
+		validatedPath = null;
+		pathFailMessage = null;
+		$gmaEntries = [];
+		gmaSize = null;
+		readyForPublish = false;
+		tippyFollow(pathInputContainer, null);
 		return invoke('verify_whitelist', { path }).then(([entries, size]) => {
+			if (!current()) return;
+			pathPending = false;
+			validatedPath = path;
 
 			$gmaEntries = entries;
 			gmaSize = size;
@@ -216,6 +243,8 @@
 			checkForm();
 
 		}, (err) => {
+			if (!current()) return;
+			pathPending = false;
 
 			$gmaEntries = [];
 			pathValue = pathInput.value;
@@ -235,6 +264,11 @@
 		if (path.length > 0) {
 			await checkPath(path, playSound);
 		} else {
+			pathRequest++;
+			pathPending = false;
+			validatedPath = null;
+			$gmaEntries = [];
+			gmaSize = null;
 			pathFailMessage = null;
 			tippyFollow(pathInputContainer, pathFailMessage);
 			pathValue = '';
@@ -304,7 +338,7 @@
 			if (ignore.length > 0 && AppSettings.ignore_globs.findIndex(s => s === ignore) === -1) {
 				AppSettings.ignore_globs.push(ignore);
 				ignoreGlobs = AppSettings.ignore_globs;
-				await invoke('update_settings', { settings: AppSettings });
+				try { await saveSettings({ ignore_globs: AppSettings.ignore_globs }); } catch { return; }
 				if (pathValue.length > 0) checkPath(pathValue);
 			}
 			this.value = '';
@@ -316,7 +350,7 @@
 		if (index !== -1) {
 			AppSettings.ignore_globs.splice(index, 1);
 			ignoreGlobs = AppSettings.ignore_globs;
-			await invoke('update_settings', { settings: AppSettings });
+			try { await saveSettings({ ignore_globs: AppSettings.ignore_globs }); } catch { return; }
 			if (pathValue.length > 0) checkPath(pathValue);
 		}
 	}
@@ -361,10 +395,11 @@
 					$remountAddonScroller = true;
 					Steam.MyWorkshop = [];
 					if (publishingAddon && $updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
+					if (event.data?.cleanupWarnings?.length) dialog.message($_('publish_cleanup_warning') + '\n' + event.data.cleanupWarnings.join('\n'), { kind: 'warning' });
 					if (event.data?.settingsError) dialog.message($_('changelog_defaults.published_save_error', { values: { error: event.data.settingsError } }), { kind: 'error' });
 				}
 
-				if (event.finished || event.error || event.cancelled) {
+				if (event.finished || event.error || event.cancelled || event.state === 'unknown') {
 					$isPublishing = false;
 				}
 			});
@@ -396,7 +431,7 @@
 					playSound('success');
 					if ($updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
 				}
-				if (event.finished || event.error || event.cancelled) $isPublishing = false;
+				if (event.finished || event.error || event.cancelled || event.state === 'unknown') $isPublishing = false;
 			});
 		} catch (error) {
 			$isPublishing = false;
@@ -413,6 +448,7 @@
 	}
 
 	function isFormValid() {
+		if (pathPending || validatedPath !== pathValue) return false;
 		if (descriptionError) return false;
 		if (pathValue.length === 0 || pathFailMessage !== null) return false;
 
@@ -448,6 +484,13 @@
 
 	const tagSearchMax = Math.max(addonTypes.length, addonTags.length);
 	onMount(() => updatingAddon.subscribe(async updatingAddon => {
+		const session = ++addonSession;
+		pathRequest++;
+		pathPending = false;
+		validatedPath = null;
+		readyForPublish = false;
+		$gmaEntries = [];
+		gmaSize = null;
 		workshopInfo = updatingAddon;
 		editorHistoryKey += 1;
 		activeTab = 'files';
@@ -481,12 +524,6 @@
 		gmaIconPath = null;
 		gmaIconBase64 = updatingAddon.previewUrl;
 
-		if (updatingAddon.id in AppSettings.my_workshop_local_paths) {
-			await onPathChanged(AppSettings.my_workshop_local_paths[updatingAddon.id]);
-		} else {
-			pathValue = '';
-			pathFailMessage = null;
-		}
 
 		addonTypeInput.value = 'default';
 		addonTypeInput = addonTypeInput;
@@ -519,6 +556,14 @@
 
 		trackAddonTitle(updatingAddon.title);
 
+		if (updatingAddon.id in AppSettings.my_workshop_local_paths) {
+			await onPathChanged(AppSettings.my_workshop_local_paths[updatingAddon.id]);
+			if (session !== addonSession) return;
+		} else {
+			pathValue = '';
+			pathFailMessage = null;
+		}
+
 		checkForm(false);
 	}));
 
@@ -550,7 +595,7 @@
 					if ($updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
 				}
 
-				if (event.finished || event.error || event.cancelled) {
+				if (event.finished || event.error || event.cancelled || event.state === 'unknown') {
 					$isPublishing = false;
 				}
 			});

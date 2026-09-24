@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Make extraction safer and improve cancellation.
+- Reduce memory use and fix archive checksums.
+- Improve publishing recovery and cleanup.
+- Fix stalled downloads and collection errors.
+- Restore job progress after reconnecting and tighten app security.
+- Save settings reliably and recover damaged settings.
+- Prevent outdated addon previews from enabling publishing.
 - Give the addon's Settings tab more space around controls, option cards, and sections.
 - Keep BBCode editor toolbars, previews, and footers from overlapping in smaller windows with formatting expanded.
 - Fix the file browser showing "No files found" or a previous addon's files after loading an addon.

@@ -59,6 +59,7 @@
 	function finish() {
 		if (finished || destroyed || expired) return;
 		finished = true;
+		if (transaction?.warnings?.length || transaction?.result?.cleanupWarnings?.length) return;
 		let delay = setTimeout(expire, 2500);
 		subscriptions.push(() => clearTimeout(delay));
 	}
@@ -70,6 +71,9 @@
 
 	function currentStatus(translate) {
 		if (cancelError) return translateError(cancelError);
+		if (transaction.transportError) return translate('job_connection_error');
+		if (transaction.state === 'unknown') return translate('publish_outcome_unknown');
+		if (transaction.state === 'committing') return translate('extraction_committing');
 		if (transaction.state === 'cancelling') return translate('cancelling');
 		if (transaction.cancelPending) return translate('cancel_pending');
 		return statusTextFn(transaction);
@@ -116,7 +120,7 @@
 
 </script>
 
-<div bind:this={taskElem} class="task" class:error={error || cancelled} class:pending={!finished} style="transform: translateY({y}px)" class:expired={expired}>
+<div bind:this={taskElem} class="task" class:error={error || cancelled} class:pending={!finished && transaction?.state !== 'unknown'} class:uncertain={transaction?.state === 'unknown'} style="transform: translateY({y}px)" class:expired={expired}>
 	<div>
 		{#if !error && !cancelled}
 			<div id="progress" style="width: {finished ? 100 : progress}%"></div>
@@ -133,7 +137,7 @@
 				{$_('cancelled')}
 			{:else if finished}
 				{#if transaction}
-					{$_('done')}
+					{$_(transaction.warnings?.length || transaction.result?.cleanupWarnings?.length ? 'job_cleanup_warning' : 'done')}
 				{:else}
 					{statusTextFn}
 				{/if}
@@ -141,7 +145,7 @@
 				<span bind:this={statusText} role={cancelError ? 'alert' : undefined}>{currentStatus($_)}</span>
 			{/if}
 		</div>
-		{#if error}
+		{#if error || transaction?.warnings?.length || transaction?.result?.cleanupWarnings?.length}
 			<div class="error-actions">
 				<JobDiagnostics {transaction} context={{ task: statusTextFn(transaction) }}/>
 				<button type="button" on:click={expire} aria-label={$_('close')}><Cross class="icon" stroke-width="3"/></button>
@@ -154,6 +158,9 @@
 </div>
 
 <style>
+	.task.uncertain { z-index: 1; }
+	.task.uncertain #status :global(#finished) { display: none; }
+	.task.uncertain #status :global(#error) { opacity: 1; transform: none; }
 	.error-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; pointer-events: auto; }
 	.error-actions { display: flex; gap: .25rem; padding-right: .5rem; pointer-events: auto; }
 	.error-actions button { cursor: pointer; color: inherit; background: transparent; border: 0; }

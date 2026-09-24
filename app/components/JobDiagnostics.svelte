@@ -15,6 +15,10 @@
 			progress: transaction.progress,
 			finished: transaction.finished,
 			cancelled: transaction.cancelled,
+			state: transaction.state,
+			result: transaction.result,
+			warnings: transaction.warnings,
+			jobContext: transaction.context,
 			error: transaction.error,
 			...context
 		}, null, 2);

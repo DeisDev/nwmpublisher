@@ -25,33 +25,18 @@ export function taskMessage(msg) {
 	tasks.update(tasks => { tasks.push([null, msg, null]); return tasks });
 }
 
-let orphanQueue = [];
-let orphanedTransactions = {};
-function checkOrphanQueue(transaction, id) {
-	let i = 0;
-	while (i < orphanQueue.length) {
-		const orphan = orphanQueue[i];
-		if (orphan[1][0] === id) {
-			orphanQueue.splice(i, 1);
-			orphan[1][0] = transaction;
-			fireTransactionEvent(orphan[0], orphan[1]);
-		} else {
-			i++;
-		}
-	}
+const completed = new Set();
+function acknowledge(id) {
+	completed.add(id);
+	if (completed.size > 1024) completed.delete(completed.values().next().value);
+	invoke('acknowledge_transaction', { id }).catch(error => console.error(error));
 }
-
-const dedup = {};
 
 class Transaction {
 	constructor(id, TASK_statusTextFn, cancellable = true) {
 		if (id === null || id == undefined) return;
 
-		if (id !== -1 && id in dedup) {
-			console.log('DUPLICATE TRANSACTION ID: ' + id);
-		} else {
-			dedup[id] = true;
-		}
+		if (transactions[id]) return transactions[id];
 
 		this.id = id;
 		this.callbacks = [];
@@ -68,10 +53,60 @@ class Transaction {
 		if (TASK_statusTextFn)
 			tasks.update(tasks => { tasks.push([this, TASK_statusTextFn, null]); return tasks });
 
-		if (id in orphanedTransactions) {
-			delete orphanedTransactions[id];
-			checkOrphanQueue(this, id);
+		this.revision = -1;
+		this.dataRevision = 0;
+		if (id !== -1) this.refresh();
+	}
+
+	async refresh() {
+		try {
+			const snapshot = await invoke('transaction_snapshot', { id: this.id });
+			this.transportError = null;
+			if (snapshot) this.applySnapshot(snapshot);
+		} catch (error) {
+			this.transportError = String(error);
+			this.emit({ transportError: this.transportError });
 		}
+	}
+
+	applySnapshot(snapshot) {
+		if (snapshot.revision <= this.revision || this.finished || this.error || this.cancelled) return;
+		if (!this.pendingSnapshot || snapshot.revision >= this.pendingSnapshot.revision) this.pendingSnapshot = snapshot;
+		if (!this.draining) this.drainSnapshots();
+	}
+
+	async drainSnapshots() {
+		this.draining = true;
+		try {
+			while (this.pendingSnapshot) {
+				let snapshot = this.pendingSnapshot;
+				this.pendingSnapshot = null;
+				if (snapshot.revision <= this.revision) continue;
+				this.context = snapshot.context;
+				do {
+					for (const [sequence, data] of snapshot.data) {
+						if (sequence > this.dataRevision) { this.dataRevision = sequence; this.setData(data); }
+					}
+					if (!snapshot.dataMore) break;
+					snapshot = await invoke('transaction_data', { id: this.id, after: this.dataRevision });
+					if (!snapshot) throw new Error('ERR_JOB_DATA_DELIVERY');
+				} while (true);
+				this.transportError = null;
+				this.revision = snapshot.revision;
+				this.warnings = snapshot.warnings;
+				if (this.warnings?.length) this.emit({ warnings: this.warnings });
+				if (snapshot.status !== null && snapshot.status !== this.status) this.setStatus(snapshot.status);
+				this.setProgress(snapshot.progress);
+				this.setState(snapshot.state);
+				if (snapshot.state === 'finished') this.setFinished(snapshot.result);
+				else if (snapshot.state === 'failed') this.setError(...snapshot.error);
+				else if (snapshot.state === 'cancelled') this.setCancelled();
+				else if (snapshot.data.length) await invoke('transaction_data', { id: this.id, after: this.dataRevision });
+			}
+		} catch (error) {
+			this.transportError = String(error);
+			this.emit({ transportError: this.transportError });
+		} finally { this.draining = false; }
 	}
 
 	static get(id) {
@@ -82,9 +117,7 @@ class Transaction {
 		this.callbacks.push(callback);
 
 		if (this.callbacks.length === 1) {
-			for (let i = 0; i < this.unconsumedEvents.length; i++) {
-				callback(this.unconsumedEvents[i]);
-			}
+			for (const event of this.unconsumedEvents.splice(0)) callback(event);
 		}
 
 		return this;
@@ -92,7 +125,10 @@ class Transaction {
 
 	emit(event) {
 		if (this.callbacks.length === 0) {
+			const key = event.stream ? null : Object.keys(event)[0];
+			if (key) this.unconsumedEvents = this.unconsumedEvents.filter(previous => !(key in previous));
 			this.unconsumedEvents.push(event);
+			if (this.unconsumedEvents.length > 256) this.unconsumedEvents.shift();
 		} else {
 			for (let i = 0; i < this.callbacks.length; i++) {
 				this.callbacks[i](event);
@@ -108,7 +144,7 @@ class Transaction {
 		try {
 			const state = await invoke('cancel_transaction', { id: this.id });
 			if (state === 'cancelled') this.setCancelled();
-			else if (state === 'cancelling' || state === 'submitting') this.setState(state);
+			else this.setState(state);
 		} catch (error) {
 			if (!this.cancelled && !this.finished && !this.error) {
 				this.emit({ cancelError: String(error) });
@@ -121,10 +157,10 @@ class Transaction {
 
 	setState(state) {
 		if (this.cancelled || this.finished || this.error) return this;
-		const order = { running: 0, preparing: 1, packing: 2, submitting: 3, cancelling: 3 };
+		const order = { running: 0, preparing: 1, packing: 2, submitting: 3, cancelling: 3, committing: 3, unknown: 4 };
 		if (!(state in order) || order[state] < order[this.state]) return this;
 		this.state = state;
-		this.cancellable = state === 'preparing' || state === 'packing';
+		this.cancellable = state === 'running' || state === 'preparing' || state === 'packing';
 		this.emit({ state });
 		return this;
 	}
@@ -136,11 +172,13 @@ class Transaction {
 		this.cancellable = false;
 		this.emit({ cancelled: true });
 		delete transactions[this.id];
+		acknowledge(this.id);
 		return this;
 	}
 
 	setFinished(data) {
 		if (this.cancelled || this.finished || this.error) return this;
+		this.result = data;
 		this.state = 'finished';
 		this.cancellable = false;
 		this.finished = true;
@@ -150,6 +188,7 @@ class Transaction {
 		}
 		this.emit({ finished: true, data });
 		delete transactions[this.id];
+		acknowledge(this.id);
 
 		return this;
 	}
@@ -161,6 +200,7 @@ class Transaction {
 		this.error = [msg, data];
 		this.emit({ error: msg, data });
 		delete transactions[this.id];
+		acknowledge(this.id);
 
 		return this;
 	}
@@ -178,7 +218,7 @@ class Transaction {
 	}
 
 	setProgress(progress) {
-		if (progress !== this.progress) {
+		if (progress !== this.progressInt) {
 			this.progressInt = progress;
 			this.progress = progress / 100;
 			this.emit({ progress: this.progress });
@@ -188,151 +228,35 @@ class Transaction {
 	}
 }
 
-let transactionEvents = {};
-function fireTransactionEvent(event, data) {
-	transactionEvents[event](data);
-}
-function receiveTransactionEvent(event, data) {
-	const transaction = Transaction.get(data[0]);
+function receiveSnapshot(snapshot) {
+	const transaction = Transaction.get(snapshot.id);
 	if (transaction) {
-		data[0] = transaction;
-		fireTransactionEvent(event, data);
-	} else if (!(data[0] in dedup)) {
-		orphanedTransactions[data[0]] = true;
-		orphanQueue.push([event, data]);
+		if (transaction.transportError) { transaction.transportError = null; transaction.emit({ transportError: null }); }
+		transaction.applySnapshot(snapshot);
+	} else if (completed.has(snapshot.id)) acknowledge(snapshot.id);
+	else if (snapshot.context && !completed.has(snapshot.id)) {
+		window.dispatchEvent(new CustomEvent('recovered-job', { detail: snapshot }));
 	}
 }
-function transactionEvent(event, callback) {
-	transactionEvents[event] = callback;
-	listen('Transaction' + event, ({ payload: data }) => {
-		receiveTransactionEvent(event, data);
-	});
+
+let unlisten;
+let recovering = false;
+async function recoverTransactions() {
+	if (recovering) return;
+	recovering = true;
+	try {
+		if (!unlisten) unlisten = await listen('TransactionSnapshot', ({ payload }) => receiveSnapshot(payload));
+		for (const snapshot of await invoke('transaction_snapshots')) receiveSnapshot(snapshot);
+	} catch (error) {
+		for (const transaction of Object.values(transactions)) {
+			transaction.transportError = String(error);
+			transaction.emit({ transportError: String(error) });
+		}
+	} finally { recovering = false; }
 }
-
-transactionEvent('ResetProgress', ([ transaction ]) => {
-	transaction.setProgress(0);
-});
-
-transactionEvent('Progress', ([ transaction, progress ]) => {
-	if (progress > (transaction.progressInt ?? 0)) transaction.setProgress(progress);
-});
-
-transactionEvent('Cancelled', ([ transaction ]) => {
-	transaction.setCancelled();
-});
-
-transactionEvent('State', ([ transaction, state ]) => {
-	transaction.setState(state);
-});
-
-transactionEvent('Finished', ([ transaction, data ]) => {
-	//console.log('transactionFinished', transaction, data);
-	transaction.setFinished(data);
-});
-
-transactionEvent('Error', ([ transaction, msg, data ]) => {
-	//console.log('transactionError', transaction, msg, data);
-	transaction.setError(msg, data);
-});
-
-transactionEvent('Status', ([ transaction, msg ]) => {
-	//console.log('transactionStatus', transaction, msg);
-	transaction.setStatus(msg);
-});
-
-transactionEvent('Data', ([ transaction, data ]) => {
-	//console.log('transactionData', data);
-	transaction.setData(data);
-});
-
-invoke('websocket').then(port => {
-	const decoder = new TextDecoder('utf-8');
-	const read_nt_string = (byteOffset, view, json) => {
-		let i = byteOffset;
-		if (json) {
-			if (view.getUint8(i++) === 0) return [null, i];
-		}
-		const buffer = [];
-		for (i; i < view.byteLength; i++) {
-			const byte = view.getUint8(i);
-			if (byte === 0) {
-				i++;
-				break;
-			} else {
-				buffer.push(byte);
-			}
-		}
-		if (json) {
-			return [JSON.parse(decoder.decode(new Uint8Array(buffer))), i];
-		} else {
-			return [decoder.decode(new Uint8Array(buffer)), i];
-		}
-	};
-	const read_json = (byteOffset, view) => {
-		return read_nt_string(byteOffset, view, true);
-	};
-
-	const socket = new WebSocket('ws://localhost:' + port, 'nwmpublisher');
-	socket.binaryType = 'arraybuffer';
-	socket.addEventListener('message', event => {
-        const view = new DataView(event.data);
-		const message = view.getUint8(0);
-        const id = view.getUint32(1);
-
-		switch(message) {
-			case 0:
-			{
-				const [data, _] = read_json(5, view);
-				receiveTransactionEvent('Finished', [id, data]);
-			}
-			break;
-
-			case 1:
-			{
-				const [msg, i] = read_nt_string(5, view);
-				const [data, _] = read_json(i, view);
-				receiveTransactionEvent('Error', [id, msg, data]);
-			}
-			break;
-
-			case 2:
-			{
-				const [data, _] = read_json(5, view);
-				receiveTransactionEvent('Data', [id, data]);
-			}
-			break;
-
-			case 3:
-			{
-				const [status, _] = read_nt_string(5, view);
-				receiveTransactionEvent('Status', [id, status]);
-			}
-			break;
-
-			case 4:
-			receiveTransactionEvent('Progress', [id, view.getUint16(5)]);
-			break;
-
-			case 5:
-			receiveTransactionEvent('IncrProgress', [id, view.getUint16(5)]);
-			break;
-
-			case 6:
-				receiveTransactionEvent('ResetProgress', [id]);
-				break;
-
-			case 7:
-			{
-				const [state] = read_json(5, view);
-				receiveTransactionEvent('State', [id, state]);
-			}
-			break;
-
-			case 8:
-				receiveTransactionEvent('Cancelled', [id]);
-				break;
-		}
-	});
-});
+recoverTransactions();
+const recoveryTimer = setInterval(recoverTransactions, 5000);
+window.addEventListener('focus', recoverTransactions);
+window.addEventListener('beforeunload', () => { clearInterval(recoveryTimer); unlisten?.(); });
 
 export { Transaction, tasks, taskHeight, tasksMax, tasksNum }

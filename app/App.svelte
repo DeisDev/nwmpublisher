@@ -6,15 +6,36 @@
 	import GitHubStar from './components/GitHubStar.svelte';
 	import ContextMenuContainer from './components/ContextMenuContainer.svelte';
 	import MigrateSettings from './components/MigrateSettings.svelte';
+	import RecoverSettings from './components/RecoverSettings.svelte';
+	import PublishRecovery from './components/PublishRecovery.svelte';
+	import { settingsSave } from './settings.js';
 	import { invoke } from '@tauri-apps/api/core';
+	import { onMount } from 'svelte';
+	import { Transaction } from './transactions.js';
+
+	onMount(() => {
+		const recover = ({ detail: snapshot }) => {
+			if (snapshot.context?.kind !== 'publish') return;
+			new Transaction(snapshot.id, transaction => transaction.status ? $_(transaction.status) : $_('publish_recovered')).applySnapshot(snapshot);
+		};
+		window.addEventListener('recovered-job', recover);
+		return () => window.removeEventListener('recovered-job', recover);
+	});
 
 	let migrateSettings = false;
+	let recovery = null;
+	invoke('settings_recovery').then(value => recovery = value);
 	invoke('legacy_settings_pending').then(pending => migrateSettings = pending);
 </script>
 
 <main>
 
 	<TasksOverlay/>
+	<PublishRecovery/>
+	{#if $settingsSave.state === 'failed'}
+		<div class="settings-error" role="alert">{$_('settings_save_failed')}: {$settingsSave.error}</div>
+	{/if}
+	{#if recovery}<RecoverSettings {recovery}/>{/if}
 
 	<ContextMenuContainer/>
 
@@ -44,6 +65,7 @@
 </main>
 
 <style>
+	.settings-error { position: fixed; inset: auto 1rem 1rem; z-index: 10000; padding: .75rem; background: var(--error); }
 	/*
 	#file-drop {
 		position: absolute;

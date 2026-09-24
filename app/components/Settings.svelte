@@ -11,6 +11,7 @@
 	import { playSound } from '../sounds';
 	import { invoke } from '@tauri-apps/api/core';
 	import { switchLanguage } from '../i18n';
+	import { saveSettings, settingsSave } from '../settings.js';
 
 	let active = false;
 	function toggle() {
@@ -19,9 +20,9 @@
 
 	let activeItem = writable('general');
 
-	function saveSettings(e) {
+	function preventSubmit(e) {
 		e.preventDefault();
-		invoke('update_settings', { settings: AppSettings });
+		// Field changes are saved individually by their controls.
 	}
 
 	async function validateGmod(before, after) {
@@ -45,12 +46,12 @@
 		} else {
 			AppSettings[this.id] = this.value;
 		}
-		form.requestSubmit();
+		saveSettings({ [this.id]: AppSettings[this.id] }).catch(() => {});
 	}
 
 	function afterChangeColor() {
 		AppSettings[this.id] = parseInt(this.value.substr(1), 16);
-		form.requestSubmit();
+		saveSettings({ [this.id]: AppSettings[this.id] }).catch(() => {});
 	}
 
 	function changeCustomColor() {
@@ -74,7 +75,7 @@
 			AppSettings.language = this.value;
 			switchLanguage(this.value);
 		}
-		form.requestSubmit();
+		saveSettings({ language: AppSettings.language }).catch(() => {});
 	}
 
 	const extractOverwriteModes = [
@@ -95,7 +96,9 @@
 
 	</Sidebar>
 
-	<form id="content" class="hide-scroll" on:submit={saveSettings} bind:this={form}>
+	<form id="content" class="hide-scroll" on:submit={preventSubmit} bind:this={form}>
+		<p role="status">{$_('settings_save_' + $settingsSave.state)}</p>
+		{#if $settingsSave.error}<p role="alert">{$settingsSave.error}</p>{/if}
 		{#if $activeItem === 'general'}
 			<div id="open-count">
 				<div>

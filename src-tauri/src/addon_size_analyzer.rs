@@ -50,6 +50,7 @@ mod tests {
 			extracted_name: String::new(),
 			modified: None,
 			membuffer: None,
+			spool: None,
 		})))
 	}
 
