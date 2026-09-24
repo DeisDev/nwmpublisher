@@ -30,6 +30,7 @@ pub mod appdata;
 pub use appdata::AppData;
 
 pub mod game_addons;
+pub mod addon_cleaner;
 pub use game_addons::GameAddons;
 
 pub mod addon_size_analyzer;

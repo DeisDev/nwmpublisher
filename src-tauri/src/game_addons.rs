@@ -398,6 +398,7 @@ pub fn downloader_extract_gmas(paths: Vec<PathBuf>) {
 }
 
 pub fn free_caches() {
+	crate::game_addons!().external.write().clear();
 	let mut paths = crate::game_addons!().paths.write();
 	let mut pages = crate::game_addons!().pages.write();
 	*paths = HashMap::new();

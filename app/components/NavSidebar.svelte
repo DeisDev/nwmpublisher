@@ -19,6 +19,11 @@
 			name: 'size_analyzer',
 			component: AddonSizeAnalyzer,
 		},
+		{
+			name: 'addon_cleaner',
+			component: AddonCleaner,
+			persist: true,
+		},
 		/*
 		{
 			name: 'subscriptions',
@@ -45,6 +50,7 @@
 	import Sidebar from './Sidebar.svelte';
 
 	import AddonSizeAnalyzer from '../pages/AddonSizeAnalyzer.svelte';
+	import AddonCleaner from '../pages/AddonCleaner.svelte';
 	import Downloader, { downloaderJobs } from '../pages/Downloader.svelte';
 	import InstalledAddons from '../pages/InstalledAddons.svelte';
 	import MyWorkshop from '../pages/MyWorkshop.svelte';

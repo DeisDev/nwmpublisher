@@ -240,6 +240,7 @@ pub struct Settings {
 	pub language: Option<String>,
 
 	pub extract_overwrite_mode: ExtractionOverwriteMode,
+	pub addon_cleaner_permanent_delete: bool,
 
 	pub color_neutral: u32,
 	pub color_error: u32,
@@ -280,6 +281,7 @@ impl Default for Settings {
 			language: None,
 
 			extract_overwrite_mode: ExtractionOverwriteMode::default(),
+			addon_cleaner_permanent_delete: false,
 
 			color_neutral: 28103,
 			color_error: 11010048,
@@ -845,9 +847,19 @@ mod tests {
 		let settings: Settings = serde_json::from_str(r#"{"sounds":false,"ignore_globs":["*.bak"],"create_folder_on_extract":false}"#).unwrap();
 		assert!(settings.open_workshop_after_publish);
 		assert!(settings.open_folder_after_extract);
+		assert!(!settings.addon_cleaner_permanent_delete);
 		assert!(!settings.sounds);
 		assert!(!settings.create_folder_on_extract);
 		assert_eq!(settings.ignore_globs, vec!["*.bak"]);
+	}
+
+	#[test]
+	fn addon_cleaner_preference_round_trips() {
+		let defaults: Settings = serde_json::from_str("{}").unwrap();
+		assert!(!defaults.addon_cleaner_permanent_delete);
+		let settings = super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"addon_cleaner_permanent_delete": true})).unwrap()).unwrap();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert!(loaded.addon_cleaner_permanent_delete);
 	}
 
 	#[test]

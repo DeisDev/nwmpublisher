@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add an addon cleaner with live scan progress, Workshop names and icons, and a choice of Trash or permanent deletion.
+
 ### Fixed
 
 - Fix the draft hint and publish button flickering while typing a changelog.
