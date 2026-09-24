@@ -7,19 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Add an addon cleaner with live scan progress, Workshop names and icons, and a choice of Trash or permanent deletion.
-
-### Fixed
-
-- Fix the draft hint and publish button flickering while typing a changelog.
-- Fix release builds failing to install frontend dependencies.
-
 ## [3.1.1] - 2026-09-24
 
 ### Added
 
+- Add an addon cleaner with live scan progress, Workshop names and icons, and a choice of Trash or permanent deletion.
 - Add a checked-by-default option to launch nwmpublisher when the Windows installer finishes.
 - Pre-fill changelogs with a reusable template or the last entered draft. Set the app default in Settings > Changelog and per-addon overrides in the publisher's Settings tab. Remember drafts even when an upload is cancelled, and keep folder-specific defaults after the first publish.
 - Manage required addons by searching Garry's Mod Workshop items or pasting an item link or ID. Review additions and removals, then save separately from uploads, with conflict detection and partial-save feedback.
@@ -29,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fix search and installed addon previews showing a previously selected addon.
+- Fix the draft hint and publish button flickering while typing a changelog.
+- Fix release builds failing to install frontend dependencies.
+- Fix macOS builds failing when compiling archive extraction.
 - Make extraction safer and improve cancellation.
 - Reduce memory use and fix archive checksums.
 - Improve publishing recovery and cleanup.

@@ -144,7 +144,7 @@ impl Directory {
 		#[cfg(unix)] {
 			use std::os::fd::{AsRawFd, FromRawFd};
 			let child = c_name(child)?;
-			let fd = unsafe { libc::openat(self.file.as_raw_fd(), child.as_ptr(), libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC, 0o600 as libc::mode_t) };
+			let fd = unsafe { libc::openat(self.file.as_raw_fd(), child.as_ptr(), libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC, 0o600 as libc::c_uint) };
 			if fd == -1 { return Err(io::Error::last_os_error()); }
 			Ok(unsafe { File::from_raw_fd(fd) })
 		}
