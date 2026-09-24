@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix search and installed addon previews showing a previously selected addon.
 - Make extraction safer and improve cancellation.
 - Reduce memory use and fix archive checksums.
 - Improve publishing recovery and cleanup.

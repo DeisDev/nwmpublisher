@@ -1,6 +1,7 @@
 <script>
 	import { Steam } from '../steam.js';
 	import { _, locale } from 'svelte-i18n';
+	import { translateError } from '../i18n';
 	import { formatSize } from '../format.js';
 	import Dead from './Dead.svelte';
 	import SteamID from 'steamid';
@@ -20,8 +21,8 @@
 	export let promises;
 	export let cancel;
 
-	let subscriptions = [];
-	onDestroy(() => subscriptions.forEach(subscription => subscription()));
+	let selection = 0;
+	onDestroy(() => selection++);
 
 	let gmaSize;
 	let gmaPath;
@@ -29,12 +30,13 @@
 
 	function extractEntry(entryPath) {
 		if (!gmaPath) return;
+		const size = gmaSize;
 		invoke('extract_preview_entry', { gmaPath, entryPath })
 			.then(transactionId => new Transaction(transactionId, transaction => {
 				return $_('extracting_progress', { values: {
 					pct: transaction.progress,
-					data: formatSize((transaction.progress / 100) * gmaSize),
-					dataTotal: formatSize(gmaSize)
+					data: formatSize((transaction.progress / 100) * size),
+					dataTotal: formatSize(size)
 				}});
 			}));
 	}
@@ -43,50 +45,76 @@
 		destinationSelect = false;
 
 		if (!gmaPath) return;
+		const size = gmaSize;
 		invoke('extract_preview_gma', { gmaPath, dest })
 			.then(transactionId => new Transaction(transactionId, transaction => {
 				return $_('extracting_progress', { values: {
 					pct: transaction.progress,
-					data: formatSize((transaction.progress / 100) * gmaSize),
-					dataTotal: formatSize(gmaSize)
+					data: formatSize((transaction.progress / 100) * size),
+					dataTotal: formatSize(size)
 				}});
 			}));
 	}
 
 	let destinationSelect = false;
 	function chooseDestination() {
+		if (!gmaPath) return;
 		destinationSelect = true;
 	}
 
 	let addon = new Promise(() => {});
-	async function updateEntries(workshop, gma) {
-		gmaPath = gma?.path ?? workshop?.localFile ?? null;
-		if (gmaPath) {
-			$entriesList = Object.values(await invoke('preview_gma', { path: gmaPath }));
-		}
-		gmaSize = gma?.size ?? workshop?.size ?? 0;
-	}
+	let previewError = null;
 	function updatePromises(promises) {
+		const currentSelection = ++selection;
 		const [workshop, gma] = promises;
+		addon = new Promise(() => {});
+		gmaPath = null;
+		gmaSize = 0;
+		$entriesList = [];
+		previewError = null;
+		destinationSelect = false;
 
 		let workshopData = null;
 		let gmaData = null;
+		let previewPath = null;
 
-		workshop.then(data => {
+		async function update() {
+			if (selection !== currentSelection) return;
+			addon = Promise.resolve([workshopData, gmaData]);
+			gmaSize = gmaData?.size ?? workshopData?.fileSize ?? 0;
+			const path = gmaData?.path ?? workshopData?.localFile ?? null;
+			if (path === previewPath) return;
+			previewPath = path;
+			gmaPath = null;
+			$entriesList = [];
+			previewError = null;
+			if (!path) return;
+
+			try {
+				const entries = await invoke('preview_gma', { path });
+				if (selection !== currentSelection || previewPath !== path) return;
+				$entriesList = entries;
+				gmaPath = path;
+			} catch (error) {
+				if (selection !== currentSelection || previewPath !== path) return;
+				previewError = translateError(error);
+			}
+		}
+
+		Promise.resolve(workshop).then(data => {
 			workshopData = data;
-			addon = Promise.resolve([workshopData, gmaData]);
-			updateEntries(workshopData, gmaData);
-			return data;
-		});
+			return update();
+		}, () => update()); // Local archives can have no available Workshop item.
 
-		gma.then(data => {
+		Promise.resolve(gma).then(data => {
 			gmaData = data;
+			return update();
+		}, error => {
+			if (selection !== currentSelection) return;
+			previewError = translateError(error);
 			addon = Promise.resolve([workshopData, gmaData]);
-			updateEntries(workshopData, gmaData);
-			return data;
 		});
 	}
-	updatePromises($promises);
 	onDestroy(promises.subscribe(updatePromises));
 
 	function open() {
@@ -94,6 +122,8 @@
 	}
 
 	async function interceptCancel() {
+		selection++;
+		gmaPath = null;
 		await invoke('preview_gma', { path: null });
 		destinationSelect = false;
 		cancel();
@@ -104,14 +134,18 @@
 	{#await addon}
 		<Loading size="2rem"/>
 	{:then [workshop, gma]}
-		{#if !workshop && !gma}
+		{#if !workshop && !gma && previewError}
+			<p class="select">{$_('addon_preview_error', { values: { error: previewError } })}</p>
+		{:else if !workshop && !gma}
 			<Dead size="2rem"/>
 		{:else}
 			<div id="content">
 				<div id="sidebar">
-					<div class="extract-btn" on:click={chooseDestination}>{$_('extract')}</div>
+					<div class="extract-btn" class:disabled={!gmaPath} on:click={chooseDestination}>{$_('extract')}</div>
 					<div id="addon" class="hide-scroll">
-						<div><Addon previewing={true} workshopData={$promises[0]} installedData={$promises[1]} fallbackName={gma ? (gma.name ?? gma.extracted_name) : null}/></div>
+						{#key $promises}
+							<div><Addon previewing={true} workshopData={$promises[0]} installedData={$promises[1]} fallbackName={gma ? (gma.name ?? gma.extracted_name) : null}/></div>
+						{/key}
 						{#if workshop}
 							<div id="tags">
 								{#if workshop.tags}
@@ -207,8 +241,12 @@
 					</div>
 				</div>
 
-				{#if gma || workshop.localFile}
+				{#if previewError}
+					<p class="select">{$_('addon_preview_error', { values: { error: previewError } })}</p>
+				{:else if gmaPath}
 					<FileBrowser browsePath={gmaPath} {entriesList} {open} openEntry={extractEntry}/>
+				{:else if gma || workshop?.localFile}
+					<Loading size="2rem"/>
 				{:else}
 					<Dead size="2rem"/>
 				{/if}

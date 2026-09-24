@@ -1,4 +1,5 @@
 {
+	"addon_preview_error": "Could not load the addon preview: {error}",
 	"ERR_SOURCE_CHANGED": "A source file changed while packaging. Select the source again and retry.",
 	"ERR_UNSAFE_ENTRY": "The extraction target contains an unsafe path, filesystem link, or conflicting file.",
 	"ERR_GMA_CHECKSUM": "The archive checksum does not match its contents.",
