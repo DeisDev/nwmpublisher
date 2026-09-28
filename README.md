@@ -23,11 +23,16 @@ Download the latest release from the [releases page](https://github.com/DeisDev/
 | Platform | Download | Install |
 | --- | --- | --- |
 | Windows | `.msi` | Open the installer. |
+| Windows, portable | `x64_portable.zip` | Extract the whole ZIP, then run `nwmpublisher.exe` from the extracted folder. |
 | macOS, Intel or Apple Silicon | Universal `.dmg` | Open the disk image, drag nwmpublisher into Applications, then launch it from Applications. |
 | Ubuntu / Debian | `amd64.deb` | Open a terminal in your download folder and run `sudo apt install ./nwmpublisher_*.deb`. This also installs required system libraries. |
 | Fedora | `x86_64.rpm` | Run `sudo dnf install ./nwmpublisher-*.rpm` in your download folder. |
 | Other Linux distributions / Steam Deck | `amd64.AppImage` | In the file's properties, allow it to run as a program, then open it. On Steam Deck, use Desktop Mode. |
 
+The portable Windows build shares settings with the installed app in `%APPDATA%\nwmpublisher`.
+It does not add shortcuts or `.gma` file associations.
+It requires [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section),
+which is already present on most Windows PCs.
 
 
 

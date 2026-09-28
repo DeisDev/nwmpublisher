@@ -99,12 +99,46 @@ jobs:
       env:
         RUSTFLAGS: -Ctarget-feature=+crt-static
 
-    - name: Upload Windows installer
+    - name: Package and verify Windows portable ZIP
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+        $packageDir = 'src-tauri/target/release/bundle/portable'
+        New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+        $archive = "$packageDir/nwmpublisher_${version}_x64_portable.zip"
+        $files = @(
+          'src-tauri/target/release/nwmpublisher.exe'
+          'src-tauri/target/release/steam_api64.dll'
+          'LICENSE'
+        )
+        Compress-Archive -LiteralPath $files -DestinationPath $archive -CompressionLevel Optimal -Force
+
+        $extracted = Join-Path $env:RUNNER_TEMP 'nwmpublisher portable'
+        Expand-Archive -LiteralPath $archive -DestinationPath $extracted
+        foreach ($file in $files) {
+          $copy = Join-Path $extracted (Split-Path -Leaf $file)
+          if ((Get-FileHash -LiteralPath $file).Hash -ne (Get-FileHash -LiteralPath $copy).Hash) {
+            throw "Portable ZIP contains a damaged file: $file"
+          }
+        }
+
+        # Launch the extracted GUI-subsystem executable away from the build tree.
+        foreach ($argument in @('--help', '--version')) {
+          $cliProcess = Start-Process -FilePath "$extracted/nwmpublisher.exe" -ArgumentList $argument -WorkingDirectory $env:RUNNER_TEMP -WindowStyle Hidden -Wait -PassThru
+          if ($cliProcess.ExitCode -ne 0) {
+            throw "Portable launch failed for $argument with exit code $($cliProcess.ExitCode)"
+          }
+        }
+
+    - name: Upload Windows packages
       uses: actions/upload-artifact@v4
       with:
         name: packages-windows
         if-no-files-found: error
-        path: src-tauri/target/release/bundle/msi/nwmpublisher_*.msi
+        path: |
+          src-tauri/target/release/bundle/msi/nwmpublisher_*.msi
+          src-tauri/target/release/bundle/portable/nwmpublisher_*_x64_portable.zip
 
   build_macos:
     runs-on: macos-15
@@ -223,14 +257,14 @@ jobs:
         path: artifacts
         merge-multiple: true
 
-    - name: Collect installers and checksums
+    - name: Collect packages and checksums
       shell: bash
       run: |
         set -euo pipefail
         mkdir release
-        find artifacts -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.dmg' -o -name '*.msi' \) -exec cp -t release -- {} +
+        find artifacts -type f \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.dmg' -o -name '*.msi' -o -name '*_x64_portable.zip' \) -exec cp -t release -- {} +
         cd release
-        for extension in AppImage deb rpm dmg msi; do
+        for extension in AppImage deb rpm dmg msi zip; do
           packages=(*."$extension")
           test "${#packages[@]}" -eq 1
           test -f "${packages[0]}"
@@ -244,11 +278,12 @@ jobs:
           See the [changelog for ${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for release notes.
 
           - **Windows:** download and run the `.msi` installer.
+          - **Windows portable:** extract the whole `x64_portable.zip` and run `nwmpublisher.exe`. It shares the installed app's settings and requires [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section).
           - **macOS (Intel and Apple Silicon):** open the universal `.dmg`, drag nwmpublisher into Applications, then open it from Applications. Builds without Developer ID signing require approval in System Settings → Privacy & Security → Open Anyway after the first launch attempt.
           - **Ubuntu / Debian:** download the `.deb` and install it with `sudo apt install ./nwmpublisher_*.deb`.
           - **Fedora:** download the `.rpm` and install it with `sudo dnf install ./nwmpublisher-*.rpm`.
           - **Other Linux distributions / Steam Deck:** download the `.AppImage`, mark it executable in its file properties, and open it. Linux packages are x86_64 and built on Ubuntu 22.04.
 
-          Keep Steam running and signed in when using Workshop features. See the [installation instructions](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/README.md#-installation) for details. `SHA256SUMS` contains checksums for every installer.
+          Keep Steam running and signed in when using Workshop features. See the [installation instructions](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/README.md#-installation) for details. `SHA256SUMS` contains checksums for every download.
         files: release/*
         fail_on_unmatched_files: true

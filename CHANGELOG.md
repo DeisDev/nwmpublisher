@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add a portable Windows ZIP that runs without the installer.
 - Add a website with app screenshots and downloads for Windows, macOS and Linux.
 
 ### Changed
