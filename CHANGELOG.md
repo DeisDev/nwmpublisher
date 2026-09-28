@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Add a website with app screenshots and downloads for Windows, macOS and Linux.
 
+### Changed
+
+- Use Windows, Apple and Linux logos for the website downloads.
+
 ## [3.1.1] - 2026-09-24
 
 ### Added

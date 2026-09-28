@@ -1,8 +1,11 @@
 <script>
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { ArrowDown, ArrowUpRight, Download, CodeXml, Monitor, Apple, Terminal } from '@lucide/svelte';
+	import { ArrowDown, ArrowUpRight, Download, CodeXml } from '@lucide/svelte';
 	import logo from '../public/img/logo.svg';
+	import windows from '../public/img/windows.svg';
+	import apple from '../public/img/apple.svg';
+	import linux from '../public/img/linux.svg';
 	import workshop from '../public/screenshots/My workshop.webp';
 	import publishing from '../public/screenshots/Publish New.webp';
 	import size from '../public/screenshots/Addon Size Analyzer.webp';
@@ -22,9 +25,9 @@
 		{ id: 'clean', image: extraction, screen: 'extract' }
 	];
 	const platforms = [
-		{ id: 'windows', icon: Monitor, packages: ['windows'] },
-		{ id: 'macos', icon: Apple, packages: ['macos'] },
-		{ id: 'linux', icon: Terminal, packages: ['linux', 'deb', 'rpm'] }
+		{ id: 'windows', icon: windows, packages: ['windows'] },
+		{ id: 'macos', icon: apple, packages: ['macos'] },
+		{ id: 'linux', icon: linux, packages: ['linux', 'deb', 'rpm'] }
 	];
 	let screenshot = screenshots[0];
 	let detectedPlatform = null;
@@ -138,7 +141,7 @@
 			{#each platforms as platform}
 				<article class:detected={detectedPlatform === platform.id}>
 					<div class="platform-heading">
-						<svelte:component this={platform.icon} size={25} strokeWidth={1.6}/>
+						<img src={platform.icon} alt="" width="25" height="25"/>
 						{#if detectedPlatform === platform.id}<span class="detected-label">{$_('website.detected')}</span>{/if}
 					</div>
 					<h3>{$_(`website.platform_${platform.id}`)}</h3>

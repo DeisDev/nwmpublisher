@@ -76,6 +76,7 @@ h3 { font-size: 1.125rem; font-weight: 600; }
 .download-grid article { display: flex; flex-direction: column; padding: 1.6rem; background: var(--content); border: 1px solid var(--border); border-radius: 5px; }
 .download-grid article.detected { border-color: var(--neutral); }
 .platform-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; min-block-size: 32px; margin-block-end: 1rem; }
+.platform-heading img { inline-size: 25px; block-size: 25px; object-fit: contain; flex-shrink: 0; }
 .detected-label { font-size: .8125rem; color: var(--link); background: #006cc71a; border: 1px solid #006cc750; border-radius: 3px; padding: .2rem .5rem; }
 .architecture { font-size: .875rem; margin-block-start: .35rem; }
 .package-links { display: flex; flex-direction: column; gap: .5rem; margin-block-start: 1.4rem; }
