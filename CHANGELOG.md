@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Offer the portable Windows ZIP alongside the installer on the website.
 - Use Windows, Apple and Linux logos for the website downloads.
 
 ## [3.1.1] - 2026-09-24

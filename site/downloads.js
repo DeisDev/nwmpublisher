@@ -26,6 +26,7 @@ export async function getLatestRelease(signal) {
 	const downloads = {};
 	const packages = {
 		windows: /_x64[^/]*\.msi$/i,
+		windows_portable: /_x64_portable\.zip$/i,
 		macos: /_universal\.dmg$/i,
 		linux: /_amd64\.AppImage$/i,
 		deb: /_amd64\.deb$/i,

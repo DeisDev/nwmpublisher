@@ -25,7 +25,7 @@
 		{ id: 'clean', image: extraction, screen: 'extract' }
 	];
 	const platforms = [
-		{ id: 'windows', icon: windows, packages: ['windows'] },
+		{ id: 'windows', icon: windows, packages: ['windows', 'windows_portable'] },
 		{ id: 'macos', icon: apple, packages: ['macos'] },
 		{ id: 'linux', icon: linux, packages: ['linux', 'deb', 'rpm'] }
 	];
@@ -156,6 +156,9 @@
 						{/each}
 					</div>
 					<p class="install-note">{$_(`website.install_${platform.id}`)}</p>
+					{#if platform.id === 'windows'}
+						<p class="install-note">{$_('website.install_windows_portable')}</p>
+					{/if}
 				</article>
 			{/each}
 		</div>
