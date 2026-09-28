@@ -1,0 +1,57 @@
+name: Deploy website
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'site/**'
+      - 'i18n/en.json'
+      - 'public/screenshots/**'
+      - 'public/img/logo.svg'
+      - 'public/fonts/**'
+      - 'public/favicon.png'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.node-version'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install dependencies
+        run: npm install --global npm@12.0.2 && npm ci
+      - name: Build website
+        run: npm run build:site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

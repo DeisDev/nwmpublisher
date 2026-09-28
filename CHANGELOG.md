@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add a website with app screenshots and downloads for Windows, macOS and Linux.
+
 ## [3.1.1] - 2026-09-24
 
 ### Added

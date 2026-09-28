@@ -55,20 +55,25 @@ To move them yourself instead, copy `settings.json` from the old `gmpublisher` f
 * Publish & update your Workshop items without added branding
 * Choose your GMA filenames and use your Steam avatar as the default icon
 * Edit descriptions & changelogs with BBCode, live previews, fullscreen editing and undo/redo
+* Reuse changelog templates or your last draft, with app-wide and per-addon defaults
 * Update descriptions without reuploading addon files
 * Filter & sort your Workshop items, with your choices saved between sessions
+* Change addon visibility and manage required addons without reuploading files
+* View Workshop dates, sizes, subscribers, favourites, page views, comments, votes and ban status
 * Drag addon folders into the publishing file browser
 * Extract, search and browse GMA files and installed addons
 * View file counts and sizes for entire folders
 * Bulk download & extract Workshop items and collections
 * Upload animated GIFs as your Workshop item's icon
 * Analyze which addons are taking up the most disk space using the addon size analyzer treemap
+* Find unsubscribed Workshop GMA files and choose which to move to Trash or permanently delete
 * Supports legacy SteamPipe addons and old GMA versions
-* Works without an Internet connection
+* Browse and extract local GMA files offline
 * Choose whether to open Workshop pages after publishing and folders after extraction
 * Copy diagnostics from failed jobs
 * CLI extraction with custom output paths and an option to keep the folder closed
 * (Windows) .GMA file type association for quick extraction
+* Import settings from gmpublisher on first launch
 
 ## Command line
 
@@ -144,20 +149,24 @@ Windows is the primary development and testing platform.
 
 ## Media
 
-![Screenshot](public/screenshots/MyWorkshop.png)
+![My Workshop](public/screenshots/My%20workshop.webp)
 
-![Screenshot](public/screenshots/Publish.png)
+![Publish a new addon](public/screenshots/Publish%20New.webp)
 
-![Screenshot](public/screenshots/Update.png)
+![Edit an addon's description](public/screenshots/Edit.webp)
 
-![Screenshot](public/screenshots/DescriptionEditor.png)
+![Addon settings](public/screenshots/Addon%20Settings.webp)
 
-![Screenshot](public/screenshots/Installed.png)
+![Installed addons](public/screenshots/Installed%20Addons.webp)
 
-![Screenshot](public/screenshots/Extract.png)
+![Extract an addon](public/screenshots/Addon%20Extract.webp)
 
-![Screenshot](public/screenshots/Size.png)
+![Downloader](public/screenshots/Downloader.webp)
 
-![Screenshot](public/screenshots/Settings.png)
+![Addon size analyzer](public/screenshots/Addon%20Size%20Analyzer.webp)
+
+![Addon cleaner](public/screenshots/Addon%20Cleaner.webp)
+
+![Settings](public/screenshots/Settings.webp)
 
 <p align="center"><img src="https://i.imgur.com/Un4akZe.gif"/></p>

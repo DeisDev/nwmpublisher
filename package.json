@@ -7,6 +7,9 @@
 		"dev": "vite",
 		"build": "vite build",
 		"preview": "vite preview",
+		"dev:site": "vite --config site/vite.config.js",
+		"build:site": "vite build --config site/vite.config.js",
+		"preview:site": "vite preview --config site/vite.config.js",
 		"tauri": "tauri"
 	},
 	"dependencies": {
