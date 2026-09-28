@@ -2445,7 +2445,7 @@ dependencies = [
 
 [[package]]
 name = "nwmpublisher"
-version = "3.1.1"
+version = "3.1.2"
 dependencies = [
  "anyhow",
  "atomic_refcell",
