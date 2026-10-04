@@ -1,6 +1,6 @@
 [package]
 name = "nwmpublisher"
-version = "3.1.2"
+version = "3.1.3"
 description = "nwmpublisher"
 authors = ["DeisDev \"CatSniffer\"", "William Venner <william@venner.io>"]
 license = "GPL-3.0"

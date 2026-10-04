@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.3] - 2026-10-03
+
+### Added
+
+- Continue BBCode lists when pressing Enter in the description and changelog editors. Press Enter on an empty item to end the list, or Shift+Enter for a plain new line.
+- Remove formatting by using the same button or shortcut again, and turn selected text into a link by pasting a URL over it.
+- Add optional settings to close BBCode tags as you type and to wrap selected text when typing [.
+
+### Changed
+
+- Find old-format Workshop files and empty Workshop folders in the addon cleaner.
+
+### Fixed
+
+- Fix the addon cleaner listing addons that Steam downloads again after they are deleted.
+
 ## [3.1.2] - 2026-09-28
 
 ### Added
