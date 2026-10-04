@@ -2,7 +2,7 @@
 	import { _ } from 'svelte-i18n';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import { createEventDispatcher, onDestroy } from 'svelte';
-	import { parseBBCode } from '../bbcode';
+	import { closingTag, linkText, listBreak, parseBBCode, unwrapTag } from '../bbcode';
 	import BBCodePreview from './BBCodePreview.svelte';
 
 	export let id;
@@ -39,6 +39,7 @@
 	let beforeInput = null;
 	let composition = null;
 	let lastEdit = null;
+	let listItem = null;
 	$: syncHistory(value, historyKey);
 	$: nodes = parseBBCode(value);
 	$: describedBy = [help && `${id}-help`, size && `${id}-size`, error && `${id}-error`].filter(Boolean).join(' ') || undefined;
@@ -83,6 +84,11 @@
 	function onKeydown(event) {
 		if (disabled || composition || event.isComposing || event.keyCode === 229) return;
 		if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) lastEdit = null;
+		listItem = null;
+		if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+			breakLine(event);
+			return;
+		}
 		if (event.altKey || !(event.ctrlKey || event.metaKey)) return;
 		const key = /^Digit\d$/.test(event.code) ? event.code.slice(-1) : event.key.toLowerCase();
 		if (key === 'z' || (key === 'y' && event.ctrlKey && !event.shiftKey)) {
@@ -96,6 +102,60 @@
 		event.preventDefault();
 		event.stopPropagation();
 		if (!event.repeat) formatText(format.tag);
+	}
+
+	function breakLine(event) {
+		if (input.selectionStart !== input.selectionEnd) return;
+		const result = listBreak(input.value, input.selectionStart);
+		if (!result) return;
+		// Let the browser insert the line break so it keeps the caret in view, then add the marker.
+		if (result.marker) {
+			listItem = result;
+			return;
+		}
+		event.preventDefault();
+		const before = snapshot();
+		input.setRangeText(result.text, result.start, result.end, 'end');
+		recordChange(before);
+	}
+
+	function insertListItem() {
+		const caret = input.selectionStart;
+		input.setRangeText(listItem.marker + listItem.suffix, caret, caret, 'start');
+		input.setSelectionRange(caret + listItem.marker.length, caret + listItem.marker.length);
+	}
+
+	function typeBracket(text) {
+		const start = input.selectionStart;
+		const end = input.selectionEnd;
+		let replacement;
+		if (text === '[' && start !== end && AppSettings.bbcode_wrap_selection) {
+			replacement = `[${input.value.slice(start, end)}]`;
+		} else if (text === ']' && start === end && AppSettings.bbcode_auto_close_tags) {
+			const closing = closingTag(input.value, start);
+			if (!closing) return false;
+			replacement = ']' + closing;
+		} else {
+			return false;
+		}
+		const before = snapshot();
+		input.setRangeText(replacement, start, end, 'start');
+		input.setSelectionRange(start + 1, text === '[' ? end + 1 : start + 1);
+		recordChange(before, text === ']' ? 'insertText' : undefined);
+		return true;
+	}
+
+	function onPaste(event) {
+		if (disabled || composition) return;
+		const start = input.selectionStart;
+		const end = input.selectionEnd;
+		const selected = input.value.slice(start, end);
+		const link = linkText(event.clipboardData?.getData('text/plain') ?? '');
+		if (!selected.trim() || !link || linkText(selected)) return;
+		event.preventDefault();
+		const before = snapshot();
+		input.setRangeText(`[url=${link}]${selected}[/url]`, start, end, 'end');
+		recordChange(before, 'insertFromPaste');
 	}
 
 	function changed() {
@@ -162,6 +222,8 @@
 		if (event.inputType === 'historyUndo' || event.inputType === 'historyRedo') {
 			event.preventDefault();
 			restoreHistory(event.inputType === 'historyRedo');
+		} else if (event.inputType === 'insertText' && typeBracket(event.data)) {
+			event.preventDefault();
 		} else {
 			beforeInput = snapshot();
 		}
@@ -169,7 +231,11 @@
 
 	function onInput(event) {
 		if (composition) changed();
-		else recordChange(beforeInput ?? current, event.inputType);
+		else {
+			if (listItem && ['insertLineBreak', 'insertParagraph'].includes(event.inputType)) insertListItem();
+			recordChange(beforeInput ?? current, event.inputType);
+		}
+		listItem = null;
 	}
 
 	function onCompositionStart() {
@@ -188,6 +254,13 @@
 		const before = snapshot();
 		const start = input.selectionStart;
 		let end = input.selectionEnd;
+		const wrapped = unwrapTag(input.value, start, end, tag);
+		if (wrapped) {
+			input.setRangeText(wrapped.text, wrapped.start, wrapped.end, 'select');
+			input.focus();
+			recordChange(before);
+			return;
+		}
 		let text = input.value.slice(start, end) || (tag === 'img' ? 'https://' : $_(tag === 'url' ? 'bbcode.link_text' : 'bbcode.text'));
 		let opening = tag === 'url' ? '[url=https://]' : `[${tag}]`;
 		let closing = `[/${tag}]`;
@@ -251,7 +324,7 @@
 			{/each}
 		</div>
 		<textarea {id} bind:this={input} value={value} {disabled}
-			on:beforeinput={onBeforeInput} on:input={onInput} on:keydown={onKeydown}
+			on:beforeinput={onBeforeInput} on:input={onInput} on:keydown={onKeydown} on:paste={onPaste}
 			on:compositionstart={onCompositionStart} on:compositionend={onCompositionEnd}
 			on:pointerdown={() => lastEdit = null} on:blur={() => lastEdit = null}
 			class:error={error !== null} aria-invalid={error !== null} aria-describedby={describedBy}

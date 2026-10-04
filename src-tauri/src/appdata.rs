@@ -241,6 +241,8 @@ pub struct Settings {
 
 	pub extract_overwrite_mode: ExtractionOverwriteMode,
 	pub addon_cleaner_permanent_delete: bool,
+	pub bbcode_auto_close_tags: bool,
+	pub bbcode_wrap_selection: bool,
 
 	pub color_neutral: u32,
 	pub color_error: u32,
@@ -282,6 +284,8 @@ impl Default for Settings {
 
 			extract_overwrite_mode: ExtractionOverwriteMode::default(),
 			addon_cleaner_permanent_delete: false,
+			bbcode_auto_close_tags: false,
+			bbcode_wrap_selection: false,
 
 			color_neutral: 28103,
 			color_error: 11010048,
@@ -860,6 +864,19 @@ mod tests {
 		let settings = super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"addon_cleaner_permanent_delete": true})).unwrap()).unwrap();
 		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
 		assert!(loaded.addon_cleaner_permanent_delete);
+	}
+
+	#[test]
+	fn bbcode_editor_preferences_default_off_and_round_trip_independently() {
+		let defaults: Settings = serde_json::from_str("{}").unwrap();
+		assert!(!defaults.bbcode_auto_close_tags);
+		assert!(!defaults.bbcode_wrap_selection);
+		for (close, wrap) in [(true, false), (false, true)] {
+			let patch = serde_json::json!({"bbcode_auto_close_tags": close, "bbcode_wrap_selection": wrap});
+			let settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+			let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+			assert_eq!((loaded.bbcode_auto_close_tags, loaded.bbcode_wrap_selection), (close, wrap));
+		}
 	}
 
 	#[test]

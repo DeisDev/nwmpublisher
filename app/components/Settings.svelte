@@ -107,6 +107,8 @@
 					<Setting {afterChange} id="sounds" type="bool" value={AppSettings.sounds}>{$_('settings.general.sounds')}</Setting>
 					<Setting {afterChange} id="open_workshop_after_publish" type="bool" value={AppSettings.open_workshop_after_publish}>{$_('settings.general.open_workshop_after_publish')}</Setting>
 					<Setting {afterChange} id="open_folder_after_extract" type="bool" value={AppSettings.open_folder_after_extract} tooltip={$_('settings.general.open_folder_after_extract_tooltip')}>{$_('settings.general.open_folder_after_extract')}</Setting>
+					<Setting {afterChange} id="bbcode_auto_close_tags" type="bool" value={AppSettings.bbcode_auto_close_tags} tooltip={$_('settings.general.bbcode_auto_close_tags_tooltip')}>{$_('settings.general.bbcode_auto_close_tags')}</Setting>
+					<Setting {afterChange} id="bbcode_wrap_selection" type="bool" value={AppSettings.bbcode_wrap_selection} tooltip={$_('settings.general.bbcode_wrap_selection_tooltip')}>{$_('settings.general.bbcode_wrap_selection')}</Setting>
 				</div>
 				<div>{$_('open_count', { values: { count: AppData.open_count } })}</div>
 			</div>

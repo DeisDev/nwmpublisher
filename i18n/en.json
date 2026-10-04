@@ -72,7 +72,7 @@
 		"credits": "Based on gmpublisher by William Venner and contributors."
 	},
 	"addon_cleaner": "Addon Cleaner",
-	"cleaner_intro": "Find Workshop GMA files you are no longer subscribed to in Steam content, Garry’s Mod cache, and addons. Loose folders and files without a Workshop ID are left alone.",
+	"cleaner_intro": "Find Workshop addon files and empty Workshop folders you are no longer subscribed to in Steam content, Garry’s Mod cache, and addons. Loose folders and files without a Workshop ID are left alone.",
 	"cleaner_scan": "Scan addons",
 	"cleaner_removal": "Removal",
 	"cleaner_trash": "Move to Recycle Bin / Trash",
@@ -102,7 +102,9 @@
 	"cleaner_previous": "Previous",
 	"cleaner_next": "Next",
 	"cleaner_account": "Subscriptions checked for Steam account {account}.",
-	"cleaner_empty": "No unsubscribed Workshop GMA files found.",
+	"cleaner_kept": "{count, plural, one {Skipped # unsubscribed addon that Steam still manages. Steam would download it again if it were deleted here.} other {Skipped # unsubscribed addons that Steam still manages. Steam would download them again if they were deleted here.}}",
+	"cleaner_empty": "No unsubscribed Workshop files or folders found.",
+	"cleaner_empty_folder": "Empty folder",
 	"cleaner_select_all": "Select all {count, plural, one {# file} other {# files}}",
 	"cleaner_selected": "{count, plural, one {# file selected} other {# files selected}} · {size}",
 	"cleaner_workshop_id": "Workshop ID: {id}",
@@ -122,6 +124,7 @@
 	"cleaner_error_gmod": "Garry’s Mod was not found. Set its folder in Settings and scan again.",
 	"cleaner_error_task": "The cleaner could not finish: {detail}",
 	"cleaner_error_subscribed": "This addon is subscribed or downloading. Its file was kept.",
+	"cleaner_error_steam": "Steam still manages this addon and would download it again. Its file was kept.",
 	"cleaner_error_retained": "The file was not moved to Trash. It is still in its original location.",
 	"addon_preview_error": "Could not load the addon preview: {error}",
 	"ERR_SOURCE_CHANGED": "A source file changed while packaging. Select the source again and retry.",
@@ -415,7 +418,11 @@
 			"sounds": "Sounds",
 			"open_workshop_after_publish": "Open Workshop page after publishing",
 			"open_folder_after_extract": "Open folder after extraction",
-			"open_folder_after_extract_tooltip": "Automatically open the folder after extracting a single addon. Bulk extraction and downloads do not open folders automatically."
+			"open_folder_after_extract_tooltip": "Automatically open the folder after extracting a single addon. Bulk extraction and downloads do not open folders automatically.",
+			"bbcode_auto_close_tags": "Close BBCode tags as you type",
+			"bbcode_auto_close_tags_tooltip": "In the description and changelog editors, typing a tag like [b] adds [/b] after the cursor.",
+			"bbcode_wrap_selection": "Wrap selected text when typing [",
+			"bbcode_wrap_selection_tooltip": "In the description and changelog editors, typing [ with text selected puts brackets around it."
 		},
 
 		"resets": {

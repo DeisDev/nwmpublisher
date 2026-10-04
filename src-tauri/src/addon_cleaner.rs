@@ -126,10 +126,26 @@ pub struct Candidate {
 	source: Source,
 	workshop_id: String,
 	size: u64,
+	folder: bool,
 	#[serde(skip)]
 	modified: SystemTime,
 	#[serde(skip)]
 	created: Option<SystemTime>,
+}
+
+impl Candidate {
+	fn new(path: PathBuf, id: u64, source: Source, metadata: &Metadata) -> Result<Self, CleanerError> {
+		Ok(Self {
+			file_name: path.file_name().unwrap().to_string_lossy().into_owned(),
+			source,
+			folder: metadata.is_dir(),
+			size: if metadata.is_dir() { 0 } else { metadata.len() },
+			modified: metadata.modified().map_err(|error| CleanerError::io(&path, error))?,
+			created: metadata.created().ok(),
+			path,
+			workshop_id: id.to_string(),
+		})
+	}
 }
 
 struct Snapshot {
@@ -145,6 +161,7 @@ pub struct ScanResult {
 	scan_id: String,
 	account: String,
 	files: Vec<Candidate>,
+	kept: usize,
 }
 
 #[derive(Serialize)]
@@ -317,6 +334,16 @@ fn archive_id(path: &Path, legacy: bool) -> Option<u64> {
 	numeric_id(stem).or_else(|| if legacy { numeric_id(stem.rsplit_once('_')?.1) } else { None })
 }
 
+fn is_workshop_archive(path: &Path) -> bool {
+	path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("gma"))
+		|| path
+			.file_name()
+			.and_then(|name| name.to_str())
+			.and_then(|name| name.strip_suffix("_legacy.bin"))
+			.and_then(numeric_id)
+			.is_some()
+}
+
 fn entries(path: &Path) -> Result<Vec<PathBuf>, CleanerError> {
 	match fs::symlink_metadata(path) {
 		Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -341,21 +368,19 @@ fn candidate(path: PathBuf, id: u64, source: Source, subscribed: &HashSet<Publis
 	if !metadata.is_file() || is_link(&metadata) {
 		return Ok(None);
 	}
-	Ok(Some(Candidate {
-		file_name: path.file_name().unwrap().to_string_lossy().into_owned(),
-		source,
-		modified: metadata.modified().map_err(|error| CleanerError::io(&path, error))?,
-		created: metadata.created().ok(),
-		size: metadata.len(),
-		path,
-		workshop_id: id.to_string(),
-	}))
+	Candidate::new(path, id, source, &metadata).map(Some)
 }
 
-fn discover(gmod: &Path, subscribed: &HashSet<PublishedFileId>, progress: &mut Progress) -> Result<Vec<Candidate>, CleanerError> {
+fn discover(
+	gmod: &Path,
+	subscribed: &HashSet<PublishedFileId>,
+	tracked: impl Fn(PublishedFileId) -> bool,
+	progress: &mut Progress,
+) -> Result<(Vec<Candidate>, usize), CleanerError> {
 	check_ancestors(gmod)?;
 	progress.stage("files", None);
 	let mut files = Vec::new();
+	let mut kept = 0;
 	for (folder, source) in [
 		(gmod.join("garrysmod/addons"), Source::Addons),
 		(gmod.join("garrysmod/cache/workshop"), Source::Cache),
@@ -389,9 +414,19 @@ fn discover(gmod: &Path, subscribed: &HashSet<PublishedFileId>, progress: &mut P
 			if !metadata.is_dir() || is_link(&metadata) {
 				continue;
 			}
+			// Steam restores the files of items it still tracks, even unsubscribed cached downloads.
+			if tracked(PublishedFileId(id)) {
+				kept += 1;
+				continue;
+			}
 			// The content root was checked above and this child is a regular directory.
-			for path in read_entries(&folder)? {
-				if path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("gma")) {
+			let paths = read_entries(&folder)?;
+			if paths.is_empty() {
+				files.push(Candidate::new(folder, id, Source::Workshop, &metadata)?);
+				continue;
+			}
+			for path in paths {
+				if is_workshop_archive(&path) {
 					if let Some(file) = candidate(path.clone(), id, Source::Workshop, subscribed)? {
 						files.push(file);
 					}
@@ -403,18 +438,29 @@ fn discover(gmod: &Path, subscribed: &HashSet<PublishedFileId>, progress: &mut P
 	progress.state.found = files.len();
 	progress.send(true);
 	files.sort_by(|a, b| b.size.cmp(&a.size).then_with(|| a.path.cmp(&b.path)));
-	Ok(files)
+	Ok((files, kept))
 }
 
 fn unchanged(file: &Candidate) -> Result<(), CleanerError> {
 	check_ancestors(&file.path)?;
 	let metadata = fs::symlink_metadata(&file.path).map_err(|error| CleanerError::io(&file.path, error))?;
-	if !metadata.is_file()
-		|| metadata.len() != file.size
-		|| metadata.modified().map_err(|error| CleanerError::io(&file.path, error))? != file.modified
-		|| metadata.created().ok() != file.created
-	{
+	let same = if file.folder {
+		metadata.is_dir() && read_entries(&file.path)?.is_empty()
+	} else {
+		metadata.is_file()
+			&& metadata.len() == file.size
+			&& metadata.modified().map_err(|error| CleanerError::io(&file.path, error))? == file.modified
+			&& metadata.created().ok() == file.created
+	};
+	if !same {
 		return Err(CleanerError::new("cleaner_error_changed"));
+	}
+	Ok(())
+}
+
+fn remove_empty_folder(folder: &Path) -> Result<(), CleanerError> {
+	if read_entries(folder)?.is_empty() {
+		fs::remove_dir(folder).map_err(|error| CleanerError::io(folder, error))?;
 	}
 	Ok(())
 }
@@ -508,7 +554,9 @@ fn remove_files(
 		progress.state.path = Some(file.path.clone());
 		progress.send(progress.state.completed == 0);
 		let removal = authorize(&file).and_then(|_| unchanged(&file)).and_then(|_| {
-			if permanent {
+			if file.folder {
+				fs::remove_dir(&file.path).map_err(|error| CleanerError::io(&file.path, error))
+			} else if permanent {
 				fs::remove_file(&file.path).map_err(|error| CleanerError::io(&file.path, error))
 			} else {
 				trash::delete(&file.path).map_err(|error| CleanerError::io(&file.path, error))?;
@@ -521,7 +569,18 @@ fn remove_files(
 			}
 		});
 		match removal {
-			Ok(()) => result.removed.push(file.path),
+			Ok(()) => {
+				if file.source == Source::Workshop && !file.folder {
+					let folder = file.path.parent().unwrap();
+					if let Err(error) = remove_empty_folder(folder) {
+						result.failed.push(FileFailure {
+							path: folder.to_owned(),
+							error,
+						});
+					}
+				}
+				result.removed.push(file.path);
+			}
 			Err(error) => result.failed.push(FileFailure { path: file.path, error }),
 		}
 		progress.state.completed += 1;
@@ -541,12 +600,13 @@ pub async fn scan_addon_cleaner(on_progress: Channel<CleanerProgress>) -> Result
 		let subscribed = subscriptions(owner, &mut progress)?;
 		progress.stage("locating", None);
 		let gmod = app_data!().gmod_dir().ok_or_else(|| CleanerError::new("cleaner_error_gmod"))?;
-		let files = discover(&gmod, &subscribed, &mut progress)?;
+		let (files, kept) = discover(&gmod, &subscribed, |id| !steam!().client().ugc().item_state(id).is_empty(), &mut progress)?;
 		let id = NEXT_SCAN.fetch_add(1, Ordering::Relaxed).to_string();
 		let result = ScanResult {
 			scan_id: id.clone(),
 			account: owner.raw().to_string(),
 			files: files.clone(),
+			kept,
 		};
 		*scan = Some(Snapshot {
 			id,
@@ -589,6 +649,9 @@ pub async fn clean_addons(
 			if subscribed.contains(&id) || state.intersects(ItemState::SUBSCRIBED | ItemState::DOWNLOADING | ItemState::DOWNLOAD_PENDING) {
 				return Err(CleanerError::new("cleaner_error_subscribed"));
 			}
+			if file.source == Source::Workshop && !state.is_empty() {
+				return Err(CleanerError::new("cleaner_error_steam"));
+			}
 			Ok(())
 		});
 		*scan = None;
@@ -624,6 +687,15 @@ mod tests {
 			assert_eq!(archive_id(Path::new(name), true), expected, "{name}");
 		}
 		assert_eq!(archive_id(Path::new("addon_123.gma"), false), None);
+		for (name, expected) in [
+			("content.GMA", true),
+			("1099143090259692554_legacy.bin", true),
+			("_legacy.bin", false),
+			("data.bin", false),
+			("notes.txt", false),
+		] {
+			assert_eq!(is_workshop_archive(Path::new(name)), expected, "{name}");
+		}
 	}
 
 	#[test]
@@ -658,6 +730,7 @@ mod tests {
 			source: Source::Cache,
 			workshop_id: "123".into(),
 			size: 1,
+			folder: false,
 			modified: SystemTime::UNIX_EPOCH,
 			created: None,
 		};
@@ -691,12 +764,18 @@ mod tests {
 			"steamapps/common/GarrysMod/garrysmod/cache/workshop/20.gma",
 			"steamapps/workshop/content/4000/30/content.gma",
 			"steamapps/workshop/content/4000/40/content.gma",
+			"steamapps/workshop/content/4000/50/content.gma",
+			"steamapps/workshop/content/4000/70/123_legacy.bin",
 			"steamapps/workshop/content/4000/30/keep.txt",
+			"steamapps/workshop/content/4000/30/data.bin",
 			"steamapps/workshop/content/4000/30/source/nested.gma",
 		] {
 			let path = root_path.join(path);
 			fs::create_dir_all(path.parent().unwrap()).unwrap();
 			fs::write(path, b"test").unwrap();
+		}
+		for folder in ["40/empty", "60", "80"] {
+			fs::create_dir_all(root_path.join("steamapps/workshop/content/4000").join(folder)).unwrap();
 		}
 		let events = std::sync::Arc::new(Mutex::new(Vec::new()));
 		let received = events.clone();
@@ -706,19 +785,61 @@ mod tests {
 			}
 			Ok(())
 		}));
-		let files = discover(&gmod, &HashSet::from([PublishedFileId(40)]), &mut progress).unwrap();
-		assert_eq!(files.len(), 3);
+		let (files, kept) = discover(&gmod, &HashSet::from([PublishedFileId(40)]), |id| [50, 80].contains(&id.0), &mut progress).unwrap();
+		assert_eq!(kept, 2);
+		assert_eq!(files.len(), 5);
 		assert_eq!(files.iter().find(|file| file.workshop_id == "30").unwrap().source, Source::Workshop);
+		let empty = files.iter().find(|file| file.workshop_id == "60").unwrap();
+		assert!(empty.folder);
+		assert_eq!(empty.size, 0);
+		assert!(files.iter().filter(|file| file.workshop_id != "60").all(|file| !file.folder));
 		let events = events.lock();
-		assert_eq!(events.last().unwrap()["found"], 3);
-		assert!(events.last().unwrap()["completed"].as_u64().unwrap() > 3);
+		assert_eq!(events.last().unwrap()["found"], 5);
+		assert!(events.last().unwrap()["completed"].as_u64().unwrap() > 5);
 		for source in ["addons", "cache", "workshop"] {
 			assert!(events.iter().any(|event| event["source"] == source));
 		}
 		assert_eq!(
 			files.iter().map(|file| file.workshop_id.as_str()).collect::<HashSet<_>>(),
-			HashSet::from(["10", "20", "30"])
+			HashSet::from(["10", "20", "30", "60", "70"])
 		);
+	}
+
+	#[test]
+	fn removing_workshop_content_clears_empty_item_folders_only() {
+		let root = tempfile::tempdir().unwrap();
+		let root_path = fs::canonicalize(root.path()).unwrap();
+		for path in ["1/content.gma", "2/content.gma", "2/keep.txt"] {
+			let path = root_path.join(path);
+			fs::create_dir_all(path.parent().unwrap()).unwrap();
+			fs::write(path, b"test").unwrap();
+		}
+		let mut files = Vec::new();
+		for id in 1..=2 {
+			files.push(
+				candidate(root_path.join(format!("{id}/content.gma")), id, Source::Workshop, &HashSet::new())
+					.unwrap()
+					.unwrap(),
+			);
+		}
+		for id in 3..=4 {
+			let folder = root_path.join(id.to_string());
+			fs::create_dir(&folder).unwrap();
+			let metadata = fs::symlink_metadata(&folder).unwrap();
+			files.push(Candidate::new(folder, id, Source::Workshop, &metadata).unwrap());
+		}
+		fs::write(root_path.join("4/new.gma"), b"test").unwrap();
+		let result = remove_files(files, true, &mut quiet_progress(), |_| Ok(()));
+		assert_eq!(
+			result.removed,
+			vec![root_path.join("1/content.gma"), root_path.join("2/content.gma"), root_path.join("3")]
+		);
+		assert_eq!(result.failed.len(), 1);
+		assert_eq!(result.failed[0].path, root_path.join("4"));
+		assert!(!root_path.join("1").exists());
+		assert!(root_path.join("2/keep.txt").exists());
+		assert!(!root_path.join("3").exists());
+		assert!(root_path.join("4/new.gma").exists());
 	}
 
 	#[test]
