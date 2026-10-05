@@ -66,7 +66,7 @@
 		white-space: pre-wrap;
 	}
 	table.formatted {
-		--cell-border: 1px solid #666;
+		--cell-border: 1px solid var(--border-muted);
 		border-collapse: collapse;
 		max-width: 100%;
 		margin: .5rem 0;
@@ -87,41 +87,41 @@
 		white-space: pre-wrap;
 	}
 	th.formatted {
-		background: #202020;
+		background: var(--bg-subtle);
 	}
 	pre {
 		padding: .7rem;
-		background: #202020;
+		background: var(--bg-subtle);
 		border-radius: 4px;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
 	}
 	blockquote {
 		margin: .5rem 0;
-		border-left: 3px solid #666;
+		border-left: 3px solid var(--border-muted);
 		padding-left: .8rem;
 	}
 	cite {
 		display: block;
-		color: #aaa;
+		color: var(--text-muted);
 	}
 	hr {
 		border: 0;
-		border-top: 1px solid #666;
+		border-top: 1px solid var(--border-muted);
 	}
 	.link {
-		color: #46b0ff;
+		color: var(--link);
 		text-decoration: underline;
 		text-underline-offset: 3px;
 	}
 	.spoiler {
-		background: #202020;
+		background: var(--bg-subtle);
 		padding: .2rem .5rem;
 		border-radius: 4px;
 	}
 	summary {
 		cursor: pointer;
-		color: #aaa;
+		color: var(--text-muted);
 	}
 	summary:focus-visible {
 		outline: 2px solid #127cff;

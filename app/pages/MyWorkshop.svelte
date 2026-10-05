@@ -219,11 +219,11 @@
 		padding: 1rem 1.5rem .5rem;
 	}
 	button, select {
-		border: 1px solid #484848;
+		border: 1px solid var(--border-strong);
 		border-radius: 4px;
 		padding: .6rem .75rem;
-		background: #313131;
-		color: #fff;
+		background: var(--control);
+		color: var(--text);
 		font: inherit;
 		cursor: pointer;
 	}
@@ -233,14 +233,15 @@
 		gap: .5rem;
 	}
 	button:hover, select:hover {
-		background: #414141;
+		background: var(--control-hover);
 	}
 	button.active {
 		border-color: var(--neutral);
 		background: var(--neutral-dark);
+		color: #fff;
 	}
 	button:focus-visible, select:focus-visible, input:focus-visible {
-		outline: 2px solid #fff;
+		outline: 2px solid var(--text);
 		outline-offset: 2px;
 	}
 	.filters {
@@ -254,14 +255,14 @@
 		min-width: 200px;
 		margin: 0;
 		padding: .75rem;
-		border: 1px solid #484848;
+		border: 1px solid var(--border-strong);
 		border-radius: 4px;
-		background: #252525;
+		background: var(--bg-raised);
 		box-shadow: 0 6px 18px #0008;
 	}
 	legend {
 		padding: 0 .35rem;
-		background: #252525;
+		background: var(--bg-raised);
 	}
 	fieldset label {
 		display: flex;
@@ -286,10 +287,10 @@
 		margin: .5rem 1.5rem 0;
 	}
 	.status {
-		color: #bbb;
+		color: var(--text-soft);
 	}
 	.error {
-		color: #ffb6b6;
+		color: var(--text-error-soft);
 	}
 	.results {
 		flex: 1;

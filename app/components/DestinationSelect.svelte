@@ -196,9 +196,9 @@
 	}
 	#destinations .destination {
 		border-radius: .4rem;
-		background-color: #292929;
+		background-color: var(--bg-preview);
 		box-shadow: 0 0 6px rgb(0 0 0 / 20%);
-		border: 1px solid #101010;
+		border: 1px solid var(--border-sunken);
 		cursor: pointer;
 		height: 7rem;
 		width: 7rem;
@@ -216,7 +216,7 @@
 	}
 	#destinations .destination:active,
 	#destinations .destination.active {
-		background-color: #0e0e0e;
+		background-color: var(--bg-sunken-3);
 	}
 	#destinations .destination img, #destinations .destination :global(.icon), #destinations .destination :global(svg) {
 		height: 2.5rem;
@@ -234,10 +234,10 @@
 		display: block;
 		margin-bottom: .8rem;
 		padding: .8rem;
-		background-color: #0e0e0e;
+		background-color: var(--bg-sunken-3);
 		width: 100%;
 		font: inherit;
-		color: #fff;
+		color: var(--text);
 		font-size: .9em;
 	}
 	input[type='text']:focus {
@@ -250,9 +250,9 @@
 		flex: 1;
 		overflow: auto;
 		margin-top: 1.5rem;
-		background-color: #292929;
+		background-color: var(--bg-preview);
 		box-shadow: inset 0 0 6px 2px rgb(0 0 0 / 20%);
-		border: 1px solid #101010;
+		border: 1px solid var(--border-sunken);
 		border-radius: .4rem;
 	}
 	#history > div {
@@ -267,7 +267,7 @@
 		background-color: rgb(0, 0, 0, .12);
 	}
 	#history > div.active {
-		background-color: #0e0e0e;
+		background-color: var(--bg-sunken-3);
 	}
 	#checkbox {
 		margin-bottom: 1rem;
@@ -289,6 +289,7 @@
 		padding: .7rem;
 		text-align: center;
 		background-color: var(--neutral);
+		color: #fff;
 		z-index: 3;
 		box-shadow: 0 0 5px rgba(0, 0, 0, .1);
 		cursor: pointer;
@@ -297,6 +298,6 @@
 		transition: background-color .5s;
 	}
 	.extract-btn.disabled {
-		background-color: rgb(59, 59, 59);
+		background-color: var(--control-hover-alt);
 	}
 </style>

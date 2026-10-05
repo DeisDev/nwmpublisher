@@ -155,7 +155,7 @@
 		cursor: pointer;
 	}
 	main:not(.previewing):hover #card {
-		background-color: rgba(45, 45, 45, 1);
+		background-color: var(--bg-card);
 		box-shadow: 0px 0px 4px rgb(0 0 0 / 40%);
 	}
 	main #title {
@@ -185,7 +185,7 @@
 		flex: 0;
 		margin-top: .8rem;
 		box-shadow: 0 0 2px 1px rgba(0, 0, 0, .5);
-		background-color: #0c0c0c;
+		background-color: var(--bg-sunken-2);
 	}
 	main #preview > img {
 		width: 100%;
@@ -212,14 +212,14 @@
 		bottom: 0;
 	}
 	main #preview.dead :global(svg), main #preview.loading :global(svg) {
-		color: #212121;
+		color: var(--preview-icon);
 	}
 	main #preview.new :global(svg) {
-		color: #424242;
+		color: var(--preview-icon-new);
 		transition: color .1s;
 	}
 	main:hover #preview.new :global(svg) {
-		color: #fff;
+		color: var(--text);
 	}
 	main :global(.highlight) {
 		background-color: rgba(255, 255, 0, .5);

@@ -89,7 +89,7 @@
 		max-height: 70px;
 		padding: .8rem;
 		padding-right: 1.5rem;
-		background-color: #323232;
+		background-color: var(--bg-navbar);
 		box-shadow: 0px 0px 10px rgba(0,0,0,0.4);
 		top: 0;
 		left: 0;
@@ -130,7 +130,7 @@
 
 	@keyframes steam-connection-error {
 		0% {
-			color: white;
+			color: var(--text);
 		}
 		100% {
 			color: red;

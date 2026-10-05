@@ -44,9 +44,9 @@
 		display: inline-block;
 		max-width: 100%;
 		padding: .4rem .7rem;
-		border: 1px dashed #666;
+		border: 1px dashed var(--border-muted);
 		border-radius: 4px;
-		color: #aaa;
+		color: var(--text-muted);
 		font-size: .85em;
 		white-space: normal;
 	}

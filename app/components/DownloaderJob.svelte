@@ -138,15 +138,16 @@
 		left: 0;
 		z-index: -1;
 		background-color: var(--success-dark);
+		color: #fff;
 	}
 	div.progress.error {
-		background-color: var(--error-dark);
+		background-color: var(--error-dark); color: #fff;
 	}
 	td.progress.finished {
 		cursor: pointer;
 	}
 	td.progress.finished > div.progress {
-		background-color: var(--neutral);
+		background-color: var(--neutral); color: #fff;
 	}
 	td.progress::before {
 		content: '';

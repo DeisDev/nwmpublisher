@@ -43,19 +43,19 @@
 {/if}
 
 <style>
-	.workshop-stats { flex: 0 0 auto; border: 1px solid #414141; border-radius: 4px; background: #292929; font-size: .85em; }
+	.workshop-stats { flex: 0 0 auto; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-preview); font-size: .85em; }
 	summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .4rem 1rem; padding: .6rem .75rem; cursor: pointer; list-style: none; border-radius: 4px; }
-	summary:hover { background: #313131; }
+	summary:hover { background: var(--control); }
 	summary::-webkit-details-marker { display: none; }
 	summary:focus-visible { outline: 2px solid #127cff; outline-offset: -2px; }
 	.details-label, .dates, .banned { display: flex; align-items: center; gap: .6rem; }
-	.details-label { color: #fff; font-weight: 600; }
-	.dates { flex-wrap: wrap; color: #aaa; gap: .4rem 1rem; }
+	.details-label { color: var(--text); font-weight: 600; }
+	.dates { flex-wrap: wrap; color: var(--text-muted); gap: .4rem 1rem; }
 	.dates > span { white-space: nowrap; }
-	.expanded { max-height: 28vh; overflow: auto; padding: 0 .75rem .6rem; border-top: 1px solid #414141; }
+	.expanded { max-height: 28vh; overflow: auto; padding: 0 .75rem .6rem; border-top: 1px solid var(--border); }
 	dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .9rem 1rem; margin: .8rem 0; }
-	dt { color: #aaa; margin-bottom: .25rem; }
-	dd { margin: 0; color: #fff; font-size: 1.1em; font-variant-numeric: tabular-nums; }
-	p { color: #aaa; margin: .5rem 0 0; font-size: .9em; line-height: 1.4; }
+	dt { color: var(--text-muted); margin-bottom: .25rem; }
+	dd { margin: 0; color: var(--text); font-size: 1.1em; font-variant-numeric: tabular-nums; }
+	p { color: var(--text-muted); margin: .5rem 0 0; font-size: .9em; line-height: 1.4; }
 	.banned { color: #fff; padding: .6rem .75rem; background: var(--error-dark); border-radius: 3px 3px 0 0; }
 </style>

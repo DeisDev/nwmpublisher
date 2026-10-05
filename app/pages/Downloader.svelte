@@ -451,9 +451,9 @@
 	#layout .table {
 		position: relative;
 		flex: 1;
-		background-color: #292929;
+		background-color: var(--bg-preview);
 		box-shadow: inset 0 0 6px 2px rgb(0 0 0 / 20%);
-		border: 1px solid #101010;
+		border: 1px solid var(--border-sunken);
 		border-radius: .4rem;
 		height: 100%;
 		flex-basis: 0;
@@ -476,7 +476,7 @@
 		border-collapse: collapse;
 	}
 	#layout .table table thead tr {
-		background-color: #212121;
+		background-color: var(--bg-panel);
 	}
 	#layout .table th {
 		text-align: center;
@@ -534,7 +534,7 @@
 		height: max-content;
 		text-align: center;
 		line-height: 1.6;
-		text-shadow: 0px 1px 0px rgb(0, 0, 0, .6);
+		text-shadow: var(--text-shadow);
 		max-width: min(calc(100% - 2rem), 16rem);
 	}
 	#layout .working {
@@ -567,12 +567,12 @@
 		font: inherit;
 		border-radius: 4px;
 		border: none;
-		background: #313131;
+		background: var(--control);
 		box-shadow: 0px 0px 2px 0px rgba(0, 0, 0, .4);
 		width: 100%;
 		padding: 1rem;
 		padding-left: 2.5rem;
-		color: #fff;
+		color: var(--text);
 	}
 	#download-input:focus {
 		outline: none;
@@ -596,18 +596,18 @@
 	#layout .btn {
 		display: inline-block;
 		padding: .5rem;
-		background-color: #212121;
+		background-color: var(--bg-panel);
 		padding-left: 1rem;
 		padding-right: 1rem;
 		box-shadow: inset 0 0 3px #0000002e;
 		border-radius: .3rem;
 		margin-top: 1rem;
-		border: 1px solid #1a1a1a;
+		border: 1px solid var(--bg-app);
 		cursor: pointer;
 		text-align: center;
 	}
 	#layout .btn:active {
-		background-color: #1b1b1b;
+		background-color: var(--bg-app-alt);
 	}
 
 	#layout table.idle {
@@ -627,12 +627,12 @@
 	.buttons .btn {
 		flex: 1;
 		flex-basis: 0;
-		background-color: #292929 !important;
+		background-color: var(--bg-preview) !important;
 		font-size: .9em;
 		padding: .7rem !important;
 	}
 	.buttons .btn:active {
-		background-color: #212121 !important;
+		background-color: var(--bg-panel) !important;
 	}
 	.buttons .btn:not(:last-child) {
 		margin-right: 1rem;

@@ -109,7 +109,7 @@
 	setting > .name {
 		font-size: .9em;
 		padding-bottom: .8rem;
-		text-shadow: 0px 1px 0px rgba(0, 0, 0, .6);
+		text-shadow: var(--text-shadow);
 	}
 	setting:not(:last-child) {
 		margin-bottom: 1.5rem;
@@ -120,9 +120,9 @@
 		font: inherit;
 		border-radius: 4px;
 		border: none;
-		background: rgba(255,255,255,.1);
+		background: var(--fill);
 		box-shadow: 0px 0px 2px 0px rgb(0 0 0 / 40%);
-		color: #fff;
+		color: var(--text);
 		font-size: .85em;
 		width: 100%;
 		height: 2rem;
@@ -134,10 +134,10 @@
 		font: inherit;
 		border-radius: 4px;
 		border: none;
-		background: rgba(255,255,255,.1);
+		background: var(--fill);
 		box-shadow: 0px 0px 2px 0px rgba(0, 0, 0, .4);
 		padding: .7rem;
-		color: #fff;
+		color: var(--text);
 		font-size: .85em;
 	}
 	input[type='text']:focus {
@@ -165,10 +165,10 @@
 		font: inherit;
 		border-radius: 4px;
 		border: none;
-		background: rgba(255,255,255,.1);
+		background: var(--fill);
 		box-shadow: 0px 0px 2px 0px rgb(0 0 0 / 40%);
 		padding: .7rem;
-		color: #fff;
+		color: var(--text);
 		font-size: .85em;
 		width: 100%;
 		cursor: pointer;
@@ -180,11 +180,11 @@
 		outline: none;
 	}
 	option {
-		background: #313131;
-		color: #fff;
+		background: var(--control);
+		color: var(--text);
 	}
 	option:hover {
-		background: #CECECE;
-		color: #313131;
+		background: var(--toggle-on);
+		color: var(--toggle-on-text);
 	}
 </style>

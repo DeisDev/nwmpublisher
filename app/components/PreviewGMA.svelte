@@ -272,7 +272,7 @@
 	}
 	:global(#gma-preview) #content {
 		display: flex;
-		background-color: #131313;
+		background-color: var(--bg-content);
 		height: 100%;
 		box-shadow: rgba(0, 0, 0, .24) 0px 3px 8px;
 	}
@@ -287,7 +287,7 @@
 		width: 17rem;
 		padding: 1.5rem;
 		box-shadow: 0 0 10px 5px rgba(0, 0, 0, .25);
-		background-color: #212121;
+		background-color: var(--bg-panel);
 		z-index: 2;
 		flex: 1;
 	}
@@ -313,7 +313,7 @@
 		margin: 0;
 		margin-top: .8rem;
 		white-space: pre-line;
-		color: #888;
+		color: var(--text-subtle);
 	}
 
 	#addon #avatar, #addon #avatar + span {
@@ -343,6 +343,7 @@
 		padding: .7rem;
 		text-align: center;
 		background-color: var(--neutral);
+		color: #fff;
 		z-index: 3;
 		box-shadow: 0 0 5px rgba(0, 0, 0, .1);
 		cursor: pointer;
@@ -351,7 +352,7 @@
 		transition: background-color .5s;
 	}
 	.extract-btn.disabled {
-		background-color: rgb(59, 59, 59);
+		background-color: var(--control-hover-alt);
 	}
 
 	:global(#addon > .loading:first-child) {

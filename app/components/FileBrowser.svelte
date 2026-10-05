@@ -299,7 +299,7 @@
 		transition: background-color .1s;
 	}
 	#entries > table tr:hover {
-		background-color: #212121;
+		background-color: var(--bg-panel);
 	}
 	#entries td:first-child img {
 		width: 16px;
@@ -316,15 +316,15 @@
 		height: 0;
 	}
 	#entries.background {
-		background-color: #292929;
+		background-color: var(--bg-preview);
 		box-shadow: inset 0 0 6px 2px rgb(0 0 0 / 20%);
-		border: 1px solid #101010;
+		border: 1px solid var(--border-sunken);
 	}
 	#entries .shortcut {
 		opacity: .5;
 	}
 	#nav {
-		background-color: #0a0a0a;
+		background-color: var(--bg-sunken);
 		font-size: .8em;
 		display: flex;
 	}
@@ -363,7 +363,7 @@
 		font-size: .8em;
 		text-align: center;
 		padding: .6rem;
-		background-color: #0a0a0a;
+		background-color: var(--bg-sunken);
 		transition: background-color .25s;
 		display: grid;
 		grid-template-rows: 1fr;

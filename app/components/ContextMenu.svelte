@@ -286,8 +286,8 @@ import { playSound } from '../sounds';
 		position: absolute;
 		animation: context-menu .25s forwards;
 		z-index: 9999;
-		background-color: #4A4A4A;
-		color: #fff;
+		background-color: var(--bg-menu);
+		color: var(--text);
 		font-size: .9em;
 		border-radius: .2rem;
 		overflow: hidden;
@@ -301,7 +301,7 @@ import { playSound } from '../sounds';
 	}
 
 	.divider {
-		background-color: #636363;
+		background-color: var(--bg-menu-hover);
 		height: 1px;
 	}
 

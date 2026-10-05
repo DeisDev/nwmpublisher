@@ -65,7 +65,7 @@
 	.btn {
 		cursor: pointer;
 		flex: 1;
-		background: #313131;
+		background: var(--control);
 		box-shadow: 0px 0px 2px 0px rgb(0 0 0 / 40%);
 		border-radius: 4px;
 		padding: .7rem;
@@ -74,13 +74,14 @@
 		justify-content: center;
 	}
 	.btn:active {
-		background: #252525;
+		background: var(--bg-raised);
 	}
 	.btn.primary {
 		background-color: var(--neutral);
+		color: #fff;
 		margin-right: .75rem;
 	}
 	.btn.primary:active {
-		background: #252525;
+		background: var(--bg-raised);
 	}
 </style>

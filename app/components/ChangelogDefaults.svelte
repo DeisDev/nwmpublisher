@@ -124,36 +124,36 @@
 
 <style>
 	.preferences { min-width: 0; }
-	.addon { padding-bottom: 1.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid #414141; }
+	.addon { padding-bottom: 1.5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
 	h2 { margin: 0; font-size: 1em; }
-	p { color: #aaa; line-height: 1.5; font-size: .85em; margin: .5rem 0 1rem; }
-	.addon-name { color: #fff; font-weight: 600; overflow-wrap: anywhere; margin-bottom: .5rem; }
+	p { color: var(--text-muted); line-height: 1.5; font-size: .85em; margin: .5rem 0 1rem; }
+	.addon-name { color: var(--text); font-weight: 600; overflow-wrap: anywhere; margin-bottom: .5rem; }
 	fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 	legend, .template-label { font-size: .9em; font-weight: 600; padding: 0; margin-bottom: .6rem; }
-	.choice { display: flex; align-items: flex-start; gap: .6rem; padding: .65rem; margin-bottom: .5rem; border: 1px solid #414141; border-radius: 4px; cursor: pointer; }
+	.choice { display: flex; align-items: flex-start; gap: .6rem; padding: .65rem; margin-bottom: .5rem; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
 	.addon .choice { gap: .75rem; padding: 1rem; margin-bottom: .75rem; }
-	.choice.selected { background: #292929; border-color: #aaa; }
+	.choice.selected { background: var(--bg-preview); border-color: var(--text-muted); }
 	.choice span { min-width: 0; }
 	.choice strong { font-size: .85em; font-weight: 600; }
-	.choice small { display: block; color: #aaa; font-size: .8em; line-height: 1.4; margin-top: .25rem; }
+	.choice small { display: block; color: var(--text-muted); font-size: .8em; line-height: 1.4; margin-top: .25rem; }
 	input { margin: .15rem 0 0; accent-color: var(--neutral); flex-shrink: 0; }
 	fieldset:disabled { opacity: .6; }
 	fieldset:disabled .choice { cursor: default; }
 	.template-label { display: block; margin-top: 1rem; }
-	button, textarea { font: inherit; color: #fff; border: 0; border-radius: 4px; padding: .65rem; font-size: .85em; }
-	textarea { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.1); min-height: 7rem; resize: vertical; }
-	button { background: #313131; cursor: pointer; }
+	button, textarea { font: inherit; color: var(--text); border: 0; border-radius: 4px; padding: .65rem; font-size: .85em; }
+	textarea { width: 100%; box-sizing: border-box; background: var(--fill); min-height: 7rem; resize: vertical; }
+	button { background: var(--control); cursor: pointer; }
 	.addon button { padding: .8rem 1rem; }
-	button:hover:enabled { background: #414141; }
+	button:hover:enabled { background: var(--control-hover); }
 	button:disabled { opacity: .5; cursor: default; }
 	button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid #127cff; outline-offset: 2px; }
 	.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .75rem; }
 	.addon .actions { margin-top: 1.25rem; }
-	.actions span { margin-right: auto; font-size: .8em; color: #aaa; }
-	.primary { background: var(--neutral); }
-	.primary:hover:enabled { background: var(--neutral-dark); }
+	.actions span { margin-right: auto; font-size: .8em; color: var(--text-muted); }
+	.primary { background: var(--neutral); color: #fff; }
+	.primary:hover:enabled { background: var(--neutral-dark); color: #fff; }
 	.save-help { margin-top: 1rem; }
 	.error { padding: .7rem; background: var(--error-dark); color: #fff; border-radius: 4px; overflow-wrap: anywhere; }
 	.error p { color: inherit; }
-	.notice { padding: .75rem; background: #292929; border-radius: 4px; }
+	.notice { padding: .75rem; background: var(--bg-preview); border-radius: 4px; }
 </style>

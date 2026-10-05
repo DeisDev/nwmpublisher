@@ -1,4 +1,5 @@
 import { switchLanguage } from './i18n.js';
+import { applyTheme } from './theme.js';
 import App from './App.svelte';
 import { mount } from 'svelte';
 
@@ -46,6 +47,7 @@ window.updateCustomColor = function(name, colorInt) {
 
 __NWMPUBLISHER__(() => {
 	if (AppSettings.language) switchLanguage(AppSettings.language);
+	applyTheme(AppSettings.theme);
 
 	updateCustomColor('neutral', AppSettings.color_neutral);
 	updateCustomColor('success', AppSettings.color_success);

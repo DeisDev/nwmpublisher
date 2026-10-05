@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-10-05
+
+### Added
+
+- Convert a Keep a Changelog section to BBCode when pasting it into the changelog editor. Undo once to keep the original text, or turn this off in Settings.
+- Add a light theme. The app follows your system setting by default, and you can pick Dark or Light in Settings.
+- Import the newest changes from the addon folder's CHANGELOG.md into the changelog editor.
+- Convert pasted Markdown to BBCode in the description editor, or import the addon folder's README.md.
+- Show the changelog's size and block changelogs that are too long for Steam before uploading.
+
+### Changed
+
+- Install alongside gmpublisher on Windows instead of replacing it.
+- Block installing an older version of nwmpublisher over a newer one on Windows.
+- Skip Markdown and CHANGELOG files, AI and editor folders such as .claude, .codex, .agents and .idea, .gitkeep files, and model source files when packing addons.
+
 ### Fixed
 
 - Fix a checksum error when extracting or downloading addons made with older versions of gmpublisher.

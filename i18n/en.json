@@ -62,7 +62,7 @@
 		"package_linux": "AppImage",
 		"package_deb": "Ubuntu / Debian (.deb)",
 		"package_rpm": "Fedora (.rpm)",
-		"install_windows": "Run the installer. It replaces an existing gmpublisher installation and offers to import your settings on first launch.",
+		"install_windows": "Run the installer. It installs separately from gmpublisher and offers to import your gmpublisher settings on first launch.",
 		"install_windows_portable": "Portable: extract the ZIP and run nwmpublisher.exe. It shares settings with the installed app and requires Microsoft WebView2 Runtime.",
 		"install_macos": "Open the disk image and drag nwmpublisher into Applications. If macOS blocks it, allow it in System Settings → Privacy & Security after the first launch attempt.",
 		"install_linux": "Install the package for your distribution, or allow the AppImage to run as a program in its file properties. On Steam Deck, use Desktop Mode.",
@@ -413,6 +413,13 @@
 			"downloads": "Downloads Path"
 		},
 
+		"theme": {
+			"theme": "Theme",
+			"system": "Match system",
+			"dark": "Dark",
+			"light": "Light"
+		},
+
 		"general": {
 			"general": "General",
 			"sounds": "Sounds",
@@ -422,7 +429,11 @@
 			"bbcode_auto_close_tags": "Close BBCode tags as you type",
 			"bbcode_auto_close_tags_tooltip": "In the description and changelog editors, typing a tag like [b] adds [/b] after the cursor.",
 			"bbcode_wrap_selection": "Wrap selected text when typing [",
-			"bbcode_wrap_selection_tooltip": "In the description and changelog editors, typing [ with text selected puts brackets around it."
+			"bbcode_wrap_selection_tooltip": "In the description and changelog editors, typing [ with text selected puts brackets around it.",
+			"bbcode_convert_pasted_changelogs": "Convert pasted Keep a Changelog notes to BBCode",
+			"bbcode_convert_pasted_markdown": "Convert pasted Markdown to BBCode",
+			"bbcode_convert_pasted_markdown_tooltip": "In the description editor, pasted Markdown (headings, lists, links, bold and italic) is converted to BBCode. Undo once to keep the original text.",
+			"bbcode_convert_pasted_changelogs_tooltip": "In the changelog editor, pasted Markdown in the Keep a Changelog format (headings like ## [1.2.0] or ### Added, with - list items) is converted to BBCode. Undo once to keep the original text."
 		},
 
 		"resets": {
@@ -476,6 +487,9 @@
 	"ERR_ICON_INVALID_FORMAT": "Icon must be a JPG, PNG or GIF",
 	"ERR_DESCRIPTION_TOO_LONG": "Workshop description must be at most 7,999 UTF-8 bytes. Shorten it before publishing.",
 	"ERR_DESCRIPTION_CONTAINS_NUL": "Workshop description contains a NUL character. Remove it before publishing.",
+	"ERR_CHANGELOG_TOO_LONG": "Changelog must be at most 7,999 UTF-8 bytes. Shorten it before publishing.",
+	"ERR_CHANGELOG_CONTAINS_NUL": "Changelog contains a NUL character. Remove it before publishing.",
+	"ERR_ADDON_DOCUMENT_TOO_LARGE": "{file} is too large to import.",
 	"ERR_LZMA": "LZMA Compression Error",
 	"ERR_DOWNLOAD_FAILED": "Download Failed",
 	"ERR_ITEM_NOT_FOUND": "Item Not Found",
@@ -599,6 +613,12 @@
 	"upscale_addon_icon": "Scale to 512x512",
 	"changelog": "Changelog",
 	"changelog_optional": "Changelog (optional)",
+	"addon_document": {
+		"import": "Import {file}",
+		"missing": "No {file} was found in the addon folder.",
+		"failed": "Could not read {file}: {error}",
+		"changelog_empty": "CHANGELOG.md has no changes to import."
+	},
 	"update_warning": "You are pushing an UPDATE to {title} ({id})",
 
 	"PUBLISH_PACKING": "Packing {pct}% ({data} / {dataTotal})",

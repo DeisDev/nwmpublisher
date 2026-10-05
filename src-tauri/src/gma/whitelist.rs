@@ -100,6 +100,24 @@ pub const DEFAULT_IGNORE: &[&str] = &[
 	".vscode/*",
 	".github/*",
 	".vs/*",
+	".idea/*",
+	".svn/*",
+	".hg/*",
+	".claude/*",
+	".codex/*",
+	".agents/*",
+	".cursor/*",
+	".gemini/*",
+	".windsurf/*",
+	".cursorrules",
+	".windsurfrules",
+	"*.code-workspace",
+	".env",
+	".luarc.json",
+	".luacheckrc",
+	"stylua.toml",
+	".stylua.toml",
+	"selene.toml",
 	".editorconfig",
 	"LICENSE",
 	"LICENSE.*",
@@ -109,11 +127,31 @@ pub const DEFAULT_IGNORE: &[&str] = &[
 	"README.*",
 	"readme",
 	"readme.*",
+	"CHANGELOG",
+	"CHANGELOG.*",
+	"changelog",
+	"changelog.*",
+	"*.md",
 	"addon.json",
 	"addon.txt",
 	"addon.jpg",
 	"thumbs.db",
 	"desktop.ini",
+	"*/.DS_Store",
+	"*/thumbs.db",
+	"*/desktop.ini",
+	".gitkeep",
+	"*/.gitkeep",
+	"*/.gitignore",
+	"*.blend",
+	"*.blend1",
+	"*.smd",
+	"*.qc",
+	"*.qci",
+	"*.dmx",
+	"*.fbx",
+	"*.tga",
+	"*.tmp",
 	"models/*.sw.vtx",
 	"models/*.360.vtx",
 	"models/*.xbox.vtx",
@@ -320,6 +358,21 @@ fn test_ignore() {
 		"hi.xcf",
 		"addon.jpg",
 		"addon.json",
+		"AGENTS.md",
+		"docs/notes.md",
+		"CHANGELOG",
+		"changelog.txt",
+		".claude/settings.local.json",
+		".codex/config.toml",
+		".agents/skills/review/SKILL.md",
+		".cursorrules",
+		".gitkeep",
+		"materials/models/.gitkeep",
+		"lua/autorun/.DS_Store",
+		"lua/.gitignore",
+		".luarc.json",
+		"source/model.blend",
+		"source/model.qc",
 	];
 
 	for ignored in ignored {
@@ -335,6 +388,14 @@ fn test_ignore() {
 	assert!(is_ignored("lua/hello.lua", &["lua/*.lua".to_string()]));
 	assert!(is_ignored("lua/hello.lua", &["lua/*".to_string()]));
 	assert!(!is_ignored("lol.txt", &[]));
+}
+
+#[test]
+fn default_ignore_keeps_addon_content() {
+	for path in ["lua/autorun/changelog.lua", "lua/agents/init.lua", "materials/readme.vmt", "lua/claude/sh_init.lua", "materials/.claude.png"] {
+		assert!(filter_default_ignored(path), "{}", path);
+		assert!(check(path), "{}", path);
+	}
 }
 
 #[test]

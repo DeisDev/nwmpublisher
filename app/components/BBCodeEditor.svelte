@@ -1,6 +1,7 @@
 <script>
 	import { _ } from 'svelte-i18n';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import FileInput from '@lucide/svelte/icons/file-input';
 	import { createEventDispatcher, onDestroy } from 'svelte';
 	import { closingTag, linkText, listBreak, parseBBCode, unwrapTag } from '../bbcode';
 	import BBCodePreview from './BBCodePreview.svelte';
@@ -15,6 +16,9 @@
 	export let formattingOpen = false;
 	export let active = true;
 	export let historyKey = 0;
+	export let convertPaste = null;
+	export let importLabel = '';
+	export let importDisabled = false;
 
 	const dispatch = createEventDispatcher();
 	const formats = [
@@ -149,13 +153,34 @@
 		if (disabled || composition) return;
 		const start = input.selectionStart;
 		const end = input.selectionEnd;
+		const text = (event.clipboardData?.getData('text/plain') ?? '').replace(/\r\n?/g, '\n');
+		const converted = convertPaste?.(text);
+		if (converted != null) {
+			event.preventDefault();
+			// Record the original paste first so a single undo restores it.
+			const before = snapshot();
+			input.setRangeText(text, start, end, 'end');
+			recordChange(before, 'insertFromPaste');
+			const pasted = snapshot();
+			input.setRangeText(converted, start, start + text.length, 'end');
+			recordChange(pasted);
+			return;
+		}
 		const selected = input.value.slice(start, end);
-		const link = linkText(event.clipboardData?.getData('text/plain') ?? '');
+		const link = linkText(text);
 		if (!selected.trim() || !link || linkText(selected)) return;
 		event.preventDefault();
 		const before = snapshot();
 		input.setRangeText(`[url=${link}]${selected}[/url]`, start, end, 'end');
 		recordChange(before, 'insertFromPaste');
+	}
+
+	export function insert(text) {
+		if (disabled || composition) return;
+		const before = snapshot();
+		input.focus({ preventScroll: true });
+		input.setRangeText(text, before.selection[0], before.selection[1], 'end');
+		recordChange(before);
 	}
 
 	function changed() {
@@ -308,6 +333,11 @@
 				<button type="button" title={`${$_('bbcode.redo')} (Ctrl+Y / Ctrl/Cmd+Shift+Z)`} aria-label={$_('bbcode.redo')} aria-keyshortcuts="Control+Y Control+Shift+Z Meta+Shift+Z" disabled={disabled || !!composition || !redoStack.length} on:click={() => restoreHistory(true)}>
 					<span aria-hidden="true">↷</span>
 				</button>
+				{#if importLabel}
+					<button type="button" class="import-button" disabled={disabled || importDisabled} on:click={() => dispatch('import')}>
+						<FileInput class="icon" size=".85rem"/>{importLabel}
+					</button>
+				{/if}
 				<button type="button" class="formatting-toggle" aria-expanded={formattingOpen} aria-controls={`${id}-toolbar`} on:click={() => formattingOpen = !formattingOpen}>
 					<span class="chevron" class:expanded={formattingOpen}><ChevronRight class="icon" size=".85rem"/></span>{$_('bbcode.formatting')}
 				</button>
@@ -358,7 +388,7 @@
 		margin: 0;
 		padding: 1rem;
 		border: 0;
-		background: #1a1a1a;
+		background: var(--bg-app);
 		color: inherit;
 		font: inherit;
 	}
@@ -408,14 +438,14 @@
 		font: inherit;
 		font-size: .8em;
 		padding: .35rem .5rem;
-		border: 1px solid #414141;
+		border: 1px solid var(--border);
 		border-radius: 4px;
-		background: #313131;
-		color: #fff;
+		background: var(--control);
+		color: var(--text);
 		cursor: pointer;
 	}
 	button:hover:not(:disabled) {
-		background: #414141;
+		background: var(--control-hover);
 	}
 	button:focus-visible, .preview:focus-visible {
 		outline: 2px solid #127cff;
@@ -425,7 +455,7 @@
 		opacity: .5;
 		cursor: default;
 	}
-	.formatting-toggle {
+	.formatting-toggle, .import-button {
 		display: flex;
 		align-items: center;
 		gap: .3rem;
@@ -467,10 +497,10 @@
 		font: .85em/1.5 monospace;
 		border-radius: 4px;
 		border: none;
-		background: rgba(255,255,255,.1);
+		background: var(--fill);
 		box-shadow: 0 0 2px rgb(0 0 0 / 40%);
 		padding: .7rem;
-		color: #fff;
+		color: var(--text);
 		width: 100%;
 		resize: none;
 		flex: 1 1 0;
@@ -494,12 +524,12 @@
 		color: var(--error);
 	}
 	.preview-heading {
-		border-top: 1px solid #414141;
+		border-top: 1px solid var(--border);
 		padding-top: .65rem;
 		margin-top: .25rem;
 	}
 	.live, .empty {
-		color: #aaa;
+		color: var(--text-muted);
 		font-size: .85em;
 	}
 	.preview {
@@ -508,7 +538,7 @@
 		overflow: auto;
 		padding: .8rem;
 		border-radius: 4px;
-		background: #292929;
+		background: var(--bg-preview);
 		font-size: .9em;
 		line-height: 1.5;
 		white-space: pre-wrap;

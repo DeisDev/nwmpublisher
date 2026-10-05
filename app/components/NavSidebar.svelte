@@ -95,11 +95,11 @@
 		line-height: 1.8em;
 	}
 	#credits a {
-		color: #636363;
+		color: var(--text-faint);
 		transition: color .25s;
 	}
 	#credits a:hover {
-		color: #fff;
+		color: var(--text);
 	}
 
 	:global(#nav-sidebar #logo) {

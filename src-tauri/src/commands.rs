@@ -46,6 +46,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 		crate::steam::workshop_management::save_workshop_settings,
 		crate::steam::downloads::workshop_download,
 		crate::steam::publishing::verify_whitelist,
+		crate::steam::publishing::read_addon_document,
 		crate::steam::publishing::publish,
 		crate::steam::publish_jobs::publish_operations,
 		crate::steam::publish_jobs::reconcile_publish,

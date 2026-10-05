@@ -70,7 +70,7 @@
 		right: 0;
 		margin: auto;
 
-		background-color: #1a1a1a;
+		background-color: var(--bg-app);
 		border-radius: .3rem;
 		box-shadow: 0 0 10px rgba(0, 0, 0, .25);
 

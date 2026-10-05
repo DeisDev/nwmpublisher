@@ -38,7 +38,7 @@
 		font: inherit;
 		color: inherit;
 		background: rgba(0, 0, 0, .2);
-		border: 1px solid rgba(255, 255, 255, .4);
+		border: 1px solid var(--overlay-border);
 		border-radius: .25rem;
 		cursor: pointer;
 		padding: .25rem .5rem;

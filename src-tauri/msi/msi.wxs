@@ -11,21 +11,17 @@
 <?endif?>
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-	<Product Id="*" Name="{{{product_name}}}" UpgradeCode="9C296848-ABD3-4538-92D0-3BC4E408F34C" Language="1033" Codepage="1252" Manufacturer="{{{manufacturer}}}" Version="{{{version}}}">
+	<Product Id="*" Name="{{{product_name}}}" UpgradeCode="0B8B261A-4840-4A5A-9E82-B51D66D26E7B" Language="1033" Codepage="1252" Manufacturer="{{{manufacturer}}}" Version="{{{version}}}">
 
 		<Package Id="*" Description="{{{product_name}}} Installer" Manufacturer="{{{manufacturer}}}" Comments="Garry's Mod Workshop Publishing Utility" Keywords="Installer" InstallerVersion="450" Languages="1033" Compressed="yes" InstallScope="perMachine" SummaryCodepage="1252"/>
 
-		<!-- Installers in this family replace each other, so this one takes over from an existing
-		     gmpublisher install. Matching every version, newer ones included, also keeps the fork
-		     installable when upstream has released a higher version, and removes the previous product
-		     before any files are written. -->
-		<Upgrade Id="9C296848-ABD3-4538-92D0-3BC4E408F34C">
-			<UpgradeVersion Minimum="0.0.0" IncludeMinimum="yes" Property="WIX_UPGRADE_DETECTED" RemoveFeatures="ALL" />
-		</Upgrade>
+		<MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="!(loc.DowngradeErrorMessage)" AllowSameVersionUpgrades="yes" />
 
-		<InstallExecuteSequence>
-			<RemoveExistingProducts After="InstallInitialize" />
-		</InstallExecuteSequence>
+		<!-- nwmpublisher 3.0.0 to 3.1.3 shared gmpublisher's upgrade code. Remove only those versions
+		     so a gmpublisher install stays in place. -->
+		<Upgrade Id="9C296848-ABD3-4538-92D0-3BC4E408F34C">
+			<UpgradeVersion Minimum="3.0.0" IncludeMinimum="yes" Maximum="3.1.3" IncludeMaximum="yes" MigrateFeatures="yes" Property="SHARED_UPGRADE_CODE_DETECTED" />
+		</Upgrade>
 
 		<Media Id="1" Cabinet="app.cab" EmbedCab="yes" />
 

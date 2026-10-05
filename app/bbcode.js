@@ -175,3 +175,166 @@ export function parseBBCode(source) {
 	while (stack.length > 1) preserveUnclosed();
 	return root.children;
 }
+
+const keepAChangelogHeading = /^(?:##[ \t]+\[?(?:unreleased|v?\d+\.\d+\.\d+)|###[ \t]+(?:added|changed|deprecated|removed|fixed|security)[ \t]*$)/im;
+const changelogSectionHeading = /^[ \t]{0,3}##[ \t]/;
+const unreleasedHeading = /^[ \t]{0,3}##[ \t]+\[?unreleased\]?/i;
+const bbcodeTag = /\[\/?(?:b|i|u|strike|h[1-3]|spoiler|url|list|olist|quote|code|noparse|img|hr|table|tr|th|td)(?:=[^\]\n]*)?\]|\[\*\]/i;
+const markdownSignals = [
+	/^[ \t]{0,3}#{1,6}[ \t]+\S/m,
+	/^[ \t]{0,3}(?:`{3,}|~{3,})/m,
+	/!?\[[^\]\n]+\]\([^)\s]+\)/,
+	/\*\*\S(?:[^\n]*?\S)?\*\*/,
+	/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\S.*\n[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\S/m,
+];
+const markdownHeading = /^[ \t]{0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
+const markdownItem = /^([ \t]*)(?:([-*+])|\d{1,9}[.)])[ \t]+(.*)$/;
+const markdownRule = /^[ \t]{0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+const markdownFence = /^[ \t]{0,3}(`{3,}|~{3,})/;
+const markdownReference = /^[ \t]{0,3}\[([^\]]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^)]*\)))?[ \t]*$/;
+const markdownInlineToken = /(`+)(?!`)([\s\S]*?[^`])\1(?!`)|(!?)\[([^\]]*)\](?:\(<?([^\s()<>]+)>?(?:[ \t]+(?:"[^"]*"|'[^']*'))?\)|\[([^\]]*)\])?|<(https?:\/\/[^\s<>]+)>|https?:\/\/[^\s<>()[\]]+|\\([!-/:-@[-`{-~])/g;
+
+function referenceKey(label) {
+	return label.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function markdownInline(text, references) {
+	const kept = [];
+	// Finished BBCode and literal text are held in placeholders so emphasis rules cannot alter them.
+	const keep = value => `\uE000${kept.push(value) - 1}\uE001`;
+	return text
+		.replace(markdownInlineToken, (match, ticks, code, image, label, url, reference, autolink, escaped) => {
+			if (ticks) {
+				const content = code.trim();
+				return keep(content.includes('[') ? `[noparse]${content}[/noparse]` : content);
+			}
+			if (escaped) return keep(escaped);
+			if (autolink) return keep(autolink);
+			if (label === undefined) return keep(match);
+			const target = url ?? references.get(referenceKey(reference || label));
+			if (!target) return match;
+			if (image) return keep(`[img]${target}[/img]`);
+			return keep(`[url=${target.replace(/]/g, '%5D')}]${markdownInline(label, references)}[/url]`);
+		})
+		.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, '[b]$1[/b]')
+		.replace(/(^|[^\p{L}\p{N}_])__(?=\S)([\s\S]*?\S)__(?![\p{L}\p{N}_])/gu, '$1[b]$2[/b]')
+		.replace(/~~(?=\S)([\s\S]*?\S)~~/g, '[strike]$1[/strike]')
+		.replace(/\*(?=[^\s*])([^*]*?[^\s*])\*/g, '[i]$1[/i]')
+		.replace(/(^|[^\p{L}\p{N}_])_(?=[^\s_])([^_]*?[^\s_])_(?![\p{L}\p{N}_])/gu, '$1[i]$2[/i]')
+		.replace(/\uE000(\d+)\uE001/g, (_, index) => kept[index]);
+}
+
+function renderList(items, references) {
+	const lines = [];
+	const open = [];
+	for (const item of items) {
+		while (open.length && (item.indent < open[open.length - 1].indent || (item.indent === open[open.length - 1].indent && item.tag !== open[open.length - 1].tag))) {
+			lines.push(`[/${open.pop().tag}]`);
+		}
+		if (!open.length || item.indent > open[open.length - 1].indent) {
+			open.push(item);
+			lines.push(`[${item.tag}]`);
+		}
+		lines.push('[*]' + markdownInline(item.text, references));
+	}
+	while (open.length) lines.push(`[/${open.pop().tag}]`);
+	return lines.join('\n');
+}
+
+export function markdownToBBCode(source) {
+	const text = source.replace(/\r\n?/g, '\n');
+	const references = new Map();
+	const lines = text.split('\n').filter(line => {
+		const reference = markdownReference.exec(line);
+		const key = reference && referenceKey(reference[1]);
+		if (reference && !references.has(key)) references.set(key, reference[2]);
+		return !reference;
+	});
+
+	const blocks = [];
+	let block = null;
+	for (let index = 0; index < lines.length; index++) {
+		const line = lines[index];
+		const fence = markdownFence.exec(line);
+		if (fence) {
+			const closing = new RegExp(`^[ \\t]{0,3}${fence[1][0]}{${fence[1].length},}[ \\t]*$`);
+			let end = index + 1;
+			while (end < lines.length && !closing.test(lines[end])) end++;
+			blocks.push({ type: 'code', text: `[code]${lines.slice(index + 1, end).join('\n')}[/code]` });
+			block = null;
+			index = end;
+			continue;
+		}
+		const heading = markdownHeading.exec(line);
+		if (heading) {
+			const level = Math.min(heading[1].length, 3);
+			// Keep a Changelog links version headings to definitions that a pasted section often leaves out.
+			const title = (heading[2] ?? '').replace(/^\[([^\]]+)\](?![[(])/, (match, label) => references.has(referenceKey(label)) ? match : label);
+			blocks.push({ type: 'heading', text: `[h${level}]${markdownInline(title, references)}[/h${level}]` });
+			block = null;
+			continue;
+		}
+		if (markdownRule.test(line)) {
+			blocks.push({ type: 'rule', text: '[hr][/hr]' });
+			block = null;
+			continue;
+		}
+		if (!line.trim()) {
+			if (block?.type === 'list') block.blank = true;
+			else block = null;
+			continue;
+		}
+		const item = markdownItem.exec(line);
+		if (item) {
+			if (block?.type !== 'list') blocks.push(block = { type: 'list', items: [] });
+			block.blank = false;
+			block.items.push({ indent: item[1].replace(/\t/g, '    ').length, tag: item[2] ? 'list' : 'olist', text: item[3].trim() });
+			continue;
+		}
+		if (block?.type === 'list' && (!block.blank || /^[ \t]/.test(line))) {
+			const last = block.items[block.items.length - 1];
+			last.text = [last.text, line.trim()].filter(Boolean).join(' ');
+			block.blank = false;
+			continue;
+		}
+		if (block?.type === 'paragraph') block.lines.push(line.trim());
+		else blocks.push(block = { type: 'paragraph', lines: [line.trim()] });
+	}
+
+	let output = '';
+	blocks.forEach((block, index) => {
+		if (index) output += block.type === 'paragraph' && blocks[index - 1].type === 'paragraph' ? '\n\n' : '\n';
+		if (block.type === 'list') output += renderList(block.items, references);
+		else if (block.type === 'paragraph') output += markdownInline(block.lines.join(' '), references);
+		else output += block.text;
+	});
+	return text.endsWith('\n') ? output + '\n' : output;
+}
+
+export function changelogToBBCode(source) {
+	const text = source.replace(/\r\n?/g, '\n');
+	return keepAChangelogHeading.test(text) && !bbcodeTag.test(text) ? markdownToBBCode(text) : null;
+}
+
+export function markdownPasteToBBCode(source) {
+	const text = source.replace(/\r\n?/g, '\n');
+	return markdownSignals.some(signal => signal.test(text)) && !bbcodeTag.test(text) ? markdownToBBCode(text) : null;
+}
+
+export function changelogImportSection(source) {
+	const lines = source.replace(/\r\n?/g, '\n').split('\n');
+	const references = lines.filter(line => markdownReference.test(line));
+	const hasChanges = section => section?.body.some(line => line.trim());
+	let section = null;
+	for (const line of lines) {
+		if (changelogSectionHeading.test(line)) {
+			if (hasChanges(section)) break;
+			section = { heading: line, body: [] };
+		} else if (section && !markdownReference.test(line)) {
+			section.body.push(line);
+		}
+	}
+	if (!hasChanges(section)) return null;
+	const heading = unreleasedHeading.test(section.heading) ? [] : [section.heading];
+	return [...heading, ...section.body, '', ...references].join('\n').trim();
+}

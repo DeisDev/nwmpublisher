@@ -20,6 +20,6 @@
 		margin-right: .5rem;
 	}
 	main:hover {
-		background-color: rgba(255,255,255,.1);
+		background-color: var(--fill);
 	}
 </style>

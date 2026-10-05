@@ -42,9 +42,8 @@ which is already present on most Windows PCs.
 
 ### Upgrading from gmpublisher
 
-On Windows, installing nwmpublisher **replaces** an existing gmpublisher installation. The installer
-uses the same upgrade code as gmpublisher, so Windows uninstalls gmpublisher and its shortcuts
-first — the two can't be installed side by side.
+On Windows, nwmpublisher installs separately and leaves gmpublisher installed, so you can use both.
+Versions 3.1.3 and earlier replaced gmpublisher; after updating, you can install gmpublisher again.
 
 Your settings are left where they are. On first launch nwmpublisher finds them and offers to import
 them — destinations, local addon paths and preferences — then restarts with them applied.

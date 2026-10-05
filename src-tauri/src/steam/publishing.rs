@@ -25,6 +25,8 @@ pub enum PublishError {
 	IconInvalidFormat,
 	DescriptionTooLong,
 	DescriptionContainsNul,
+	ChangelogTooLong,
+	ChangelogContainsNul,
 	IOError(#[source] crate::IoError),
 	SteamError(#[source] SteamError),
 	ImageError {
@@ -48,6 +50,8 @@ impl std::fmt::Display for PublishError {
 			PublishError::IconInvalidFormat => write!(f, "ERR_ICON_INVALID_FORMAT"),
 			PublishError::DescriptionTooLong => write!(f, "ERR_DESCRIPTION_TOO_LONG"),
 			PublishError::DescriptionContainsNul => write!(f, "ERR_DESCRIPTION_CONTAINS_NUL"),
+			PublishError::ChangelogTooLong => write!(f, "ERR_CHANGELOG_TOO_LONG"),
+			PublishError::ChangelogContainsNul => write!(f, "ERR_CHANGELOG_CONTAINS_NUL"),
 			PublishError::IOError(error) => write!(f, "ERR_IO_ERROR:{}", error),
 			PublishError::SteamError(error) => write!(f, "ERR_STEAM_ERROR:{}", error),
 			PublishError::ImageError { operation, path, source } => write!(f, "ERR_IMAGE_ERROR:{} \"{}\": {}", operation, path.display(), source),
@@ -276,6 +280,8 @@ impl WorkshopIcon {
 
 // k_cchPublishedDocumentDescriptionMax is 8000, including the C string terminator.
 const WORKSHOP_DESCRIPTION_MAX_BYTES: usize = 7999;
+// k_cchPublishedDocumentChangeDescriptionMax is also 8000, including the C string terminator.
+const WORKSHOP_CHANGELOG_MAX_BYTES: usize = 7999;
 
 fn validate_description(description: Option<&str>) -> Result<(), PublishError> {
 	if let Some(description) = description {
@@ -284,6 +290,18 @@ fn validate_description(description: Option<&str>) -> Result<(), PublishError> {
 		}
 		if description.contains('\0') {
 			return Err(PublishError::DescriptionContainsNul);
+		}
+	}
+	Ok(())
+}
+
+fn validate_changelog(changes: Option<&str>) -> Result<(), PublishError> {
+	if let Some(changes) = changes {
+		if changes.len() > WORKSHOP_CHANGELOG_MAX_BYTES {
+			return Err(PublishError::ChangelogTooLong);
+		}
+		if changes.contains('\0') {
+			return Err(PublishError::ChangelogContainsNul);
 		}
 	}
 	Ok(())
@@ -542,6 +560,42 @@ pub fn verify_whitelist(path: PathBuf) -> Result<(Vec<GMAEntry>, u64), GMAError>
 	ContentManifest::build(&path, &ignore, || false).map(ContentManifest::into_preview)
 }
 
+#[derive(Clone, Copy, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AddonDocument {
+	Changelog,
+	Readme,
+}
+
+const ADDON_DOCUMENT_MAX_BYTES: u64 = 1024 * 1024;
+
+#[tauri::command]
+pub fn read_addon_document(content_path: PathBuf, document: AddonDocument) -> Result<Option<String>, String> {
+	if !content_path.is_absolute() {
+		return Err(PublishError::InvalidContentPath.to_string());
+	}
+	let name = match document {
+		AddonDocument::Changelog => "changelog.md",
+		AddonDocument::Readme => "readme.md",
+	};
+	let folder_error = |error| crate::IoError::new("read addon folder", &content_path, error).to_string();
+	let mut found = None;
+	for entry in std::fs::read_dir(&content_path).map_err(folder_error)? {
+		let entry = entry.map_err(folder_error)?;
+		if entry.file_name().to_string_lossy().eq_ignore_ascii_case(name) && entry.path().is_file() {
+			found = Some(entry.path());
+			break;
+		}
+	}
+	let Some(path) = found else { return Ok(None) };
+	let document_error = |error| crate::IoError::new("read addon document", &path, error).to_string();
+	if path.metadata().map_err(document_error)?.len() > ADDON_DOCUMENT_MAX_BYTES {
+		return Err("ERR_ADDON_DOCUMENT_TOO_LARGE".to_owned());
+	}
+	let text = std::fs::read_to_string(&path).map_err(document_error)?;
+	Ok(Some(text.strip_prefix('\u{feff}').unwrap_or(&text).to_owned()))
+}
+
 #[tauri::command]
 pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId) -> u32 {
 	let transaction = crate::transactions::new_publish();
@@ -715,6 +769,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 		let result = with_publish_staging(&temp_dir, |root, content| {
 			job.staging(root)?;
 			validate_description(description.as_deref()).map_err(|error| error.to_string())?;
+			validate_changelog(changes.as_deref()).map_err(|error| error.to_string())?;
 			if transaction.aborted() {
 				return Ok(None);
 			}
@@ -1157,6 +1212,28 @@ mod tests {
 			publish_description(PublishedFileId(0), "before\0after".to_owned()),
 			Err(PublishError::DescriptionContainsNul)
 		));
+	}
+
+	#[test]
+	fn changelog_reserves_space_for_the_nul_terminator_and_rejects_nul() {
+		let changes = "a".repeat(WORKSHOP_CHANGELOG_MAX_BYTES);
+		assert!(validate_changelog(None).is_ok());
+		assert!(validate_changelog(Some(&changes)).is_ok());
+		assert!(matches!(validate_changelog(Some(&(changes + "a"))), Err(PublishError::ChangelogTooLong)));
+		assert!(matches!(validate_changelog(Some("before\0after")), Err(PublishError::ChangelogContainsNul)));
+	}
+
+	#[test]
+	fn addon_documents_are_found_case_insensitively() {
+		let directory = tempfile::tempdir().unwrap();
+		assert_eq!(read_addon_document(directory.path().to_owned(), AddonDocument::Changelog), Ok(None));
+		std::fs::write(directory.path().join("CHANGELOG.MD"), "\u{feff}## [1.0.0]").unwrap();
+		std::fs::write(directory.path().join("readme.md"), "# Addon").unwrap();
+		assert_eq!(read_addon_document(directory.path().to_owned(), AddonDocument::Changelog), Ok(Some("## [1.0.0]".to_owned())));
+		assert_eq!(read_addon_document(directory.path().to_owned(), AddonDocument::Readme), Ok(Some("# Addon".to_owned())));
+		std::fs::write(directory.path().join("readme.md"), vec![b'a'; ADDON_DOCUMENT_MAX_BYTES as usize + 1]).unwrap();
+		assert_eq!(read_addon_document(directory.path().to_owned(), AddonDocument::Readme), Err("ERR_ADDON_DOCUMENT_TOO_LARGE".to_owned()));
+		assert!(read_addon_document(PathBuf::from("relative"), AddonDocument::Readme).is_err());
 	}
 
 	#[test]

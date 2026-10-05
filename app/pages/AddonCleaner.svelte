@@ -263,38 +263,38 @@
 	.cleaner { height: 100%; overflow: auto; padding: 1.5rem; }
 	h2 { margin: 0 0 .75rem; }
 	p { line-height: 1.5; }
-	header > p, .account, .kept, small { color: #aaa; }
+	header > p, .account, .kept, small { color: var(--text-muted); }
 	.toolbar, .selection, .actions, footer { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
 	.toolbar { margin: 1rem 0; }
 	.mode { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
-	button, select { padding: .65rem .85rem; border: 0; border-radius: .25rem; color: #fff; background: #313131; font: inherit; }
+	button, select { padding: .65rem .85rem; border: 0; border-radius: .25rem; color: var(--text); background: var(--control); font: inherit; }
 	button { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; cursor: pointer; }
-	button.scan { background: var(--neutral); }
-	button.remove { background: var(--error); }
+	button.scan { background: var(--neutral); color: #fff; }
+	button.remove { background: var(--error); color: #fff; }
 	button:hover:not(:disabled) { filter: brightness(1.15); }
 	button:disabled, select:disabled { opacity: .45; cursor: default; }
-	button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+	button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 	.selection { justify-content: space-between; margin: 1rem 0; }
 	.selection label { display: flex; align-items: center; gap: .5rem; }
-	.files { background: #131313; border-radius: .3rem; }
+	.files { background: var(--bg-content); border-radius: .3rem; }
 	.file { display: flex; align-items: center; gap: .75rem; padding: .85rem; }
-	.file + .file { border-top: 1px solid #313131; }
-	.file:hover { background: #212121; }
+	.file + .file { border-top: 1px solid var(--control); }
+	.file:hover { background: var(--bg-panel); }
 	.file-info { flex: 1; min-width: 0; }
-	.title { color: #fff; font-weight: 600; overflow-wrap: anywhere; }
-	.title:hover { color: #46b0ff; }
-	.preview { display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; flex-shrink: 0; background: #212121; color: #aaa; }
+	.title { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+	.title:hover { color: var(--link); }
+	.preview { display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; flex-shrink: 0; background: var(--bg-panel); color: var(--text-muted); }
 	.preview img { width: 100%; height: 100%; object-fit: contain; }
 	.path { overflow-wrap: anywhere; }
 	small { display: block; margin-top: .3rem; }
 	.size { white-space: nowrap; }
 	input[type='checkbox'] { flex-shrink: 0; accent-color: var(--neutral); }
 	footer { justify-content: flex-end; margin-top: 1rem; }
-	.error { color: #fff; border-inline-start: 3px solid var(--error); padding-inline-start: .75rem; overflow-wrap: anywhere; }
-	.progress-panel { background: #212121; border-radius: .3rem; padding: 1rem; margin-block: 1rem; }
+	.error { color: var(--text); border-inline-start: 3px solid var(--error); padding-inline-start: .75rem; overflow-wrap: anywhere; }
+	.progress-panel { background: var(--bg-panel); border-radius: .3rem; padding: 1rem; margin-block: 1rem; }
 	.progress { display: flex; align-items: center; gap: .75rem; }
 	progress { width: 100%; height: .5rem; accent-color: var(--neutral); margin-block: .75rem .25rem; }
-	.details-status { color: #aaa; }
+	.details-status { color: var(--text-muted); }
 	.pagination { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: 1rem; }
 	.progress :global(.loading) { position: static; margin: 0; }
 	.confirmation { width: min(28rem, 70vw); }

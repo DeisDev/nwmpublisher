@@ -51,10 +51,10 @@
 
 	@keyframes update-available {
 		0% {
-			color: #9effc9;
+			color: var(--text-success);
 		}
 		100% {
-			color: white;
+			color: var(--text);
 		}
 	}
 </style>

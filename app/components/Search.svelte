@@ -217,12 +217,12 @@
 		font: inherit;
 		border-radius: 4px;
 		border: none;
-		background: rgba(255,255,255,.1);
+		background: var(--fill);
 		box-shadow: 0px 0px 2px 0px rgb(0 0 0 / 40%);
 		width: 100%;
 		padding: .8rem;
 		padding-left: 2.5rem;
-		color: #fff;
+		color: var(--text);
 	}
 	#search:focus {
 		outline: none;
@@ -263,7 +263,7 @@
 	main > #search-results {
 		position: absolute;
 		top: 100%;
-		background: #474747;
+		background: var(--bg-popover);
 		box-shadow: 0 0 10px #0000009e;
 		z-index: 1;
 		max-height: calc(100vh - 70px - 1rem);
@@ -321,7 +321,7 @@
 	}
 	#search-results a.association:hover {
 		opacity: 1;
-		color: #46b0ff;
+		color: var(--link);
 	}
 
 	#search-results .image {

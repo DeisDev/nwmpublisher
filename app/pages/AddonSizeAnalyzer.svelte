@@ -578,7 +578,7 @@
 	}
 
 	main {
-		background-color: #1a1a1a;
+		background-color: var(--bg-app);
 		border-radius: .3rem;
 		box-shadow: 0 0 0 #000 inset;
 
@@ -663,12 +663,13 @@
 		z-index: -1;
 		height: calc(100% - .6rem);
 		background-color: var(--neutral);
+		color: #fff;
 		top: .3rem;
 		left: .3rem;
 	}
 
 	#progress-log {
-		text-shadow: 0px 1px 0px rgba(0, 0, 0, 0.6);
+		text-shadow: var(--text-shadow);
 		text-align: center;
 		max-height: 0;
 	}

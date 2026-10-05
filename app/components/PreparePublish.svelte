@@ -21,6 +21,8 @@
 	import FileBrowser from './FileBrowser.svelte';
 	import BBCodeEditor from './BBCodeEditor.svelte';
 	import ChangelogEditor from './ChangelogEditor.svelte';
+	import { markdownPasteToBBCode, markdownToBBCode } from '../bbcode';
+	import { readAddonDocument } from '../addon-documents';
 	import ChangelogDefaults from './ChangelogDefaults.svelte';
 	import { writable } from 'svelte/store';
 	import { Transaction } from '../transactions';
@@ -41,6 +43,9 @@
 	let workshopSettings;
 	let changelogEditor;
 	let changelogBusy = false;
+	let changelogInvalid = null;
+	let descriptionEditor;
+	let importingReadme = false;
 	let changelogSettingsBusy = false;
 
 	async function togglePreparePublish() {
@@ -125,6 +130,20 @@
 			event.stopPropagation();
 			publishModeOpen = false;
 			publishModeButton.focus();
+		}
+	}
+
+	function convertDescriptionPaste(text) {
+		return AppSettings.bbcode_convert_pasted_markdown ? markdownPasteToBBCode(text) : null;
+	}
+
+	async function importReadme() {
+		importingReadme = true;
+		try {
+			const text = await readAddonDocument(pathValue, 'readme', 'README.md');
+			if (text !== null) descriptionEditor.insert(markdownToBBCode(text));
+		} finally {
+			importingReadme = false;
 		}
 	}
 
@@ -733,7 +752,7 @@
 		{#if $updatingAddon}<WorkshopStats item={workshopInfo} estimatedSize={pathValue ? gmaSize : null}/>{/if}
 		<div class="workspace-tabs" role="tablist" aria-label={$_('publish_tabs.label')}>
 			{#each tabs as tab, index}
-				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={tab === 'description' && descriptionError !== null} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'settings' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
+				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={(tab === 'description' && descriptionError !== null) || (tab === 'changelog' && changelogInvalid !== null)} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'settings' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
 			{/each}
 		</div>
 		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
@@ -754,10 +773,10 @@
 			</details>
 		</div>
 		<div id="publish-panel-description" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-description" tabindex="0" hidden={activeTab !== 'description'}>
-			<BBCodeEditor id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'} historyKey={editorHistoryKey}/>
+			<BBCodeEditor bind:this={descriptionEditor} id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} convertPaste={convertDescriptionPaste} importLabel={$_('addon_document.import', { values: { file: 'README.md' } })} importDisabled={!pathValue || importingReadme} on:import={importReadme} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'} historyKey={editorHistoryKey}/>
 		</div>
 		<div id="publish-panel-changelog" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-changelog" tabindex="0" hidden={activeTab !== 'changelog'}>
-			<ChangelogEditor bind:this={changelogEditor} addonId={$updatingAddon?.id ?? null} contentPath={pathValue || null} bind:value={changes} bind:busy={changelogBusy} disabled={$isPublishing} active={$preparePublish} editorActive={activeTab === 'changelog'}/>
+			<ChangelogEditor bind:this={changelogEditor} addonId={$updatingAddon?.id ?? null} contentPath={pathValue || null} bind:value={changes} bind:busy={changelogBusy} bind:invalid={changelogInvalid} disabled={$isPublishing} active={$preparePublish} editorActive={activeTab === 'changelog'}/>
 			{#if $updatingAddon}
 				<div class="editor-footer">
 					<a href={`https://steamcommunity.com/sharedfiles/filedetails/changelog/${$updatingAddon.id}`} on:click|preventDefault={openChangeNotes}>{$_('view_edit_change_notes')}<LinkOut class="icon" size=".85rem"/></a>
@@ -821,28 +840,28 @@
 	.workspace-tabs {
 		display: flex;
 		flex-shrink: 0;
-		border-bottom: 1px solid #414141;
+		border-bottom: 1px solid var(--border);
 	}
 	.workspace-tabs button {
 		flex: 1;
 		padding: .7rem;
 		font: inherit;
-		color: #aaa;
+		color: var(--text-muted);
 		border: 0;
 		border-bottom: 2px solid transparent;
 		background: transparent;
 		cursor: pointer;
 	}
 	.workspace-tabs button[aria-selected='true'] {
-		color: #fff;
-		background: #252525;
-		border-bottom-color: #fff;
+		color: var(--text);
+		background: var(--bg-raised);
+		border-bottom-color: var(--text);
 	}
 	.workspace-tabs button:hover {
-		background: #313131;
+		background: var(--control);
 	}
 	.workspace-tabs button.invalid {
-		color: #ff7777;
+		color: var(--text-error);
 	}
 	.workspace-tabs button:focus-visible, summary:focus-visible, .workspace-panel:focus-visible {
 		outline: 2px solid #127cff;
@@ -876,16 +895,16 @@
 		justify-content: center;
 		gap: .5rem;
 		padding: .6rem .75rem;
-		border: 1px solid #414141;
+		border: 1px solid var(--border);
 		border-radius: 4px;
-		background: #313131;
-		color: #fff;
+		background: var(--control);
+		color: var(--text);
 		font: inherit;
 		text-decoration: none;
 		cursor: pointer;
 	}
 	.editor-footer a:hover {
-		background: #414141;
+		background: var(--control-hover);
 	}
 	.editor-footer a:focus-visible {
 		outline: 2px solid #127cff;
@@ -905,10 +924,10 @@
 		font: inherit;
 		border-radius: 4px;
 		border: none;
-		background: rgba(255,255,255,.1);
+		background: var(--fill);
 		box-shadow: 0px 0px 2px 0px rgba(0, 0, 0, .4);
 		padding: .7rem;
-		color: #fff;
+		color: var(--text);
 		font-size: .85em;
 		width: 100%;
 	}
@@ -949,9 +968,9 @@
 		position: relative;
 		overflow: hidden;
 		cursor: pointer;
-		background-color: #101010;
+		background-color: var(--bg-sunken-4);
 		box-shadow: inset 0 0 6px 2px rgb(0 0 0 / 20%);
-		border: 1px solid #101010;
+		border: 1px solid var(--border-sunken);
 		border-radius: .4rem;
 	}
 	#icon-browse-container {
@@ -962,7 +981,7 @@
 	}
 	#icon-browse, #icon-publish {
 		cursor: pointer;
-		background: #313131;
+		background: var(--control);
 		box-shadow: 0px 0px 2px 0px rgb(0 0 0 / 40%);
 		border-radius: 4px;
 		padding: .7rem;
@@ -973,14 +992,15 @@
 	#icon-publish {
 		margin-left: .5rem;
 		background-color: var(--neutral);
+		color: #fff;
 		transition: background-color .5s;
 	}
 	#icon-publish.disabled {
 		cursor: default;
-		background-color: #313131;
+		background-color: var(--control);
 	}
 	#icon-browse:active, #icon-publish:active {
-		background: #252525;
+		background: var(--bg-raised);
 	}
 	#icon-browse > :global(.icon) {
 		margin-right: .5rem;
@@ -1065,10 +1085,10 @@
 		font: inherit;
 		border-radius: 4px;
 		border: none;
-		background: rgba(255,255,255,.1);
+		background: var(--fill);
 		box-shadow: 0px 0px 2px 0px rgb(0 0 0 / 40%);
 		padding: .7rem;
-		color: #fff;
+		color: var(--text);
 		font-size: .85em;
 		width: 100%;
 		cursor: pointer;
@@ -1080,12 +1100,12 @@
 		outline: none;
 	}
 	option {
-		background: #313131;
-		color: #fff;
+		background: var(--control);
+		color: var(--text);
 	}
 	option:hover {
-		background: #CECECE;
-		color: #313131;
+		background: var(--toggle-on);
+		color: var(--toggle-on-text);
 	}
 	select:nth-child(2) {
 		margin-left: 1rem;
@@ -1102,7 +1122,7 @@
 		list-style: none;
 		padding: .7rem;
 		border-radius: 4px;
-		background: #313131;
+		background: var(--control);
 		cursor: pointer;
 		font-size: .85em;
 	}
@@ -1123,9 +1143,9 @@
 		overflow: auto;
 		max-height: 10rem;
 		margin-top: .75rem;
-		background-color: #292929;
+		background-color: var(--bg-preview);
 		box-shadow: inset 0 0 6px 2px rgb(0 0 0 / 20%);
-		border: 1px solid #101010;
+		border: 1px solid var(--border-sunken);
 		border-radius: .4rem;
 	}
 	.ignore-patterns > * {
@@ -1134,7 +1154,7 @@
 		border: 0;
 		border-radius: 0;
 		background: transparent;
-		color: #fff;
+		color: var(--text);
 		font: inherit;
 		padding: .6rem;
 		font-size: .9em;
@@ -1146,7 +1166,7 @@
 		cursor: pointer;
 	}
 	.ignore-patterns > .default {
-		color: rgba(255,255,255,.5);
+		color: var(--text-dim);
 	}
 	.ignore-patterns > :nth-child(2n-1) {
 		background-color: rgb(0, 0, 0, .12);
@@ -1160,7 +1180,7 @@
 	.workspace-panel.workshop-panel { overflow: hidden; }
 	#publish-actions button {
 		font: inherit;
-		color: #fff;
+		color: var(--text);
 		border: 0;
 		cursor: pointer;
 	}
@@ -1172,6 +1192,7 @@
 		padding: .7rem;
 		text-align: center;
 		background-color: var(--neutral);
+		color: #fff;
 		box-shadow: 0 0 5px rgba(0, 0, 0, .1);
 		text-shadow: 0px 1px 0px rgba(0, 0, 0, .6);
 		line-height: 1.2;
@@ -1193,8 +1214,8 @@
 		border-left: 1px solid rgba(0, 0, 0, .3);
 	}
 	#publish-actions button:disabled {
-		background-color: #313131;
-		color: #aaa;
+		background-color: var(--control);
+		color: var(--text-muted);
 		cursor: default;
 	}
 	#publish-actions button:focus-visible {
@@ -1208,9 +1229,9 @@
 		right: 0;
 		z-index: 4;
 		padding: .25rem;
-		border: 1px solid #555;
+		border: 1px solid var(--border-stronger);
 		border-radius: 4px;
-		background: #252525;
+		background: var(--bg-raised);
 		box-shadow: 0 2px 10px rgba(0, 0, 0, .4);
 	}
 	#publish-modes button {
@@ -1222,15 +1243,15 @@
 		background: transparent;
 	}
 	#publish-modes button[aria-pressed='true'] {
-		background: #414141;
+		background: var(--control-hover);
 		box-shadow: inset 3px 0 var(--neutral);
 	}
 	#publish-modes button:hover {
-		background: #505050;
+		background: var(--control-hover-strong);
 	}
 	#publish-help {
 		font-size: .8em;
-		color: #aaa;
+		color: var(--text-muted);
 		text-align: left;
 	}
 

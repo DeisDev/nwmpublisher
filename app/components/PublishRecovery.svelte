@@ -56,8 +56,8 @@
 {/if}
 
 <style>
-	.publish-recovery { position: fixed; inset-block-start: 4.5rem; inset-inline-end: 1rem; max-width: 36rem; max-height: 65vh; overflow: auto; background: #252525; padding: .75rem; z-index: 9998; box-shadow: 0 2px 8px #0008; }
+	.publish-recovery { position: fixed; inset-block-start: 4.5rem; inset-inline-end: 1rem; max-width: 36rem; max-height: 65vh; overflow: auto; background: var(--bg-raised); padding: .75rem; z-index: 9998; box-shadow: 0 2px 8px #0008; }
 	summary, button { cursor: pointer; }
-	section { border-top: 1px solid #666; margin-top: .5rem; overflow-wrap: anywhere; }
+	section { border-top: 1px solid var(--border-muted); margin-top: .5rem; overflow-wrap: anywhere; }
 	button, input { margin: .25rem; padding: .5rem; }
 </style>

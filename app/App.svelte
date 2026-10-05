@@ -65,7 +65,7 @@
 </main>
 
 <style>
-	.settings-error { position: fixed; inset: auto 1rem 1rem; z-index: 10000; padding: .75rem; background: var(--error); }
+	.settings-error { position: fixed; inset: auto 1rem 1rem; z-index: 10000; padding: .75rem; background: var(--error); color: #fff; }
 	/*
 	#file-drop {
 		position: absolute;

@@ -30,6 +30,7 @@
 	item > .jobs {
 		padding: .25em .4em;
 		background-color: #007eff;
+		color: #fff;
 		border-radius: .35rem;
 		font-size: .75em;
 		text-align: center;
@@ -46,7 +47,7 @@
 		opacity: 1;
 	}
 	item.active {
-		background-color: #2A2A2A;
+		background-color: var(--bg-hover);
 	}
 	item:not(:last-child) {
 		margin-bottom: .5rem;

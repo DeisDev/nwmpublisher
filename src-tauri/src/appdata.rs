@@ -90,6 +90,15 @@ pub enum WorkshopUpdateMode {
 	Package,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Theme {
+	#[default]
+	System,
+	Dark,
+	Light,
+}
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ChangelogMode {
@@ -238,11 +247,14 @@ pub struct Settings {
 	pub changelogs: ChangelogSettings,
 
 	pub language: Option<String>,
+	pub theme: Theme,
 
 	pub extract_overwrite_mode: ExtractionOverwriteMode,
 	pub addon_cleaner_permanent_delete: bool,
 	pub bbcode_auto_close_tags: bool,
 	pub bbcode_wrap_selection: bool,
+	pub bbcode_convert_pasted_changelogs: bool,
+	pub bbcode_convert_pasted_markdown: bool,
 
 	pub color_neutral: u32,
 	pub color_error: u32,
@@ -281,11 +293,14 @@ impl Default for Settings {
 			changelogs: ChangelogSettings::default(),
 
 			language: None,
+			theme: Theme::System,
 
 			extract_overwrite_mode: ExtractionOverwriteMode::default(),
 			addon_cleaner_permanent_delete: false,
 			bbcode_auto_close_tags: false,
 			bbcode_wrap_selection: false,
+			bbcode_convert_pasted_changelogs: true,
+			bbcode_convert_pasted_markdown: true,
 
 			color_neutral: 28103,
 			color_error: 11010048,
@@ -877,6 +892,28 @@ mod tests {
 			let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
 			assert_eq!((loaded.bbcode_auto_close_tags, loaded.bbcode_wrap_selection), (close, wrap));
 		}
+	}
+
+	#[test]
+	fn paste_conversions_default_on_and_can_be_disabled_independently() {
+		let defaults: Settings = serde_json::from_str("{}").unwrap();
+		assert!(defaults.bbcode_convert_pasted_changelogs);
+		assert!(defaults.bbcode_convert_pasted_markdown);
+		for (changelogs, markdown) in [(false, true), (true, false)] {
+			let patch = serde_json::json!({"bbcode_convert_pasted_changelogs": changelogs, "bbcode_convert_pasted_markdown": markdown});
+			let settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+			let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+			assert_eq!((loaded.bbcode_convert_pasted_changelogs, loaded.bbcode_convert_pasted_markdown), (changelogs, markdown));
+		}
+	}
+
+	#[test]
+	fn theme_defaults_to_system_and_round_trips() {
+		let defaults: Settings = serde_json::from_str("{}").unwrap();
+		assert_eq!(defaults.theme, super::Theme::System);
+		let settings = super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"theme": "light"})).unwrap()).unwrap();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert_eq!(loaded.theme, super::Theme::Light);
 	}
 
 	#[test]
