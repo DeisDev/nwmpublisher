@@ -246,6 +246,7 @@ impl GMAFile {
 		reader.seek(SeekFrom::Start(end)).map_err(|error| GMAError::io("seek archive footer", &self.path, error))?;
 		let footer = reader.read_u32::<LittleEndian>().map_err(|error| GMAError::io("read archive footer", &self.path, error))?;
 		if footer == 0 { return Ok(()); } // Facepunch gmad -nocrc explicitly writes zero CRCs.
+		let checksummed = end;
 		reader.seek(SeekFrom::Start(0)).map_err(|error| GMAError::io("seek archive", &self.path, error))?;
 		let mut hash = crc32fast::Hasher::new();
 		while end > 0 {
@@ -255,8 +256,13 @@ impl GMAFile {
 			hash.update(&buffer[..count]);
 			end -= count as u64;
 		}
-		if hash.finalize() != footer { return Err(GMAError::Checksum(self.path.display().to_string())); }
-		Ok(())
+		if hash.finalize() == footer { return Ok(()); }
+		// Older gmpublisher writers checksummed only their unflushed 8 KiB write buffer, so the footer covers a tail of the archive.
+		let tail = &mut buffer[..checksummed.min(8 * 1024) as usize];
+		reader.seek(SeekFrom::Start(checksummed - tail.len() as u64)).map_err(|error| GMAError::io("seek archive checksum", &self.path, error))?;
+		reader.read_exact(tail).map_err(|error| GMAError::io("read archive checksum", &self.path, error))?;
+		if (0..tail.len()).any(|start| crc32fast::hash(&tail[start..]) == footer) { return Ok(()); }
+		Err(GMAError::Checksum(self.path.display().to_string()))
 	}
 
 }
@@ -298,7 +304,7 @@ mod tests {
 
 	#[test]
 	fn legacy_absent_and_zero_checksums_are_accepted_but_corruption_is_not() {
-		for footer in [None, Some(0)] {
+		for footer in [None, Some(0), Some(crc32fast::hash(b"test")), Some(crc32fast::hash(b"st"))] {
 			let mut gma = archive(&[("lua/a.lua", 4, 0)], b"test", footer);
 			gma.entries().unwrap();
 			let transaction = crate::transactions::new_extraction();

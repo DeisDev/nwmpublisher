@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix a checksum error when extracting or downloading addons made with older versions of gmpublisher.
+
 ## [3.1.3] - 2026-10-03
 
 ### Added
