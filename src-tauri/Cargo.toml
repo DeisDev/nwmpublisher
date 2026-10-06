@@ -17,7 +17,7 @@ strip = true
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "2.11.6", features = ["devtools"] }
+tauri = { version = "2.11.6", features = [] }
 tauri-plugin-dialog = "2.7.3"
 tauri-plugin-shell = "2.3.6"
 tauri-plugin-clipboard-manager = "2.3.3"

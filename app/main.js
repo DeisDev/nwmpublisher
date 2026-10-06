@@ -45,6 +45,12 @@ window.updateCustomColor = function(name, colorInt) {
 	root.style.setProperty(varName + '-l', (l * 100) + '%');
 }
 
+if (import.meta.env.PROD) {
+	document.addEventListener('contextmenu', e => {
+		if (!e.target.closest('input, textarea') && !e.target.isContentEditable) e.preventDefault();
+	});
+}
+
 __NWMPUBLISHER__(() => {
 	if (AppSettings.language) switchLanguage(AppSettings.language);
 	applyTheme(AppSettings.theme);

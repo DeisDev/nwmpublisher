@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- Remove the browser's right-click menu outside text boxes, and turn off developer tools.
+
 ## [3.2.0] - 2026-10-05
 
 ### Added
