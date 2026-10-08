@@ -22,6 +22,19 @@
 	export let promises;
 	export let cancel;
 
+	let activeTab = 'details';
+	const tabs = ['details', 'files'];
+	function onTabKeydown(event, index) {
+		let next;
+		if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') next = 1 - index;
+		else if (event.key === 'Home') next = 0;
+		else if (event.key === 'End') next = 1;
+		else return;
+		event.preventDefault();
+		activeTab = tabs[next];
+		event.currentTarget.parentElement.children[next].focus();
+	}
+
 	let selection = 0;
 	onDestroy(() => selection++);
 
@@ -67,6 +80,7 @@
 	let previewError = null;
 	function updatePromises(promises) {
 		const currentSelection = ++selection;
+		activeTab = 'details';
 		const [workshop, gma] = promises;
 		addon = new Promise(() => {});
 		gmaPath = null;
@@ -141,12 +155,22 @@
 			<Dead size="2rem"/>
 		{:else}
 			<div id="content">
-				<div id="sidebar">
-					<div class="extract-btn" class:disabled={!gmaPath} on:click={chooseDestination}>{$_('extract')}</div>
-					<div id="addon" class="hide-scroll">
+				<div class="preview-toolbar">
+					<div class="preview-tabs" role="tablist" aria-label={$_('addon_preview.tabs')}>
+						{#each tabs as tab, index}
+							<button type="button" role="tab" id={'preview-tab-' + tab} aria-controls={'preview-panel-' + tab} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('addon_preview.' + tab)}</button>
+						{/each}
+					</div>
+					<button type="button" class="extract-btn" disabled={!gmaPath} on:click={chooseDestination}>{$_('extract')}</button>
+				</div>
+				<div id="preview-panel-details" class="preview-panel details-panel" role="tabpanel" aria-labelledby="preview-tab-details" tabindex="0" hidden={activeTab !== 'details'}>
+					<div id="addon">
+						<div class="addon-card">
 						{#key $promises}
 							<div><Addon previewing={true} workshopData={$promises[0]} installedData={$promises[1]} fallbackName={gma ? (gma.name ?? gma.extracted_name) : null}/></div>
 						{/key}
+						</div>
+						<div class="addon-metadata">
 						{#if workshop}
 							<div id="tags">
 								{#if workshop.tags}
@@ -236,12 +260,17 @@
 						{#if (gma && gma.id) || workshop}
 							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut class="icon" size=".8rem"/></a></div>
 						{/if}
+						</div>
+					</div>
+					<div id="description" class="select">
 						{#if workshop?.description ?? gma?.description}
-							<div id="description"><BBCode value={workshop?.description ?? gma.description}/></div>
+							<BBCode value={workshop?.description ?? gma.description}/>
+						{:else}
+							<p class="empty-description">{$_('addon_preview.no_description')}</p>
 						{/if}
 					</div>
 				</div>
-
+				<div id="preview-panel-files" class="preview-panel files-panel" role="tabpanel" aria-labelledby="preview-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
 				{#if previewError}
 					<p class="select">{$_('addon_preview_error', { values: { error: previewError } })}</p>
 				{:else if gmaPath}
@@ -251,6 +280,7 @@
 				{:else}
 					<Dead size="2rem"/>
 				{/if}
+				</div>
 			</div>
 
 			<DestinationSelect active={destinationSelect} cancel={() => destinationSelect = false} callback={extractGMA} text={$_('extract')} extractedName={gma?.extractedName} />
@@ -262,10 +292,10 @@
 	:global(#gma-preview > .hide-scroll) {
 		max-width: 100%;
    		max-height: 100%;
-		width: 63rem;
-		height: 44rem;
+		width: 76rem;
+		height: 50rem;
 	}
-	@media (max-width: 63rem), (max-height: 44rem) {
+	@media (max-width: 76rem), (max-height: 50rem) {
 		:global(#gma-preview > .hide-scroll) {
 			width: 100%;
 			height: 100%;
@@ -273,6 +303,8 @@
 	}
 	:global(#gma-preview) #content {
 		display: flex;
+		flex-direction: column;
+		min-width: 0;
 		background-color: var(--bg-content);
 		height: 100%;
 		box-shadow: rgba(0, 0, 0, .24) 0px 3px 8px;
@@ -284,14 +316,53 @@
 		border-top-left-radius: 0 !important;
 	}
 
-	#addon {
-		width: 17rem;
-		padding: 1.5rem;
-		box-shadow: 0 0 10px 5px rgba(0, 0, 0, .25);
-		background-color: var(--bg-panel);
-		z-index: 2;
-		flex: 1;
+	.preview-toolbar, .preview-tabs {
+		display: flex;
+		align-items: center;
+		gap: .5rem;
 	}
+	.preview-toolbar {
+		justify-content: space-between;
+		padding-inline: 1rem;
+		border-bottom: 1px solid var(--border);
+		background: var(--bg-panel);
+		flex-shrink: 0;
+	}
+	.preview-tabs button {
+		padding: .9rem 1.25rem;
+		border: 0;
+		border-bottom: 2px solid transparent;
+		background: transparent;
+		font: inherit;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.preview-tabs button[aria-selected='true'] {
+		border-bottom-color: var(--text);
+		color: var(--text);
+		background: var(--bg-raised);
+	}
+	.preview-tabs button:hover { background: var(--control); }
+	button:focus-visible, .preview-panel:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: -2px;
+	}
+	.preview-panel {
+		flex: 1;
+		min-height: 0;
+		min-width: 0;
+		overflow: auto;
+	}
+	.preview-panel[hidden] { display: none; }
+	.details-panel { padding: 1.5rem; }
+	.files-panel { display: flex; }
+	#addon {
+		display: grid;
+		grid-template-columns: 12rem minmax(0, 1fr);
+		gap: 1.5rem;
+		align-items: start;
+	}
+	.addon-card, .addon-metadata { min-width: 0; }
 	#addon :global(.addon #card) {
 		padding: 0;
 	}
@@ -310,11 +381,14 @@
 		margin: .5rem -.5rem -.5rem -.5rem;
 	}
 
-	#addon #description {
-		margin: 0;
-		margin-top: .8rem;
+	#description {
+		margin-top: 1.5rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid var(--border);
 		color: var(--text-subtle);
+		line-height: 1.6;
 	}
+	.empty-description { color: var(--text-muted); }
 
 	#addon #avatar, #addon #avatar + span {
 		vertical-align: middle;
@@ -328,18 +402,16 @@
 	#ws-link {
 		margin-top: 1rem;
 		margin-bottom: 1rem;
-		text-align: center;
+		text-align: start;
 	}
 	#ws-link :global(.icon) {
 		margin-left: .2rem;
 	}
 
-	:global(#gma-preview) #sidebar {
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
 	.extract-btn {
+		font: inherit;
+		border: 0;
+		border-radius: 4px;
 		padding: .7rem;
 		text-align: center;
 		background-color: var(--neutral);
@@ -351,7 +423,9 @@
 		line-height: 1;
 		transition: background-color .5s;
 	}
-	.extract-btn.disabled {
+	.extract-btn:disabled {
+		cursor: default;
+		color: var(--text-muted);
 		background-color: var(--control-hover-alt);
 	}
 

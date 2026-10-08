@@ -71,6 +71,7 @@
 						"core:event:default",
 						"core:window:allow-set-theme",
 						"dialog:allow-open",
+						"dialog:allow-save",
 						"dialog:allow-message",
 						"clipboard-manager:allow-write-text",
 						"shell:allow-open"

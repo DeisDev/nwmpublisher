@@ -1,5 +1,13 @@
+<script context="module">
+	import { writable, get } from 'svelte/store';
+	const previewLayout = writable(null);
+	const savingLayout = writable(false);
+</script>
+
 <script>
 	import { _ } from 'svelte-i18n';
+	import { saveSettings } from '../settings.js';
+	import { message } from '@tauri-apps/plugin-dialog';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import FileInput from '@lucide/svelte/icons/file-input';
 	import { createEventDispatcher, onDestroy } from 'svelte';
@@ -19,6 +27,23 @@
 	export let convertPaste = null;
 	export let importLabel = '';
 	export let importDisabled = false;
+
+	if (get(previewLayout) === null) previewLayout.set(AppSettings.bbcode_preview_layout);
+
+	async function changeLayout(event) {
+		const layout = event.currentTarget.value;
+		$savingLayout = true;
+		try {
+			await saveSettings({ bbcode_preview_layout: layout });
+			AppSettings.bbcode_preview_layout = layout;
+			$previewLayout = layout;
+		} catch (error) {
+			event.target.value = $previewLayout;
+			await message($_('settings_save_failed') + ': ' + String(error), { kind: 'error' });
+		} finally {
+			$savingLayout = false;
+		}
+	}
 
 	const dispatch = createEventDispatcher();
 	const formats = [
@@ -340,6 +365,10 @@
 				<button type="button" class="formatting-toggle" aria-expanded={formattingOpen} aria-controls={`${id}-toolbar`} on:click={() => formattingOpen = !formattingOpen}>
 					<span class="chevron" class:expanded={formattingOpen}><ChevronRight class="icon" size=".85rem"/></span>{$_('bbcode.formatting')}
 				</button>
+				<select class="layout-select" aria-label={$_('bbcode.layout')} title={$_('bbcode.layout')} value={$previewLayout} disabled={$savingLayout} on:change={changeLayout}>
+					<option value="vertical">{$_('bbcode.vertical')}</option>
+					<option value="horizontal">{$_('bbcode.horizontal')}</option>
+				</select>
 				<button type="button" class="fullscreen-toggle" bind:this={fullscreenButton} title={$_(fullscreen ? 'bbcode.restore' : 'bbcode.fullscreen')} aria-label={$_(fullscreen ? 'bbcode.restore' : 'bbcode.fullscreen')} aria-pressed={fullscreen} aria-controls={`${id}-fullscreen`} on:click={toggleFullscreen}>
 					<svg width="1rem" height="1rem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 						{#if fullscreen}<path d="M9 3v6H3m12-6v6h6M9 21v-6H3m12 6v-6h6"/>{:else}<path d="M9 3H3v6m12-6h6v6M3 15v6h6m6 0h6v-6"/>{/if}
@@ -352,19 +381,26 @@
 				<button type="button" data-format={format.tag} title={`${$_('bbcode.' + format.tag)} (Ctrl/Cmd+${shortcut(format)})`} aria-label={$_('bbcode.' + format.tag)} aria-keyshortcuts={`Control+${shortcut(format)} Meta+${shortcut(format)}`} {disabled} on:click={() => formatText(format.tag)}>{format.label ?? $_('bbcode.' + format.tag)}</button>
 			{/each}
 		</div>
-		<textarea {id} bind:this={input} value={value} {disabled}
-			on:beforeinput={onBeforeInput} on:input={onInput} on:keydown={onKeydown} on:paste={onPaste}
-			on:compositionstart={onCompositionStart} on:compositionend={onCompositionEnd}
-			on:pointerdown={() => lastEdit = null} on:blur={() => lastEdit = null}
-			class:error={error !== null} aria-invalid={error !== null} aria-describedby={describedBy}
-		></textarea>
-		{#if help}<p id={`${id}-help`}>{help}</p>{/if}
-		{#if size}<p id={`${id}-size`}>{size}</p>{/if}
-		{#if error}<p id={`${id}-error`} class="error-message" role="alert">{$_(error)}</p>{/if}
-		<div class="preview-heading"><span id={`${id}-preview-label`}>{$_('bbcode.preview')}</span><span class="live">{$_('bbcode.live')}</span></div>
-		<!-- Keep the scrollable preview focusable for keyboard scrolling. -->
-		<div class="preview select" role="region" aria-labelledby={`${id}-preview-label`} tabindex="0">
-			{#if value}<BBCode {value} widgets={active}/>{:else}<span class="empty">{$_('bbcode.preview_empty')}</span>{/if}
+		<div class="editor-panes" class:horizontal={$previewLayout === 'horizontal'}>
+			<div class="input-pane">
+				<textarea {id} bind:this={input} value={value} {disabled}
+					on:beforeinput={onBeforeInput} on:input={onInput} on:keydown={onKeydown} on:paste={onPaste}
+					on:compositionstart={onCompositionStart} on:compositionend={onCompositionEnd}
+					on:pointerdown={() => lastEdit = null} on:blur={() => lastEdit = null}
+					class:error={error !== null} aria-invalid={error !== null} aria-describedby={describedBy}
+				></textarea>
+			</div>
+			<div class="preview-pane">
+				<div class="preview-heading"><span id={`${id}-preview-label`}>{$_('bbcode.preview')}</span><span class="live">{$_('bbcode.live')}</span></div>
+				<div class="preview select" role="region" aria-labelledby={`${id}-preview-label`} tabindex="0">
+					{#if value}<BBCode {value} widgets={active}/>{:else}<span class="empty">{$_('bbcode.preview_empty')}</span>{/if}
+				</div>
+			</div>
+		</div>
+		<div class="editor-footer">
+			{#if help}<p id={`${id}-help`}>{help}</p>{/if}
+			{#if size}<p id={`${id}-size`}>{size}</p>{/if}
+			{#if error}<p id={`${id}-error`} class="error-message" role="alert">{$_(error)}</p>{/if}
 		</div>
 	</div>
 </div>
@@ -401,6 +437,27 @@
 		overflow: auto;
 		padding: 2px;
 	}
+	.editor-panes {
+		display: grid;
+		grid-template-rows: minmax(8rem, 1fr) minmax(8rem, 1fr);
+		gap: .75rem;
+		flex: 1;
+		min-height: 18rem;
+		min-width: 0;
+	}
+	.editor-panes.horizontal {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		grid-template-rows: minmax(14rem, 1fr);
+		min-height: 14rem;
+	}
+	.editor-footer { display: flex; flex-direction: column; gap: .25rem; flex-shrink: 0; }
+	.input-pane, .preview-pane {
+		display: flex;
+		flex-direction: column;
+		gap: .5rem;
+		min-height: 0;
+		min-width: 0;
+	}
 	.editor-heading, .preview-heading {
 		display: flex;
 		align-items: center;
@@ -413,8 +470,11 @@
 	}
 	.editor-actions {
 		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
 		gap: .4rem;
-		flex-shrink: 0;
+		min-width: 0;
+		max-width: 100%;
 	}
 	.editor-title {
 		display: flex;
@@ -433,7 +493,7 @@
 		align-items: center;
 		justify-content: center;
 	}
-	button {
+	button, .layout-select {
 		font: inherit;
 		font-size: .8em;
 		padding: .35rem .5rem;
@@ -446,7 +506,7 @@
 	button:hover:not(:disabled) {
 		background: var(--control-hover);
 	}
-	button:focus-visible, .preview:focus-visible {
+	button:focus-visible, .layout-select:focus-visible, .preview:focus-visible {
 		outline: 2px solid #127cff;
 		outline-offset: 1px;
 	}
@@ -523,9 +583,7 @@
 		color: var(--error);
 	}
 	.preview-heading {
-		border-top: 1px solid var(--border);
-		padding-top: .65rem;
-		margin-top: .25rem;
+		font-size: .85em;
 	}
 	.live, .empty {
 		color: var(--text-muted);

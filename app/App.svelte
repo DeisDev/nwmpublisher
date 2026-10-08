@@ -15,8 +15,8 @@
 
 	onMount(() => {
 		const recover = ({ detail: snapshot }) => {
-			if (snapshot.context?.kind !== 'publish') return;
-			new Transaction(snapshot.id, transaction => transaction.status ? $_(transaction.status) : $_('publish_recovered')).applySnapshot(snapshot);
+			if (!['publish', 'package'].includes(snapshot.context?.kind)) return;
+			new Transaction(snapshot.id, transaction => snapshot.context.kind === 'package' ? $_('package_only') : transaction.status ? $_(transaction.status) : $_('publish_recovered')).applySnapshot(snapshot);
 		};
 		window.addEventListener('recovered-job', recover);
 		return () => window.removeEventListener('recovered-job', recover);

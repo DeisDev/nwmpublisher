@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Show YouTube, Steam store, and Workshop widgets in live BBCode previews.
+- Switch description and changelog previews between stacked and side-by-side layouts.
+- Save addons as GMA packages without publishing them.
+
+### Changed
+
+- Give addon descriptions a full-width Details tab and give the publisher more editing space.
 
 ### Fixed
 

@@ -73,7 +73,7 @@
 		if (cancelError) return translateError(cancelError);
 		if (transaction.transportError) return translate('job_connection_error');
 		if (transaction.state === 'unknown') return translate('publish_outcome_unknown');
-		if (transaction.state === 'committing') return translate('extraction_committing');
+		if (transaction.state === 'committing') return translate(transaction.context?.kind === 'package' ? 'package_saving' : 'extraction_committing');
 		if (transaction.state === 'cancelling') return translate('cancelling');
 		if (transaction.cancelPending) return translate('cancel_pending');
 		return statusTextFn(transaction);

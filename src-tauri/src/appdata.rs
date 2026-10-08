@@ -90,6 +90,13 @@ pub enum WorkshopUpdateMode {
 	Package,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PreviewLayout {
+	Vertical,
+	Horizontal,
+}
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {
@@ -251,6 +258,7 @@ pub struct Settings {
 
 	pub extract_overwrite_mode: ExtractionOverwriteMode,
 	pub addon_cleaner_permanent_delete: bool,
+	pub bbcode_preview_layout: PreviewLayout,
 	pub bbcode_auto_close_tags: bool,
 	pub bbcode_wrap_selection: bool,
 	pub bbcode_convert_pasted_changelogs: bool,
@@ -297,6 +305,7 @@ impl Default for Settings {
 
 			extract_overwrite_mode: ExtractionOverwriteMode::default(),
 			addon_cleaner_permanent_delete: false,
+			bbcode_preview_layout: PreviewLayout::Vertical,
 			bbcode_auto_close_tags: false,
 			bbcode_wrap_selection: false,
 			bbcode_convert_pasted_changelogs: true,
@@ -879,6 +888,18 @@ mod tests {
 		let settings = super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"addon_cleaner_permanent_delete": true})).unwrap()).unwrap();
 		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
 		assert!(loaded.addon_cleaner_permanent_delete);
+	}
+
+	#[test]
+	fn preview_layout_preserves_existing_settings_and_round_trips() {
+		let settings: Settings = serde_json::from_value(serde_json::json!({"sounds": false})).unwrap();
+		assert_eq!(settings.bbcode_preview_layout, super::PreviewLayout::Vertical);
+		assert!(!settings.sounds);
+		for layout in ["vertical", "horizontal"] {
+			let settings: Settings = serde_json::from_value(serde_json::json!({"bbcode_preview_layout": layout})).unwrap();
+			assert_eq!(serde_json::to_value(settings).unwrap()["bbcode_preview_layout"], layout);
+		}
+		assert!(serde_json::from_value::<Settings>(serde_json::json!({"bbcode_preview_layout": "invalid"})).is_err());
 	}
 
 	#[test]

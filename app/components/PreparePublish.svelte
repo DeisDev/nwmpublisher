@@ -9,6 +9,7 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CloudUpload from '@lucide/svelte/icons/cloud-upload';
+	import Package from '@lucide/svelte/icons/package';
 	import Cross from '@lucide/svelte/icons/x';
 	import Folder from '@lucide/svelte/icons/folder';
 	import LinkOut from '@lucide/svelte/icons/external-link';
@@ -82,6 +83,8 @@
 	let descriptionTouched = false;
 	let descriptionError = null;
 	let publishMode = AppSettings.workshop_update_mode;
+	let packageOnly = false;
+	let packageResult = null;
 	let savingPublishMode = false;
 	let publishModeOpen = false;
 	let publishActions;
@@ -96,19 +99,21 @@
 	$: descriptionBytes = descriptionEncoder.encode(description).length;
 	$: canUpdateDescription = !!$updatingAddon && descriptionTouched && descriptionError === null
 		&& description !== ($updatingAddon.description ?? '');
-	$: descriptionOnly = !!$updatingAddon && publishMode === 'description';
-	$: canSubmit = !savingPublishMode && !changelogSettingsBusy && (descriptionOnly ? canUpdateDescription : readyForPublish && !changelogBusy);
-	$: publishLabel = descriptionOnly ? $_('update_description') : $_($updatingAddon ? 'package_update' : 'package_publish');
-	$: publishHelp = descriptionOnly ? $_('update_description_help') : $_($updatingAddon ? 'package_update_help' : 'package_publish_help');
+	$: descriptionOnly = !packageOnly && !!$updatingAddon && publishMode === 'description';
+	$: canSubmit = !savingPublishMode && !changelogSettingsBusy && (descriptionOnly ? canUpdateDescription : readyForPublish && (packageOnly || (!changelogBusy && descriptionError === null)));
+	$: publishLabel = packageOnly ? $_('package_only') : descriptionOnly ? $_('update_description') : $_($updatingAddon ? 'package_update' : 'package_publish');
+	$: publishHelp = packageOnly ? $_('package_only_help') : descriptionOnly ? $_('update_description_help') : $_($updatingAddon ? 'package_update_help' : 'package_publish_help');
 	$: if (!$preparePublish || $isPublishing) publishModeOpen = false;
 	$: if ($preparePublish) publishMode = AppSettings.workshop_update_mode;
 
 	async function selectPublishMode(mode) {
 		if ($isPublishing || savingPublishMode) return;
-		publishMode = mode;
+		packageOnly = mode === 'local';
 		publishModeOpen = false;
 		publishModeButton.focus();
-		if (mode === AppSettings.workshop_update_mode) return;
+		if (packageOnly) return;
+		publishMode = mode;
+		if (!$updatingAddon || mode === AppSettings.workshop_update_mode) return;
 		savingPublishMode = true;
 		try {
 			await saveSettings({ workshop_update_mode: mode });
@@ -376,8 +381,9 @@
 
 	async function publish() {
 		if (savingPublishMode || settingsBusy || changelogSettingsBusy) return;
+		if (packageOnly) return packageAddon();
 		if (descriptionOnly) return publishDescription();
-		if (!readyForPublish || $isPublishing || changelogBusy) return;
+		if (!readyForPublish || descriptionError || $isPublishing || changelogBusy) return;
 		const publishingAddon = $updatingAddon;
 		const descriptionUpdate = descriptionTouched ? description : null;
 		$isPublishing = true;
@@ -429,6 +435,47 @@
 		});
 	}
 
+	async function packageAddon() {
+		if (!readyForPublish || $isPublishing) return;
+		const session = addonSession;
+		const size = gmaSize;
+		const request = {
+			contentPath: pathValue,
+			title: titleInput.value.trim(),
+			addonType: addonTypeInput.value,
+			tags: chosenAddonTags.filter(Boolean),
+		};
+		const name = gmaNameFromTitle(gmaNameInput.value).replace(/\.gma$/i, '') || 'publishedaddon';
+		$isPublishing = true;
+		packageResult = null;
+		try {
+			const destination = await dialog.save({
+				title: $_('package_only'),
+				defaultPath: name + '.gma',
+				filters: [{ name: $_('gma_archive'), extensions: ['gma'] }],
+			});
+			if (!destination || session !== addonSession) {
+				$isPublishing = false;
+				return;
+			}
+			const id = await invoke('package_addon', { request: { ...request, destination } });
+			new Transaction(id, transaction => $_('PUBLISH_PACKING', { values: {
+				pct: transaction.progress,
+				data: formatSize((transaction.progress / 100) * size),
+				dataTotal: formatSize(size),
+			} })).listen(event => {
+				if (event.finished && session === addonSession) {
+					packageResult = event.data.path;
+					playSound('success');
+				}
+				if (event.finished || event.error || event.cancelled) $isPublishing = false;
+			});
+		} catch (error) {
+			$isPublishing = false;
+			await dialog.message(translateError(String(error)), { kind: 'error' });
+		}
+	}
+
 	async function publishDescription() {
 		if (!canUpdateDescription || $isPublishing || settingsBusy || changelogSettingsBusy) return;
 		const publishingAddon = $updatingAddon;
@@ -469,7 +516,6 @@
 
 	function isFormValid() {
 		if (pathPending || validatedPath !== pathValue) return false;
-		if (descriptionError) return false;
 		if (pathValue.length === 0 || pathFailMessage !== null) return false;
 
 		let chosenAddonTag = false;
@@ -514,6 +560,8 @@
 		workshopInfo = updatingAddon;
 		editorHistoryKey += 1;
 		activeTab = 'files';
+		packageOnly = false;
+		packageResult = null;
 		descriptionFormattingOpen = false;
 		ignoreOpen = false;
 		description = updatingAddon?.description ?? '';
@@ -664,27 +712,20 @@
 				<div id="icon-publish" on:click={publishIcon} use:tippy={$_('publish_icon')} class:disabled={gmaIconPath == null}><CloudUpload class="icon" size="1rem"/></div>
 			{/if}
 		</div>
-		<p>{$_('icon_instructions')}</p>
-		<div id="upscale-container">
-			<label class:disabled={!canUpscale}>
-				<input type="checkbox" id="upscale" bind:this={upscale} checked={AppSettings.upscale_addon_icon} disabled={!canUpscale} on:change={() => upscale = upscale}/>
-				{$_('upscale_addon_icon')}
-			</label>
-		</div>
-
-		<div class="path-container" bind:this={pathInputContainer}>
-			<input type="text" class:error={pathFailMessage?.length > 0} bind:this={pathInput} id="path" placeholder={$_('addon_path')} required on:change={() => onPathChanged(pathInput.value, true)} value={pathValue}/>
-			<div class="browse icon-button" on:click={browseAddon}><Folder class="icon" size="1rem"/></div>
-		</div>
+		<details class="icon-options">
+			<summary>{$_('icon_options')}</summary>
+			<p>{$_('icon_instructions')}</p>
+			<div id="upscale-container">
+				<label class:disabled={!canUpscale}>
+					<input type="checkbox" id="upscale" bind:this={upscale} checked={AppSettings.upscale_addon_icon} disabled={!canUpscale} on:change={() => upscale = upscale}/>
+					{$_('upscale_addon_icon')}
+				</label>
+			</div>
+		</details>
 
 		<span use:tippy={$updatingAddon ? $_('update_addon_title_via_steam') : null}>
 			<input type="text" id="title" placeholder={$_('addon_title')} disabled={$updatingAddon} bind:this={titleInput} on:input={onTitleChanged} on:change={onTitleChanged}/>
 		</span>
-
-		<div class="path-container" id="gma-name-container" use:tippy={$_('gma_file_name_tip')}>
-			<input type="text" id="gma-name" placeholder={$_('gma_file_name_placeholder')} bind:this={gmaNameInput} on:input={onGmaNameInput}/>
-			<div class="extension">.gma</div>
-		</div>
 
 		<select id="addon-type" bind:this={addonTypeInput} on:blur={checkForm} on:change={checkForm}>
 			<option value="default" selected hidden disabled>{$_('addon_type')}</option>
@@ -730,33 +771,50 @@
 			<button type="button" id="publish-btn" on:click={publish} disabled={!canSubmit || $isPublishing || settingsBusy} aria-describedby="publish-help">
 				{#if $isPublishing}
 					<Loading size="1.1rem"/>
+				{:else if packageOnly}
+					<Package class="icon" size="1.1rem"/>
 				{:else}
 					<CloudUpload class="icon" size="1.1rem"/>
 				{/if}
 				<span>{publishLabel}</span>
 			</button>
-			{#if $updatingAddon}
-				<button type="button" id="publish-mode-button" bind:this={publishModeButton} on:click={() => publishModeOpen = !publishModeOpen} disabled={$isPublishing || savingPublishMode} aria-label={$_('choose_update_mode')} aria-expanded={publishModeOpen} aria-controls="publish-modes">
-					<ChevronDown class="icon" size="1rem"/>
-				</button>
-				<div id="publish-modes" role="group" aria-label={$_('choose_update_mode')} hidden={!publishModeOpen}>
-					<button type="button" aria-pressed={publishMode === 'description'} on:click={() => selectPublishMode('description')} disabled={$isPublishing || savingPublishMode}>{$_('description_only')}</button>
-					<button type="button" aria-pressed={publishMode === 'package'} on:click={() => selectPublishMode('package')} disabled={$isPublishing || savingPublishMode}>{$_('package_update')}</button>
-				</div>
-			{/if}
+			<button type="button" id="publish-mode-button" bind:this={publishModeButton} on:click={() => publishModeOpen = !publishModeOpen} disabled={$isPublishing || savingPublishMode} aria-label={$_('choose_publish_action')} aria-expanded={publishModeOpen} aria-controls="publish-modes">
+				<ChevronDown class="icon" size="1rem"/>
+			</button>
+			<div id="publish-modes" role="group" aria-label={$_('choose_publish_action')} hidden={!publishModeOpen}>
+				{#if $updatingAddon}
+					<button type="button" aria-pressed={descriptionOnly} on:click={() => selectPublishMode('description')} disabled={$isPublishing || savingPublishMode}>{$_('description_only')}</button>
+				{/if}
+				<button type="button" aria-pressed={!packageOnly && !descriptionOnly} on:click={() => selectPublishMode('package')} disabled={$isPublishing || savingPublishMode}>{$_($updatingAddon ? 'package_update' : 'package_publish')}</button>
+				<button type="button" aria-pressed={packageOnly} on:click={() => selectPublishMode('local')} disabled={$isPublishing || savingPublishMode}>{$_('package_only')}</button>
+			</div>
 		</div>
 		<p id="publish-help" aria-live="polite">{publishHelp}</p>
+		{#if packageResult}
+			<div class="package-result" role="status">
+				<span>{$_('package_saved')}</span>
+				<span class="select package-path">{packageResult}</span>
+				<button type="button" on:click={() => invoke('open_file_location', { path: packageResult })}>{$_('open_folder')}</button>
+			</div>
+		{/if}
 	</div>
 
 	<div id="publish-workspace">
-		{#if $updatingAddon}<WorkshopStats item={workshopInfo} estimatedSize={pathValue ? gmaSize : null}/>{/if}
 		<div class="workspace-tabs" role="tablist" aria-label={$_('publish_tabs.label')}>
 			{#each tabs as tab, index}
 				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={(tab === 'description' && descriptionError !== null) || (tab === 'changelog' && changelogInvalid !== null)} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'settings' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
 			{/each}
 		</div>
 		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
+			<div class="path-container" bind:this={pathInputContainer}>
+				<input type="text" class:error={pathFailMessage?.length > 0} bind:this={pathInput} id="path" placeholder={$_('addon_path')} required on:change={() => onPathChanged(pathInput.value, true)} value={pathValue}/>
+				<div class="browse icon-button" on:click={browseAddon}><Folder class="icon" size="1rem"/></div>
+			</div>
 			<FileBrowser fileSelect={path => onPathChanged(path)} dropActive={$preparePublish && activeTab === 'files' && !$isPublishing} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} {openEntry} open={openAddon}/>
+			<div class="path-container" id="gma-name-container" use:tippy={$_('gma_file_name_tip')}>
+				<input type="text" id="gma-name" placeholder={$_('gma_file_name_placeholder')} bind:this={gmaNameInput} on:input={onGmaNameInput}/>
+				<div class="extension">.gma</div>
+			</div>
 			<details id="ignore" bind:open={ignoreOpen}>
 				<summary><span class="ignore-chevron"><ChevronRight class="icon" size=".85rem"/></span>{$_('ignored_file_patterns')}</summary>
 				<div class="ignore-content">
@@ -785,6 +843,7 @@
 		</div>
 		<div id="publish-panel-settings" class="workspace-panel workshop-panel" role="tabpanel" aria-labelledby="publish-tab-settings" tabindex="0" hidden={activeTab !== 'settings'}>
 			{#if $updatingAddon}
+				<WorkshopStats item={workshopInfo} estimatedSize={pathValue ? gmaSize : null}/>
 				<WorkshopSettings bind:this={workshopSettings} item={$updatingAddon} active={$preparePublish} disabled={$isPublishing || changelogSettingsBusy} bind:busy={settingsBusy} bind:dirty={settingsDirty} on:details={event => workshopInfo = event.detail} on:saved={workshopSettingsSaved}>
 					<ChangelogDefaults id="addon-changelog" addonId={$updatingAddon.id} addonTitle={$updatingAddon.title} active={$preparePublish} disabled={$isPublishing || settingsBusy} bind:busy={changelogSettingsBusy} currentChangelog={changes} beforeSave={() => changelogEditor.flush()} on:saved={event => changelogEditor.applyDefaults(event.detail)}/>
 				</WorkshopSettings>
@@ -800,12 +859,12 @@
 <style>
 	:global(#prepare-publish > div) {
 		display: flex;
-		width: 70rem;
+		width: 90rem;
 		min-height: 0;
-		height: 50rem;
+		height: 54rem;
 		padding: 1.5rem;
 	}
-	@media (max-width: 70rem), (max-height: 44rem) {
+	@media (max-width: 90rem), (max-height: 60rem) {
 		:global(#prepare-publish > .hide-scroll) {
 			width: 100%;
 			height: 100%;
@@ -815,7 +874,7 @@
 		}
 	}
 	#details-container {
-		width: 18rem;
+		width: clamp(14rem, 22vw, 18rem);
 		flex-shrink: 0;
 		min-height: 0;
 		display: flex;
@@ -825,12 +884,12 @@
 		flex-shrink: 0;
 	}
 	#details-container > #icon-container {
-		flex: 0 1 15rem;
+		flex: 0 1 18rem;
 		min-height: 4rem;
 	}
 	#publish-workspace {
 		flex: 1;
-		margin-left: 1.5rem;
+		margin-inline-start: 1.5rem;
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
@@ -839,6 +898,7 @@
 	}
 	.workspace-tabs {
 		display: flex;
+		flex-wrap: wrap;
 		flex-shrink: 0;
 		border-bottom: 1px solid var(--border);
 	}
@@ -916,7 +976,8 @@
 	.files-panel > :global(#file-browser) {
 		border-radius: .4rem;
 		overflow: hidden;
-		flex: 1 0 12rem;
+		flex: 1;
+		min-height: 10rem;
 	}
 
 	input[type='text'] {
@@ -1176,8 +1237,31 @@
 		display: flex;
 		position: relative;
 	}
+	.icon-options { font-size: .8em; color: var(--text-muted); }
+	.icon-options summary { padding: .4rem 0; cursor: pointer; }
+	.icon-options p { margin-block: .5rem; }
+	.package-result {
+		display: flex;
+		flex-direction: column;
+		gap: .5rem;
+		padding: .75rem;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		font-size: .8em;
+	}
+	.package-path { overflow-wrap: anywhere; color: var(--text-muted); }
+	.package-result button {
+		font: inherit;
+		padding: .5rem;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		background: var(--control);
+		color: var(--text);
+		cursor: pointer;
+	}
+	.package-result button:focus-visible { outline: 2px solid #127cff; }
 	.pending-dot { color: var(--neutral); }
-	.workspace-panel.workshop-panel { overflow: hidden; }
+	.workspace-panel.workshop-panel { overflow: hidden; gap: .75rem; }
 	#publish-actions button {
 		font: inherit;
 		color: var(--text);

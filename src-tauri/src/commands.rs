@@ -60,6 +60,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 		crate::addon_size_analyzer::addon_size_analyzer,
 		crate::content_generator::get_content_generator_manifests,
 		crate::content_generator::update_content_generator_manifest,
+		crate::gma::write::package_addon,
 		crate::gma::preview::preview_gma,
 		crate::gma::preview::extract_preview_entry,
 		crate::gma::preview::extract_preview_gma,
