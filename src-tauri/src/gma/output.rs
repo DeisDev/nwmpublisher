@@ -151,6 +151,27 @@ impl Directory {
 		#[cfg(windows)] { fs::OpenOptions::new().write(true).create_new(true).open(self.path.join(child)) }
 	}
 
+	pub fn read_file(&self, child: &Path) -> io::Result<File> {
+		name(child)?;
+		#[cfg(unix)]
+		let file = {
+			use std::os::fd::{AsRawFd, FromRawFd};
+			let child = c_name(child)?;
+			let fd = unsafe { libc::openat(self.file.as_raw_fd(), child.as_ptr(), libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_NONBLOCK | libc::O_CLOEXEC) };
+			if fd == -1 { return Err(io::Error::last_os_error()); }
+			unsafe { File::from_raw_fd(fd) }
+		};
+		#[cfg(windows)]
+		let file = {
+			use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+			let file = fs::OpenOptions::new().read(true).share_mode(0x1).custom_flags(0x00200000).open(self.path.join(child))?;
+			if file.metadata()?.file_attributes() & 0x400 != 0 { return Err(invalid()); }
+			file
+		};
+		if !file.metadata()?.is_file() { return Err(invalid()); }
+		Ok(file)
+	}
+
 	pub fn kind(&self, child: &Path) -> io::Result<Option<Kind>> {
 		name(child)?;
 		#[cfg(unix)] {
@@ -196,5 +217,36 @@ impl Directory {
 		#[cfg(windows)] {
 			if directory { fs::remove_dir(self.path.join(child)) } else { fs::remove_file(self.path.join(child)) }
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use std::io::Read;
+
+	#[test]
+	fn reads_only_regular_children_without_modifying_them() {
+		let temporary = tempfile::tempdir().unwrap();
+		fs::write(temporary.path().join("test.lua"), b"print('hello')").unwrap();
+		fs::create_dir(temporary.path().join("folder")).unwrap();
+		let directory = Directory::open(temporary.path(), false).unwrap();
+		let mut source = String::new();
+		directory.read_file(Path::new("test.lua")).unwrap().read_to_string(&mut source).unwrap();
+		assert_eq!(source, "print('hello')");
+		assert_eq!(fs::read_to_string(temporary.path().join("test.lua")).unwrap(), source);
+		for path in ["../test.lua", "folder/test.lua", "folder", "missing.lua"] {
+			assert!(directory.read_file(Path::new(path)).is_err());
+		}
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn refuses_linked_preview_files() {
+		let temporary = tempfile::tempdir().unwrap();
+		fs::write(temporary.path().join("test.lua"), b"source").unwrap();
+		std::os::unix::fs::symlink("test.lua", temporary.path().join("link.lua")).unwrap();
+		let directory = Directory::open(temporary.path(), false).unwrap();
+		assert!(directory.read_file(Path::new("link.lua")).is_err());
 	}
 }

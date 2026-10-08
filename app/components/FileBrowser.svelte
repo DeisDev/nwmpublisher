@@ -5,6 +5,8 @@
 	import { tippyFollow } from '../tippy.js';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import Copy from '@lucide/svelte/icons/copy';
+	import FileDown from '@lucide/svelte/icons/file-down';
+	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import Folder from '@lucide/svelte/icons/folder';
 	import FolderAdd from '@lucide/svelte/icons/folder-plus';
 	import { afterUpdate, onDestroy } from 'svelte';
@@ -16,6 +18,9 @@
 	export let browsePath;
 	export let entriesList = null;
 	export let openEntry;
+	export let previewEntry = null;
+	export let entryAction = 'extract';
+	export let selectedPath = null;
 	export let open;
 	export let background = false;
 	export let fileSelect = null;
@@ -243,15 +248,19 @@
 								</td>
 								<td><span>{entries.total_files === 1 ? $_('items_one') : $_('items_num', { values: { n: entries.total_files } })}</span></td>
 								<td><span>{formatSize(entries.size, $locale)}</span></td>
+								{#if previewEntry}<td></td>{/if}
 							</tr>
 						{/if}
 					{/each}
 					{#each browsing.files as entry}
-						<tr on:click={() => openEntry(entry.path)}>
+						<tr class:selected={selectedPath === entry.path} on:click={() => (previewEntry ?? openEntry)(entry.path)}>
 							<td><img class="icon" use:tippyFollow={entry.typeTip} src="/img/silkicons/{entry.icon}" alt=""/></td>
-							<td><span>{entry.name}</span></td>
+							<td><button type="button" class="file-name" on:click|stopPropagation={() => (previewEntry ?? openEntry)(entry.path)}>{entry.name}</button></td>
 							<td><span>{entry.typeTip}</span></td>
 							<td><span>{formatSize(entry.size, $locale)}</span></td>
+							{#if previewEntry}
+								<td><button type="button" class="entry-action" title={$_(entryAction === 'open' ? 'file_preview.open_file' : 'file_preview.extract_file', { values: { name: entry.name } })} aria-label={$_(entryAction === 'open' ? 'file_preview.open_file' : 'file_preview.extract_file', { values: { name: entry.name } })} on:click|stopPropagation={() => openEntry(entry.path)}>{#if entryAction === 'open'}<ExternalLink class="icon" size="1rem"/>{:else}<FileDown class="icon" size="1rem"/>{/if}</button></td>
+							{/if}
 						</tr>
 					{/each}
 				</tbody>
@@ -265,6 +274,13 @@
 </main>
 
 <style>
+	.file-name { display: block; width: 100%; font: inherit; text-align: start; overflow-wrap: anywhere; }
+	.file-name, .entry-action { color: inherit; background: transparent; border: 0; padding: 0; cursor: pointer; }
+	.entry-action { display: flex; align-items: center; padding: .2rem; border-radius: 4px; }
+	.entry-action:hover { background: var(--control); }
+	button:focus-visible { outline: 2px solid #127cff; }
+	#entries > table tr.selected { background: var(--control); }
+
 	#entries > table th, #entries > table td, #entries > table td > span, #entries > table td > img {
 		vertical-align: middle;
 	}
@@ -308,6 +324,7 @@
 
 	#file-browser {
 		flex: 1;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
 	}

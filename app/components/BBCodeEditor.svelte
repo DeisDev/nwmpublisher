@@ -1,17 +1,17 @@
 <script context="module">
-	import { writable, get } from 'svelte/store';
-	const previewLayout = writable(null);
+	import { writable } from 'svelte/store';
 	const savingLayout = writable(false);
 </script>
 
 <script>
 	import { _ } from 'svelte-i18n';
-	import { saveSettings } from '../settings.js';
+	import { saveSettings, settings } from '../settings.js';
 	import { message } from '@tauri-apps/plugin-dialog';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import FileInput from '@lucide/svelte/icons/file-input';
-	import { createEventDispatcher, onDestroy } from 'svelte';
-	import { closingTag, linkText, listBreak, unwrapTag } from '../bbcode';
+	import { createEventDispatcher, onDestroy, tick, afterUpdate } from 'svelte';
+	import { closingTag, linkText, listBreak, unwrapTag, highlightBBCode, tagCompletions, completeTag, indentLines } from '../bbcode';
+	import SyntaxText from './SyntaxText.svelte';
 	import BBCode from './BBCode.svelte';
 
 	export let id;
@@ -28,17 +28,14 @@
 	export let importLabel = '';
 	export let importDisabled = false;
 
-	if (get(previewLayout) === null) previewLayout.set(AppSettings.bbcode_preview_layout);
-
 	async function changeLayout(event) {
 		const layout = event.currentTarget.value;
 		$savingLayout = true;
 		try {
 			await saveSettings({ bbcode_preview_layout: layout });
 			AppSettings.bbcode_preview_layout = layout;
-			$previewLayout = layout;
 		} catch (error) {
-			event.target.value = $previewLayout;
+			event.target.value = $settings.bbcode_preview_layout;
 			await message($_('settings_save_failed') + ': ' + String(error), { kind: 'error' });
 		} finally {
 			$savingLayout = false;
@@ -69,6 +66,83 @@
 	let composition = null;
 	let lastEdit = null;
 	let listItem = null;
+	let highlight;
+	let suggestions;
+	let completion = null;
+	let completionIndex = 0;
+	let tabEscape = false;
+	$: highlighted = $settings.bbcode_syntax_highlighting ? highlightBBCode(value) : [{ text: value, kind: '' }];
+	$: if (!active || disabled || !$settings.bbcode_autocomplete) completion = null;
+	afterUpdate(() => tick().then(syncHighlight));
+
+	function syncHighlight() {
+		if (!input || !highlight) return;
+		highlight.style.setProperty('width', input.clientWidth + 'px');
+		highlight.style.setProperty('height', input.clientHeight + 'px');
+		highlight.scrollTo(input.scrollLeft, input.scrollTop);
+		positionSuggestions();
+	}
+
+	function positionSuggestions() {
+		if (!completion || !suggestions) return;
+		const walker = document.createTreeWalker(highlight, NodeFilter.SHOW_TEXT);
+		let offset = completion.end;
+		let node;
+		while ((node = walker.nextNode())) {
+			if (offset <= node.length) break;
+			offset -= node.length;
+		}
+		if (!node) return;
+		const range = document.createRange();
+		range.setStart(node, offset);
+		range.collapse(true);
+		const caret = range.getBoundingClientRect();
+		const pane = suggestions.offsetParent.getBoundingClientRect();
+		const below = caret.bottom - pane.top + 4;
+		suggestions.style.setProperty('top', Math.max(8, below + suggestions.offsetHeight <= pane.height - 8 ? below : caret.top - pane.top - suggestions.offsetHeight - 4) + 'px');
+		suggestions.style.setProperty('left', Math.max(8, Math.min(caret.left - pane.left, pane.width - suggestions.offsetWidth - 8)) + 'px');
+	}
+
+	function observeInput(node) {
+		const observer = new ResizeObserver(syncHighlight);
+		observer.observe(node);
+		return { destroy: () => observer.disconnect() };
+	}
+
+	function updateCompletion() {
+		const next = active && !disabled && !composition && $settings.bbcode_autocomplete && input.selectionStart === input.selectionEnd
+			? tagCompletions(input.value, input.selectionStart) : null;
+		if (next?.start !== completion?.start || next?.end !== completion?.end) completionIndex = 0;
+		completion = next;
+	}
+
+	function acceptCompletion(index = completionIndex) {
+		if (!completion || disabled || composition) return;
+		const before = snapshot();
+		const result = completeTag(input.value, completion, completion.options[index], $settings.bbcode_auto_close_tags);
+		completion = null;
+		input.setRangeText(result.text, result.start, result.end, 'end');
+		input.focus({ preventScroll: true });
+		input.setSelectionRange(result.caret, result.caret);
+		recordChange(before);
+	}
+
+	function indentSelection(outdent) {
+		const before = snapshot();
+		const result = indentLines(input.value, input.selectionStart, input.selectionEnd, outdent);
+		input.setRangeText(result.text, result.start, result.end, 'end');
+		input.setSelectionRange(...result.selection);
+		recordChange(before);
+	}
+
+	function onKeyup(event) {
+		if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) updateCompletion();
+	}
+
+	function blurInput() {
+		lastEdit = completion = null;
+		tabEscape = false;
+	}
 	$: syncHistory(value, historyKey);
 	$: describedBy = [help && `${id}-help`, size && `${id}-size`, error && `${id}-error`].filter(Boolean).join(' ') || undefined;
 	$: if (!active && fullscreen) closeFullscreen(false);
@@ -111,6 +185,40 @@
 
 	function onKeydown(event) {
 		if (disabled || composition || event.isComposing || event.keyCode === 229) return;
+		if (completion && !event.ctrlKey && !event.metaKey && !event.altKey) {
+			if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+				event.preventDefault();
+				completionIndex = (completionIndex + (event.key === 'ArrowDown' ? 1 : completion.options.length - 1)) % completion.options.length;
+				tick().then(() => document.getElementById(id + '-suggestion-' + completionIndex)?.scrollIntoView({ block: 'nearest' }));
+				return;
+			}
+			if ((event.key === 'Enter' || event.key === 'Tab') && !event.shiftKey) {
+				event.preventDefault();
+				acceptCompletion();
+				return;
+			}
+		}
+		if (event.key === 'Escape' && (completion || ($settings.bbcode_indent && !tabEscape))) {
+			event.preventDefault();
+			event.stopPropagation();
+			completion = null;
+			tabEscape = true;
+			return;
+		}
+		if (event.key === 'Tab' && $settings.bbcode_indent && !event.ctrlKey && !event.metaKey && !event.altKey && !tabEscape) {
+			event.preventDefault();
+			completion = null;
+			indentSelection(event.shiftKey);
+			return;
+		}
+		tabEscape = false;
+		if (event.code === 'Space' && (event.ctrlKey || event.metaKey) && !event.altKey) {
+			if ($settings.bbcode_autocomplete) {
+				event.preventDefault();
+				updateCompletion();
+			}
+			return;
+		}
 		if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) lastEdit = null;
 		listItem = null;
 		if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -135,7 +243,20 @@
 	function breakLine(event) {
 		if (input.selectionStart !== input.selectionEnd) return;
 		const result = listBreak(input.value, input.selectionStart);
-		if (!result) return;
+		if (!result) {
+			if ($settings.bbcode_indent) {
+				const caret = input.selectionStart;
+				const from = caret === 0 ? 0 : input.value.lastIndexOf('\n', caret - 1) + 1;
+				const indent = /^[\t ]*/.exec(input.value.slice(from, caret))[0];
+				if (indent) {
+					event.preventDefault();
+					const before = snapshot();
+					input.setRangeText('\n' + indent, caret, caret, 'end');
+					recordChange(before);
+				}
+			}
+			return;
+		}
 		// Let the browser insert the line break so it keeps the caret in view, then add the marker.
 		if (result.marker) {
 			listItem = result;
@@ -157,9 +278,14 @@
 		const start = input.selectionStart;
 		const end = input.selectionEnd;
 		let replacement;
-		if (text === '[' && start !== end && AppSettings.bbcode_wrap_selection) {
+		if (text === ']' && start === end && input.value[start] === ']' && ($settings.bbcode_auto_close_tags || $settings.bbcode_autocomplete) && closingTag(input.value, start)) {
+			input.setSelectionRange(start + 1, start + 1);
+			lastEdit = completion = null;
+			return true;
+		}
+		if (text === '[' && start !== end && $settings.bbcode_wrap_selection) {
 			replacement = `[${input.value.slice(start, end)}]`;
-		} else if (text === ']' && start === end && AppSettings.bbcode_auto_close_tags) {
+		} else if (text === ']' && start === end && $settings.bbcode_auto_close_tags) {
 			const closing = closingTag(input.value, start);
 			if (!closing) return false;
 			replacement = ']' + closing;
@@ -229,11 +355,11 @@
 		previousHistoryKey = nextKey;
 		undoStack = [];
 		redoStack = [];
-		beforeInput = composition = lastEdit = null;
+		beforeInput = composition = lastEdit = completion = null;
 	}
 
 	function recordChange(before, inputType) {
-		beforeInput = null;
+		beforeInput = completion = null;
 		if (before.value === input.value) return;
 		const time = Date.now();
 		const groupable = ['insertText', 'deleteContentBackward', 'deleteContentForward'].includes(inputType);
@@ -247,7 +373,7 @@
 
 	function restoreHistory(redo = false) {
 		if (disabled || composition) return;
-		lastEdit = beforeInput = null;
+		lastEdit = beforeInput = completion = null;
 		const stack = redo ? redoStack : undoStack;
 		if (!stack.length) return;
 		const state = stack[stack.length - 1];
@@ -285,11 +411,12 @@
 			recordChange(beforeInput ?? current, event.inputType);
 		}
 		listItem = null;
+		updateCompletion();
 	}
 
 	function onCompositionStart() {
 		composition = snapshot();
-		beforeInput = lastEdit = null;
+		beforeInput = lastEdit = completion = null;
 	}
 
 	function onCompositionEnd() {
@@ -365,7 +492,7 @@
 				<button type="button" class="formatting-toggle" aria-expanded={formattingOpen} aria-controls={`${id}-toolbar`} on:click={() => formattingOpen = !formattingOpen}>
 					<span class="chevron" class:expanded={formattingOpen}><ChevronRight class="icon" size=".85rem"/></span>{$_('bbcode.formatting')}
 				</button>
-				<select class="layout-select" aria-label={$_('bbcode.layout')} title={$_('bbcode.layout')} value={$previewLayout} disabled={$savingLayout} on:change={changeLayout}>
+				<select class="layout-select" aria-label={$_('bbcode.layout')} title={$_('bbcode.layout')} value={$settings.bbcode_preview_layout} disabled={$savingLayout} on:change={changeLayout}>
 					<option value="vertical">{$_('bbcode.vertical')}</option>
 					<option value="horizontal">{$_('bbcode.horizontal')}</option>
 				</select>
@@ -381,14 +508,29 @@
 				<button type="button" data-format={format.tag} title={`${$_('bbcode.' + format.tag)} (Ctrl/Cmd+${shortcut(format)})`} aria-label={$_('bbcode.' + format.tag)} aria-keyshortcuts={`Control+${shortcut(format)} Meta+${shortcut(format)}`} {disabled} on:click={() => formatText(format.tag)}>{format.label ?? $_('bbcode.' + format.tag)}</button>
 			{/each}
 		</div>
-		<div class="editor-panes" class:horizontal={$previewLayout === 'horizontal'}>
+		<div class="editor-panes" class:horizontal={$settings.bbcode_preview_layout === 'horizontal'}>
 			<div class="input-pane">
-				<textarea {id} bind:this={input} value={value} {disabled}
-					on:beforeinput={onBeforeInput} on:input={onInput} on:keydown={onKeydown} on:paste={onPaste}
-					on:compositionstart={onCompositionStart} on:compositionend={onCompositionEnd}
-					on:pointerdown={() => lastEdit = null} on:blur={() => lastEdit = null}
-					class:error={error !== null} aria-invalid={error !== null} aria-describedby={describedBy}
-				></textarea>
+				<div class="source-input">
+					<pre class="highlight" class:plain={!$settings.bbcode_syntax_highlighting} bind:this={highlight} aria-hidden="true"><SyntaxText tokens={highlighted}/>{'\n'}</pre>
+					<textarea {id} bind:this={input} use:observeInput value={value} {disabled} spellcheck={!$settings.bbcode_syntax_highlighting}
+						on:beforeinput={onBeforeInput} on:input={onInput} on:keydown={onKeydown} on:keyup={onKeyup} on:paste={onPaste}
+						on:compositionstart={onCompositionStart} on:compositionend={onCompositionEnd}
+						on:pointerdown={() => lastEdit = null} on:click={updateCompletion} on:blur={blurInput} on:scroll={syncHighlight}
+						class:highlighted={$settings.bbcode_syntax_highlighting} class:error={error !== null} aria-invalid={error !== null} aria-describedby={describedBy}
+						aria-autocomplete={$settings.bbcode_autocomplete ? 'list' : 'none'} aria-controls={completion ? id + '-suggestions' : undefined}
+						aria-activedescendant={completion ? id + '-suggestion-' + completionIndex : undefined}
+					></textarea>
+				</div>
+				{#if completion}
+					<div class="suggestions" bind:this={suggestions} id={id + '-suggestions'} role="listbox" aria-label={$_('bbcode.suggestions')}>
+						{#each completion.options as tag, index}
+							<button type="button" role="option" id={id + '-suggestion-' + index} aria-selected={index === completionIndex} tabindex="-1"
+								on:mousedown|preventDefault on:click={() => acceptCompletion(index)}>
+								<code>[{completion.closing ? '/' : ''}{tag}]</code><span>{$_('bbcode.' + (tag === '*' ? 'list_item' : tag))}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
 			</div>
 			<div class="preview-pane">
 				<div class="preview-heading"><span id={`${id}-preview-label`}>{$_('bbcode.preview')}</span><span class="live">{$_('bbcode.live')}</span></div>
@@ -551,19 +693,70 @@
 	[data-format='strike'] {
 		text-decoration: line-through;
 	}
-	textarea {
-		appearance: none;
-		font: .85em/1.5 monospace;
+	.input-pane { position: relative; }
+	.source-input {
+		position: relative;
+		flex: 1;
+		min-height: 7rem;
 		border-radius: 4px;
-		border: none;
 		background: var(--fill);
 		box-shadow: 0 0 2px rgb(0 0 0 / 40%);
+		overflow: hidden;
+	}
+	textarea, .highlight {
+		position: absolute;
+		inset: 0;
+		margin: 0;
 		padding: .7rem;
+		font: .85rem/1.5 monospace;
+		font-variant-ligatures: none;
+		letter-spacing: normal;
+		tab-size: 4;
+		white-space: pre-wrap;
+		overflow-wrap: break-word;
+		word-break: normal;
+		border: 0;
+		border-radius: 4px;
 		color: var(--text);
+		background: transparent;
+	}
+	textarea {
+		appearance: none;
 		width: 100%;
+		height: 100%;
 		resize: none;
-		flex: 1 1 0;
-		min-height: 7rem;
+	}
+	.highlight { overflow: hidden; pointer-events: none; }
+	.highlight.plain { visibility: hidden; }
+	textarea.highlighted { color: transparent; caret-color: var(--text); }
+	textarea.highlighted::selection { color: var(--text); background: var(--control-hover); }
+	.suggestions {
+		position: absolute;
+		width: min(24rem, calc(100% - 1rem));
+		max-height: min(10rem, 70%);
+		overflow: auto;
+		z-index: 1;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		background: var(--bg-panel);
+		box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
+	}
+	.suggestions button {
+		display: flex;
+		justify-content: space-between;
+		gap: .75rem;
+		width: 100%;
+		border: 0;
+		border-radius: 0;
+		text-align: start;
+		background: transparent;
+	}
+	.suggestions button[aria-selected='true'] { background: var(--control-hover); }
+	.suggestions code { color: var(--syntax-keyword); }
+	.suggestions span { color: var(--text-muted); }
+	@media (forced-colors: active) {
+		textarea.highlighted { color: CanvasText; }
+		.highlight { visibility: hidden; }
 	}
 	textarea:focus {
 		box-shadow: inset 0 0 0 1.5px #127cff;

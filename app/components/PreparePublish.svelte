@@ -20,6 +20,7 @@
 	import { open } from '@tauri-apps/plugin-shell';
 	import { playSound } from '../sounds';
 	import FileBrowser from './FileBrowser.svelte';
+	import FilePreview from './FilePreview.svelte';
 	import BBCodeEditor from './BBCodeEditor.svelte';
 	import ChangelogEditor from './ChangelogEditor.svelte';
 	import { markdownPasteToBBCode, markdownToBBCode } from '../bbcode';
@@ -70,6 +71,7 @@
 	let gmaIconPath = null;
 	let gmaIconBase64;
 	let gmaEntries = writable([]);
+	let selectedEntry = null;
 	let gmaSize;
 	let readyForPublish = false;
 	let ignoreGlobs = AppSettings.ignore_globs;
@@ -185,6 +187,7 @@
 	let pathRequest = 0;
 	let pathPending = false;
 	let validatedPath = null;
+	$: if (!$preparePublish || pathPending || !$gmaEntries.some(entry => entry.path === selectedEntry)) selectedEntry = null;
 	onDestroy(() => { addonSession++; pathRequest++; });
 
 	// The preview image the backend uploads when no icon is chosen: the user's Steam avatar
@@ -797,22 +800,9 @@
 				<button type="button" on:click={() => invoke('open_file_location', { path: packageResult })}>{$_('open_folder')}</button>
 			</div>
 		{/if}
-	</div>
-
-	<div id="publish-workspace">
-		<div class="workspace-tabs" role="tablist" aria-label={$_('publish_tabs.label')}>
-			{#each tabs as tab, index}
-				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={(tab === 'description' && descriptionError !== null) || (tab === 'changelog' && changelogInvalid !== null)} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'settings' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
-			{/each}
-		</div>
-		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
-			<div class="path-container" bind:this={pathInputContainer}>
-				<input type="text" class:error={pathFailMessage?.length > 0} bind:this={pathInput} id="path" placeholder={$_('addon_path')} required on:change={() => onPathChanged(pathInput.value, true)} value={pathValue}/>
-				<div class="browse icon-button" on:click={browseAddon}><Folder class="icon" size="1rem"/></div>
-			</div>
-			<FileBrowser fileSelect={path => onPathChanged(path)} dropActive={$preparePublish && activeTab === 'files' && !$isPublishing} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} {openEntry} open={openAddon}/>
+		<div class="file-options" hidden={activeTab !== 'files'}>
 			<div class="path-container" id="gma-name-container" use:tippy={$_('gma_file_name_tip')}>
-				<input type="text" id="gma-name" placeholder={$_('gma_file_name_placeholder')} bind:this={gmaNameInput} on:input={onGmaNameInput}/>
+				<input type="text" id="gma-name" aria-label={$_('gma_file_name_placeholder')} placeholder={$_('gma_file_name_placeholder')} bind:this={gmaNameInput} on:input={onGmaNameInput}/>
 				<div class="extension">.gma</div>
 			</div>
 			<details id="ignore" bind:open={ignoreOpen}>
@@ -829,6 +819,26 @@
 					</div>
 				</div>
 			</details>
+		</div>
+	</div>
+
+	<div id="publish-workspace">
+		<div class="workspace-tabs" role="tablist" aria-label={$_('publish_tabs.label')}>
+			{#each tabs as tab, index}
+				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={(tab === 'description' && descriptionError !== null) || (tab === 'changelog' && changelogInvalid !== null)} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'settings' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
+			{/each}
+		</div>
+		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
+			<div class="path-container" bind:this={pathInputContainer}>
+				<input type="text" class:error={pathFailMessage?.length > 0} bind:this={pathInput} id="path" placeholder={$_('addon_path')} required on:change={() => onPathChanged(pathInput.value, true)} value={pathValue}/>
+				<div class="browse icon-button" on:click={browseAddon}><Folder class="icon" size="1rem"/></div>
+			</div>
+			<div class="file-layout" class:has-preview={selectedEntry !== null}>
+				<div class="file-list"><FileBrowser fileSelect={path => onPathChanged(path)} dropActive={$preparePublish && activeTab === 'files' && !$isPublishing} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} previewEntry={path => selectedEntry = path} selectedPath={selectedEntry} entryAction="open" {openEntry} open={openAddon}/></div>
+				{#if $preparePublish && activeTab === 'files' && selectedEntry && validatedPath && !pathPending}
+					<FilePreview contentPath={validatedPath} entryPath={selectedEntry} close={() => selectedEntry = null} {openEntry}/>
+				{/if}
+			</div>
 		</div>
 		<div id="publish-panel-description" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-description" tabindex="0" hidden={activeTab !== 'description'}>
 			<BBCodeEditor bind:this={descriptionEditor} id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} convertPaste={convertDescriptionPaste} importLabel={$_('addon_document.import', { values: { file: 'README.md' } })} importDisabled={!pathValue || importingReadme} on:import={importReadme} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'} historyKey={editorHistoryKey}/>
@@ -935,7 +945,7 @@
 		flex-direction: column;
 		overflow: auto;
 	}
-	.workspace-panel[hidden] {
+	.workspace-panel[hidden], .file-options[hidden] {
 		display: none;
 	}
 	.local-settings { flex: 1; min-height: 0; overflow: auto; padding: .25rem; }
@@ -970,14 +980,30 @@
 		outline: 2px solid #127cff;
 		outline-offset: 1px;
 	}
+	.file-options {
+		display: flex;
+		flex-direction: column;
+		gap: .75rem;
+		margin-top: .5rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--border);
+	}
 	.files-panel {
 		gap: .75rem;
 	}
-	.files-panel > :global(#file-browser) {
+	.file-layout {
+		display: flex;
+		min-width: 0;
 		border-radius: .4rem;
 		overflow: hidden;
 		flex: 1;
 		min-height: 10rem;
+	}
+	.file-list { display: flex; flex: 1; min-width: 0; min-height: 0; }
+	.has-preview .file-list { flex: 0 0 42%; }
+	@media (max-width: 900px) {
+		.file-layout { flex-direction: column; }
+		.has-preview .file-list { flex: 0 0 38%; min-height: 8rem; }
 	}
 
 	input[type='text'] {
@@ -1013,8 +1039,9 @@
 	#gma-name-container > .extension {
 		display: flex;
 		align-items: center;
-		margin-left: .75rem;
-		padding: .7rem;
+		flex-shrink: 0;
+		margin-inline-start: .5rem;
+		padding-block: .7rem;
 		font-size: .85em;
 		opacity: .6;
 	}

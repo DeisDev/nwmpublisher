@@ -53,7 +53,7 @@
 	.dates { flex-wrap: wrap; color: var(--text-muted); gap: .4rem 1rem; }
 	.dates > span { white-space: nowrap; }
 	.expanded { max-height: 28vh; overflow: auto; padding: 0 .75rem .6rem; border-top: 1px solid var(--border); }
-	dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .9rem 1rem; margin: .8rem 0; }
+	dl { display: grid; grid-template-columns: var(--workshop-stats-columns, repeat(auto-fit, minmax(8rem, 1fr))); gap: .9rem 1rem; margin: .8rem 0; }
 	dt { color: var(--text-muted); margin-bottom: .25rem; }
 	dd { margin: 0; color: var(--text); font-size: 1.1em; font-variant-numeric: tabular-nums; }
 	p { color: var(--text-muted); margin: .5rem 0 0; font-size: .9em; line-height: 1.4; }

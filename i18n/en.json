@@ -351,6 +351,7 @@
 		"properties": "Properties",
 
 		"audio": "Audio",
+		"video": "Video",
 		"image": "Image",
 		"unknown": "Unknown ({extension})"
 	},
@@ -402,6 +403,18 @@
 	"publish_new": "Publish New...",
 
 	"settings": {
+		"language": "Language",
+		"appearance": "Appearance",
+		"editors": {
+			"title": "Editors",
+			"shared": "Description and changelog",
+			"description": "Description",
+			"highlighting": "Syntax highlighting",
+			"autocomplete": "BBCode suggestions",
+			"autocomplete_help": "Suggest Steam tags as you type [. Use arrow keys to choose, Enter or Tab to insert, and Escape to dismiss.",
+			"indent": "Indent with Tab",
+			"indent_help": "Use Tab and Shift+Tab to indent lines, and keep indentation on Enter. Press Escape then Tab to leave the editor."
+		},
 		"saved": "Saved!",
 		"settings": "Settings",
 
@@ -514,6 +527,19 @@
 		"changelog": "Changelog",
 		"settings": "Settings"
 	},
+	"ERR_FILE_PREVIEW_UNSUPPORTED": "This file type cannot be previewed.",
+	"ERR_FILE_PREVIEW_TEXT_LIMIT": "This text file is too large to preview (over 1 MiB).",
+	"ERR_FILE_PREVIEW_MEDIA_LIMIT": "This media file is too large to preview (over 32 MiB).",
+	"ERR_FILE_PREVIEW_ENCODING": "This file is not UTF-8 text.",
+	"file_preview": {
+		"title": "File preview",
+		"read_only": "Read only",
+		"close": "Close preview",
+		"extract_file": "Extract {name}",
+		"open_file": "Open {name} in another app",
+		"open_externally": "Open externally",
+		"media_error": "This file could not be displayed or played."
+	},
 	"addon_preview": {
 		"tabs": "Addon preview",
 		"details": "Details",
@@ -521,6 +547,8 @@
 		"no_description": "This addon has no description."
 	},
 	"bbcode": {
+		"suggestions": "BBCode suggestions",
+		"list_item": "List item",
 		"layout": "Preview layout",
 		"vertical": "Stacked",
 		"horizontal": "Side by side",

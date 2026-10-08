@@ -15,6 +15,7 @@
 	import Modal from './Modal.svelte';
 	import Addon from './Addon.svelte';
 	import FileBrowser from './FileBrowser.svelte';
+	import FilePreview from './FilePreview.svelte';
 	import DestinationSelect from './DestinationSelect.svelte';
 	import { writable } from 'svelte/store';
 
@@ -40,6 +41,7 @@
 
 	let gmaSize;
 	let gmaPath;
+	let selectedEntry = null;
 	let entriesList = writable([]);
 
 	function extractEntry(entryPath) {
@@ -81,6 +83,7 @@
 	function updatePromises(promises) {
 		const currentSelection = ++selection;
 		activeTab = 'details';
+		selectedEntry = null;
 		const [workshop, gma] = promises;
 		addon = new Promise(() => {});
 		gmaPath = null;
@@ -100,6 +103,7 @@
 			const path = gmaData?.path ?? workshopData?.localFile ?? null;
 			if (path === previewPath) return;
 			previewPath = path;
+			selectedEntry = null;
 			gmaPath = null;
 			$entriesList = [];
 			previewError = null;
@@ -161,15 +165,17 @@
 							<button type="button" role="tab" id={'preview-tab-' + tab} aria-controls={'preview-panel-' + tab} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('addon_preview.' + tab)}</button>
 						{/each}
 					</div>
-					<button type="button" class="extract-btn" disabled={!gmaPath} on:click={chooseDestination}>{$_('extract')}</button>
+					<div class="preview-actions">
+						{#if (gma && gma.id) || workshop}
+							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut class="icon" size=".8rem"/></a></div>
+						{/if}
+						<button type="button" class="extract-btn" disabled={!gmaPath} on:click={chooseDestination}>{$_('extract')}</button>
+					</div>
 				</div>
 				<div id="preview-panel-details" class="preview-panel details-panel" role="tabpanel" aria-labelledby="preview-tab-details" tabindex="0" hidden={activeTab !== 'details'}>
 					<div id="addon">
-						<div class="addon-card">
 						{#key $promises}
-							<div><Addon previewing={true} workshopData={$promises[0]} installedData={$promises[1]} fallbackName={gma ? (gma.name ?? gma.extracted_name) : null}/></div>
-						{/key}
-						</div>
+						<Addon previewing={true} workshopData={$promises[0]} installedData={$promises[1]} fallbackName={gma ? (gma.name ?? gma.extracted_name) : null}>
 						<div class="addon-metadata">
 						{#if workshop}
 							<div id="tags">
@@ -256,12 +262,11 @@
 								{/if}
 							</tbody>
 						</table>
-						{#if workshop}<WorkshopStats item={workshop}/>{/if}
-						{#if (gma && gma.id) || workshop}
-							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut class="icon" size=".8rem"/></a></div>
-						{/if}
 						</div>
+						</Addon>
+						{/key}
 					</div>
+					{#if workshop}<WorkshopStats item={workshop}/>{/if}
 					<div id="description" class="select">
 						{#if workshop?.description ?? gma?.description}
 							<BBCode value={workshop?.description ?? gma.description}/>
@@ -274,7 +279,12 @@
 				{#if previewError}
 					<p class="select">{$_('addon_preview_error', { values: { error: previewError } })}</p>
 				{:else if gmaPath}
-					<FileBrowser browsePath={gmaPath} {entriesList} {open} openEntry={extractEntry}/>
+					<div class="file-layout" class:has-preview={selectedEntry !== null}>
+						<div class="file-list"><FileBrowser browsePath={gmaPath} {entriesList} {open} openEntry={extractEntry} previewEntry={path => selectedEntry = path} selectedPath={selectedEntry}/></div>
+						{#if active && activeTab === 'files' && selectedEntry}
+							<FilePreview {gmaPath} entryPath={selectedEntry} close={() => selectedEntry = null} openEntry={extractEntry}/>
+						{/if}
+					</div>
 				{:else if gma || workshop?.localFile}
 					<Loading size="2rem"/>
 				{:else}
@@ -316,7 +326,7 @@
 		border-top-left-radius: 0 !important;
 	}
 
-	.preview-toolbar, .preview-tabs {
+	.preview-toolbar, .preview-tabs, .preview-actions {
 		display: flex;
 		align-items: center;
 		gap: .5rem;
@@ -354,41 +364,37 @@
 		overflow: auto;
 	}
 	.preview-panel[hidden] { display: none; }
-	.details-panel { padding: 1.5rem; }
+	.details-panel { padding: 1.5rem 2rem; --workshop-stats-columns: repeat(4, minmax(0, 1fr)); }
+	.preview-actions { gap: 1rem; }
 	.files-panel { display: flex; }
-	#addon {
-		display: grid;
-		grid-template-columns: 12rem minmax(0, 1fr);
-		gap: 1.5rem;
-		align-items: start;
+	.file-layout { display: flex; flex: 1; min-width: 0; min-height: 0; }
+	.file-list { display: flex; flex: 1; min-width: 0; min-height: 0; }
+	.has-preview .file-list { flex: 0 0 42%; }
+	@media (max-width: 900px) {
+		.file-layout { flex-direction: column; }
+		.has-preview .file-list { flex: 0 0 38%; min-height: 8rem; }
 	}
-	.addon-card, .addon-metadata { min-width: 0; }
-	#addon :global(.addon #card) {
-		padding: 0;
-	}
-
-	#addon-info {
-		text-align: left;
-		border-spacing: 1rem;
-	}
-
-	#addon #tags {
-		line-height: 1.7rem;
-		margin-top: 1rem;
-	}
-	#addon-info {
-		border-spacing: .5rem;
-		margin: .5rem -.5rem -.5rem -.5rem;
-	}
-
+	#addon { margin-bottom: 1.5rem; }
+	.addon-metadata { display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
+	#tags { display: flex; flex-wrap: wrap; gap: .35rem .6rem; line-height: 1.4; }
+	#tags :global(.tag) { margin: 0; }
+	#addon-info { order: -1; border-collapse: collapse; text-align: start; font-size: .85rem; }
+	#addon-info tbody { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; }
+	#addon-info tr { display: flex; align-items: center; gap: .5rem; }
+	#addon-info th { color: var(--text-muted); font-weight: 400; }
+	#addon-info th, #addon-info td { padding: 0; }
 	#description {
 		margin-top: 1.5rem;
-		padding-top: 1.5rem;
-		border-top: 1px solid var(--border);
-		color: var(--text-subtle);
+		color: var(--text);
 		line-height: 1.6;
 	}
 	.empty-description { color: var(--text-muted); }
+	@media (max-width: 600px) {
+		.details-panel { padding: 1rem; --workshop-stats-columns: repeat(2, minmax(0, 1fr)); }
+		.preview-toolbar { padding-inline: .5rem; }
+		.preview-tabs button { padding-inline: .75rem; }
+		.preview-actions { gap: .5rem; }
+	}
 
 	#addon #avatar, #addon #avatar + span {
 		vertical-align: middle;
@@ -399,14 +405,8 @@
 		margin-right: .2rem;
 	}
 
-	#ws-link {
-		margin-top: 1rem;
-		margin-bottom: 1rem;
-		text-align: start;
-	}
-	#ws-link :global(.icon) {
-		margin-left: .2rem;
-	}
+	#ws-link { font-size: .85rem; }
+	#ws-link a { display: inline-flex; align-items: center; gap: .3rem; }
 
 	.extract-btn {
 		font: inherit;
@@ -427,10 +427,6 @@
 		cursor: default;
 		color: var(--text-muted);
 		background-color: var(--control-hover-alt);
-	}
-
-	:global(#addon > .loading:first-child) {
-		margin-bottom: .8rem !important;
 	}
 
 	#author-loading {

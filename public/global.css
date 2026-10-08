@@ -30,6 +30,11 @@
 	--text-error-soft: #ffb6b6;
 	--text-success: #9effc9;
 	--link: #46b0ff;
+	--syntax-keyword: #8ecbff;
+	--syntax-string: #b7df99;
+	--syntax-number: #dfb3ff;
+	--syntax-comment: #aaa;
+	--syntax-operator: #ffc58d;
 	--preview-icon: #212121;
 	--preview-icon-new: #424242;
 	--toggle-on: #cecece;
@@ -79,6 +84,11 @@
 	--text-error-soft: #b42318;
 	--text-success: #1e7b46;
 	--link: #0a66c2;
+	--syntax-keyword: #005a9e;
+	--syntax-string: #326515;
+	--syntax-number: #7c328e;
+	--syntax-comment: #656565;
+	--syntax-operator: #934500;
 	--preview-icon: #d5d8dc;
 	--preview-icon-new: #b4b8be;
 	--toggle-on: #313131;

@@ -1,6 +1,7 @@
 import { switchLanguage } from './i18n.js';
 import { applyTheme } from './theme.js';
 import App from './App.svelte';
+import { settings } from './settings.js';
 import { mount } from 'svelte';
 
 function rgbToHsl(r, g, b) {
@@ -52,6 +53,7 @@ if (import.meta.env.PROD) {
 }
 
 __NWMPUBLISHER__(() => {
+	settings.set(AppSettings);
 	if (AppSettings.language) switchLanguage(AppSettings.language);
 	applyTheme(AppSettings.theme);
 

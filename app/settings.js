@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { writable } from 'svelte/store';
 
+export const settings = writable({});
 export const settingsSave = writable({ state: 'saved', error: null });
 let queue = Promise.resolve();
 let pending = 0;

@@ -61,7 +61,7 @@
 	}
 </script>
 
-<main class="addon" class:previewing={previewing} on:click={e => onClick(e, workshop, installed)} bind:this={addonElement}>
+<main class="addon" class:previewing={previewing} on:click={e => onClick?.(e, workshop, installed)} bind:this={addonElement}>
 	<div id="card">
 		<div id="stats">
 			{#if newAddon}
@@ -138,6 +138,7 @@
 				{/await}
 			{/await}
 		{/if}
+		{#if previewing}<div class="summary"><slot/></div>{/if}
 	</div>
 </main>
 
@@ -220,6 +221,41 @@
 	}
 	main:hover #preview.new :global(svg) {
 		color: var(--text);
+	}
+	main.previewing #card {
+		display: grid;
+		grid-template-columns: 8rem minmax(0, 1fr);
+		grid-template-rows: auto auto 1fr;
+		gap: .6rem 1.5rem;
+		align-items: start;
+	}
+	main.previewing #preview {
+		grid-column: 1;
+		grid-row: 1 / 4;
+		margin: 0;
+		border-radius: 4px;
+		overflow: hidden;
+		aspect-ratio: 1;
+	}
+	main.previewing #preview > img { height: 100%; object-fit: contain; }
+	main.previewing #title {
+		grid-column: 2;
+		grid-row: 1;
+		margin: 0;
+		font-size: 1.65rem;
+		font-weight: 600;
+		line-height: 1.25;
+		text-align: start;
+		overflow-wrap: anywhere;
+	}
+	main.previewing .summary { grid-column: 2; grid-row: 2; min-width: 0; }
+	main.previewing #stats { grid-column: 2; grid-row: 3; gap: 1rem; font-size: .85rem; }
+	main.previewing #subscriptions { flex: none; }
+	@media (max-width: 600px) {
+		main.previewing #card { grid-template-columns: 5rem minmax(0, 1fr); gap: .6rem 1rem; }
+		main.previewing #title { font-size: 1.25rem; }
+		main.previewing #preview { grid-row: 1 / 3; }
+		main.previewing #stats { grid-column: 1 / -1; }
 	}
 	main :global(.highlight) {
 		background-color: rgba(255, 255, 0, .5);

@@ -259,6 +259,9 @@ pub struct Settings {
 	pub extract_overwrite_mode: ExtractionOverwriteMode,
 	pub addon_cleaner_permanent_delete: bool,
 	pub bbcode_preview_layout: PreviewLayout,
+	pub bbcode_syntax_highlighting: bool,
+	pub bbcode_autocomplete: bool,
+	pub bbcode_indent: bool,
 	pub bbcode_auto_close_tags: bool,
 	pub bbcode_wrap_selection: bool,
 	pub bbcode_convert_pasted_changelogs: bool,
@@ -306,6 +309,9 @@ impl Default for Settings {
 			extract_overwrite_mode: ExtractionOverwriteMode::default(),
 			addon_cleaner_permanent_delete: false,
 			bbcode_preview_layout: PreviewLayout::Vertical,
+			bbcode_syntax_highlighting: true,
+			bbcode_autocomplete: true,
+			bbcode_indent: false,
 			bbcode_auto_close_tags: false,
 			bbcode_wrap_selection: false,
 			bbcode_convert_pasted_changelogs: true,
@@ -913,6 +919,27 @@ mod tests {
 			let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
 			assert_eq!((loaded.bbcode_auto_close_tags, loaded.bbcode_wrap_selection), (close, wrap));
 		}
+	}
+
+	#[test]
+	fn editor_tools_preserve_old_settings_and_round_trip_independently() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false,"bbcode_auto_close_tags":true}"#).unwrap();
+		assert!(defaults.bbcode_syntax_highlighting);
+		assert!(defaults.bbcode_autocomplete);
+		assert!(!defaults.bbcode_indent);
+		for highlight in [false, true] {
+			for complete in [false, true] {
+				for indent in [false, true] {
+					let patch = serde_json::json!({"bbcode_syntax_highlighting": highlight, "bbcode_autocomplete": complete, "bbcode_indent": indent});
+					let settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+					let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+					assert_eq!((loaded.bbcode_syntax_highlighting, loaded.bbcode_autocomplete, loaded.bbcode_indent), (highlight, complete, indent));
+					assert!(!loaded.sounds);
+					assert!(loaded.bbcode_auto_close_tags);
+				}
+			}
+		}
+		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"bbcode_autocomplete": "yes"})).unwrap()).is_err());
 	}
 
 	#[test]

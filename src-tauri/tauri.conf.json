@@ -40,7 +40,7 @@
 				"script-src-attr": "'none'",
 				"img-src": "'self' data: blob: https:",
 				"font-src": "'self'",
-				"media-src": "'self'",
+				"media-src": "'self' blob:",
 				"connect-src": "'self' ipc: http://ipc.localhost https://ipc.localhost https://api.github.com"
 			},
 			"devCsp": {
@@ -57,7 +57,7 @@
 				"script-src-attr": "'none'",
 				"img-src": "'self' data: blob: https:",
 				"font-src": "'self'",
-				"media-src": "'self'",
+				"media-src": "'self' blob:",
 				"connect-src": "'self' ipc: http://ipc.localhost https://ipc.localhost https://api.github.com ws://localhost:1420"
 			},
 			"capabilities": [

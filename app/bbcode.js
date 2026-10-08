@@ -405,3 +405,81 @@ export function changelogImportSection(source) {
 	const heading = unreleasedHeading.test(section.heading) ? [] : [section.heading];
 	return [...heading, ...section.body, '', ...references].join('\n').trim();
 }
+
+function* sourceTags(value) {
+	const pattern = /\[(\/?)([a-z][a-z0-9]*|\*)(?:(=[^\]\r\n]*)|([ \t]+[^\]\r\n]*))?\]/gi;
+	let literal = null;
+	for (const match of value.matchAll(pattern)) {
+		const [, closing, name, argument, attributes] = match;
+		const tag = name.toLowerCase();
+		if (literal && !(closing && tag === literal && !argument && !attributes)) continue;
+		if (!supportedTags.has(tag) && tag !== '*') continue;
+		if (tag === '*' && (closing || argument || attributes)) continue;
+		if (argument && (closing || !argumentTags.has(tag))) continue;
+		if (attributes && (closing || tag !== 'table' || attributes.trim().toLowerCase().split(/[ \t]+/).some(option => !['noborder=1', 'equalcells=1'].includes(option)))) continue;
+		yield { text: match[0], start: match.index, tag, closing: !!closing, argument: argument ?? attributes };
+		if (literal) literal = null;
+		else if (!closing && literalTags.has(tag)) literal = tag;
+	}
+}
+
+export function highlightBBCode(value) {
+	const parts = [];
+	let position = 0;
+	for (const token of sourceTags(value)) {
+		if (token.start > position) parts.push({ text: value.slice(position, token.start), kind: '' });
+		if (token.argument) {
+			const split = token.text.length - token.argument.length - 1;
+			parts.push({ text: token.text.slice(0, split), kind: 'tag' }, { text: token.argument, kind: 'string' }, { text: ']', kind: 'tag' });
+		} else parts.push({ text: token.text, kind: 'tag' });
+		position = token.start + token.text.length;
+	}
+	if (position < value.length) parts.push({ text: value.slice(position), kind: '' });
+	return parts;
+}
+
+export function tagCompletions(value, caret) {
+	const prefix = /\[(\/?)([a-z0-9*]*)$/i.exec(value.slice(0, caret));
+	if (!prefix) return null;
+	const open = [];
+	for (const token of sourceTags(value.slice(0, prefix.index))) {
+		if (token.closing) {
+			const index = open.lastIndexOf(token.tag);
+			if (index !== -1) open.length = index;
+		} else if (!['*', 'hr'].includes(token.tag)) open.push(token.tag);
+	}
+	const literal = literalTags.has(open[open.length - 1]);
+	if (literal && !prefix[1]) return null;
+	const names = prefix[1] ? [...new Set(open.reverse())] : [...supportedTags, '*'];
+	const options = names.filter(tag => tag.startsWith(prefix[2].toLowerCase()) && (!literal || tag === open[0]));
+	return options.length ? { start: prefix.index, end: caret, closing: !!prefix[1], options } : null;
+}
+
+export function completeTag(value, completion, tag, autoClose) {
+	let end = completion.end;
+	const tail = /^[a-z0-9*]*(=[^\]\r\n]*)?\]/i.exec(value.slice(end));
+	if (tail) end += tail[0].length;
+	let text = completion.closing ? '[/' + tag + ']' : '[' + tag + ']';
+	let offset = text.length;
+	if (!completion.closing && argumentTags.has(tag)) {
+		text = '[' + tag + (tail?.[1] ?? '=') + ']';
+		offset = text.length - 1;
+	}
+	if (autoClose && !tail && !completion.closing && !['*', 'hr'].includes(tag)) {
+		const closing = '[/' + tag + ']';
+		if (value.slice(end, end + closing.length).toLowerCase() !== closing) text += closing;
+	}
+	return { start: completion.start, end, text, caret: completion.start + offset };
+}
+
+export function indentLines(value, start, end, outdent) {
+	if (start === end && !outdent) return { start, end, text: '\t', selection: [start + 1, start + 1] };
+	const from = start === 0 ? 0 : value.lastIndexOf('\n', start - 1) + 1;
+	const last = end > start && value[end - 1] === '\n' ? end - 1 : end;
+	const newline = value.indexOf('\n', last);
+	const to = newline === -1 ? value.length : newline;
+	const lines = value.slice(from, to).split('\n');
+	const changes = lines.map(line => outdent ? -(line.match(/^(?:\t| {1,4})/)?.[0].length ?? 0) : 1);
+	const text = lines.map((line, index) => outdent ? line.slice(-changes[index]) : '\t' + line).join('\n');
+	return { start: from, end: to, text, selection: [Math.max(from, start + changes[0]), Math.max(from, end + changes.reduce((sum, change) => sum + change, 0))] };
+}

@@ -131,12 +131,23 @@ function getFileIcon(extension) {
 		case 'mp3':
 		case 'ogg':
 		case 'wav':
+		case 'flac':
+		case 'm4a':
+		case 'aac':
 			return 'sound.png';
 
 		case 'png':
 		case 'jpg':
 		case 'jpeg':
+		case 'gif':
+		case 'webp':
+		case 'bmp':
+		case 'ico':
 			return 'photo.png';
+
+		case 'mp4':
+		case 'webm':
+			return 'picture.png';
 
 		case 'bsp':
 		case 'nav':
@@ -154,6 +165,10 @@ function getFileIcon(extension) {
 			return 'font.png';
 
 		case 'txt':
+		case 'json':
+		case 'cfg':
+		case 'csv':
+		case 'md':
 			return 'page_white_text.png';
 
 		case 'properties':
@@ -181,12 +196,29 @@ function getFileType(extension) {
 		case 'mp3':
 		case 'ogg':
 		case 'wav':
+		case 'flac':
+		case 'm4a':
+		case 'aac':
 			return 'audio';
 
 		case 'png':
 		case 'jpg':
 		case 'jpeg':
+		case 'gif':
+		case 'webp':
+		case 'bmp':
+		case 'ico':
 			return 'image';
+
+		case 'mp4':
+		case 'webm':
+			return 'video';
+
+		case 'json':
+		case 'cfg':
+		case 'csv':
+		case 'md':
+			return 'txt';
 
 		case 'bsp':
 			return 'map';
