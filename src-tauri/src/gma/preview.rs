@@ -104,6 +104,7 @@ fn preview_format(path: &str) -> Option<(&'static str, &'static str)> {
 	Some(match extension.as_str() {
 		"lua" => ("lua", "text/plain"),
 		"txt" | "json" | "vmt" | "cfg" | "properties" | "csv" | "md" => ("text", "text/plain"),
+		"vtf" => ("vtf", "image/png"),
 		"png" => ("image", "image/png"),
 		"jpg" | "jpeg" => ("image", "image/jpeg"),
 		"gif" => ("image", "image/gif"),
@@ -146,6 +147,11 @@ fn check_preview_size(kind: &str, size: u64) -> Result<u64, String> {
 }
 
 fn decode_preview(kind: &'static str, mime: &'static str, bytes: Vec<u8>) -> Result<EntryPreview, String> {
+	let (kind, bytes) = if kind == "vtf" {
+		let png = super::vtf::preview(&bytes)?;
+		check_preview_size("image", png.len() as u64)?;
+		("image", png)
+	} else { (kind, bytes) };
 	let data = if matches!(kind, "text" | "lua") {
 		let source = String::from_utf8(bytes).map_err(|_| "ERR_FILE_PREVIEW_ENCODING")?;
 		if source.contains('\0') { return Err("ERR_FILE_PREVIEW_ENCODING".into()); }
@@ -217,6 +223,26 @@ mod tests {
 
 	fn read_preview(gma: &GMAFile, path: &str) -> Result<EntryPreview, String> {
 		entry_preview(gma, path, gma.read().unwrap())
+	}
+
+	#[test]
+	fn previews_vtf_textures_from_archives_and_folders() {
+		let bytes = super::super::vtf::tests::texture(12, 1, 1, &[30, 20, 10, 40]);
+		let path = "materials/test.VTF";
+		let archive_preview = read_preview(&archive(path, &bytes, crc32fast::hash(&bytes)), path).unwrap();
+		let directory = tempfile::tempdir().unwrap();
+		std::fs::create_dir(directory.path().join("materials")).unwrap();
+		std::fs::write(directory.path().join(path), &bytes).unwrap();
+		let folder_preview = folder_entry_preview(directory.path(), "materials/test.vtf", &[]).unwrap();
+		for preview in [archive_preview, folder_preview] {
+			assert_eq!((preview.kind, preview.mime), ("image", "image/png"));
+			let png = base64::decode(preview.data).unwrap();
+			assert_eq!(image::load_from_memory(&png).unwrap().to_rgba8().get_pixel(0, 0).0, [10, 20, 30, 40]);
+		}
+		assert!(read_preview(&archive(path, &bytes, 1), path).unwrap_err().starts_with("ERR_GMA_CHECKSUM:"));
+		assert_eq!(read_preview(&archive(path, b"invalid", 0), path).unwrap_err(), "ERR_FILE_PREVIEW_VTF_INVALID");
+		std::fs::write(directory.path().join(path), b"invalid").unwrap();
+		assert_eq!(folder_entry_preview(directory.path(), "materials/test.vtf", &[]).unwrap_err(), "ERR_FILE_PREVIEW_VTF_INVALID");
 	}
 
 	#[test]

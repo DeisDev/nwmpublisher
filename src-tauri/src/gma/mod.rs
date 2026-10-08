@@ -354,6 +354,8 @@ pub mod filename;
 
 pub mod manifest;
 
+mod vtf;
+
 pub mod preview;
 
 #[cfg(test)]

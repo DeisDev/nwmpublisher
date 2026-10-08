@@ -532,6 +532,10 @@
 	"ERR_FILE_PREVIEW_TEXT_LIMIT": "This text file is too large to preview (over 1 MiB).",
 	"ERR_FILE_PREVIEW_MEDIA_LIMIT": "This media file is too large to preview (over 32 MiB).",
 	"ERR_FILE_PREVIEW_ENCODING": "This file is not UTF-8 text.",
+	"ERR_FILE_PREVIEW_VTF_INVALID": "This VTF texture is damaged or incomplete.",
+	"ERR_FILE_PREVIEW_VTF_FORMAT": "This VTF image format is not supported: {data}.",
+	"ERR_FILE_PREVIEW_VTF_VERSION": "This VTF version is not supported: {data}.",
+	"ERR_FILE_PREVIEW_VTF_LIMIT": "This texture is too large to preview.",
 	"file_preview": {
 		"title": "File preview",
 		"read_only": "Read only",

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keep matching text in view when scrolling description and changelog previews, with a saved sync toggle.
 - Add optional syntax highlighting, tag suggestions, and indentation to the BBCode editors.
 - Preview images, GIFs, audio, video, and read-only Lua and text files inside addons.
+- Preview VTF textures inside addons, showing the first frame of animated textures.
 - Show YouTube, Steam store, and Workshop widgets in live BBCode previews.
 - Switch description and changelog previews between stacked and side-by-side layouts.
 - Save addons as GMA packages without publishing them.
