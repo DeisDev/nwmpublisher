@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-10-08
+
 ### Added
 
 - Add Discord Rich Presence support for the current screen and active jobs.
