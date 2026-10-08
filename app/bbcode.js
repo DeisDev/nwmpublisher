@@ -71,6 +71,73 @@ export function linkText(text) {
 	return link;
 }
 
+export function bbcodeUrl(source) {
+	let value = source.trim();
+	if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+	if (!value || /[\s\\\u0000-\u001f\u007f]/u.test(value)) return null;
+	if (/^[\p{L}\p{N}.-]+\.[\p{L}\p{N}-]+(?::\d+)?(?:[/?#]|$)/u.test(value)) value = 'https://' + value;
+	try {
+		const url = new URL(value);
+		return ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password ? url.href : null;
+	} catch (error) {
+		if (error instanceof TypeError) return null;
+		throw error;
+	}
+}
+
+export function bbcodeWidget(href) {
+	const value = bbcodeUrl(href);
+	if (!value) return null;
+	const url = new URL(value);
+	if (url.port) return null;
+	if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(url.hostname)) {
+		const id = url.hostname === 'youtu.be' ? url.pathname.slice(1) : url.pathname === '/watch' ? url.searchParams.get('v') : null;
+		if (!id || !/^[\w-]{11}$/.test(id)) return null;
+		const start = url.searchParams.get('start') ?? url.searchParams.get('t');
+		const seconds = start && /^\d+$/.test(start) ? Number(start) : 0;
+		return { type: 'youtube', src: 'https://www.youtube.com/embed/' + id + (seconds ? '?start=' + seconds : '') };
+	}
+	if (url.hostname === 'store.steampowered.com') {
+		const id = /^\/app\/([1-9]\d*)(?:\/|$)/.exec(url.pathname)?.[1];
+		if (id) return { type: 'store', src: 'https://store.steampowered.com/widget/' + id + '/' };
+	}
+	if (url.hostname === 'steamcommunity.com' && /^\/(?:sharedfiles|workshop)\/filedetails\/?$/.test(url.pathname)) {
+		const ids = url.searchParams.getAll('id');
+		const id = ids.length === 1 ? ids[0] : null;
+		if (id && /^[1-9]\d{0,19}$/.test(id) && BigInt(id) <= 18446744073709551615n) return { type: 'workshop', id };
+	}
+	return null;
+}
+
+function nodeText(nodes) {
+	return nodes.map(node => typeof node === 'string' ? node : node.text ?? nodeText(node.children ?? [])).join('');
+}
+
+function linkify(nodes, insideLink = false) {
+	return nodes.flatMap(node => {
+		if (typeof node !== 'string') {
+			const link = node.tag === 'url';
+			if (link) node.href = insideLink ? null : bbcodeUrl(node.argument ?? nodeText(node.children));
+			if (node.children) node.children = linkify(node.children, insideLink || link);
+			return [node];
+		}
+		if (insideLink) return [node];
+		const parts = [];
+		let position = 0;
+		for (const match of node.matchAll(/\b(?:https?:\/\/|www\.)[^\s<>\[\]"']+/gi)) {
+			let text = match[0].replace(/[.,!?;:]+$/, '');
+			while (text.endsWith(')') && text.split(')').length > text.split('(').length) text = text.slice(0, -1);
+			const href = bbcodeUrl(text);
+			if (!href) continue;
+			if (match.index > position) parts.push(node.slice(position, match.index));
+			parts.push({ tag: 'url', href, automatic: true, children: [text] });
+			position = match.index + text.length;
+		}
+		if (position < node.length) parts.push(node.slice(position));
+		return parts;
+	});
+}
+
 export function parseBBCode(source) {
 	const root = { children: [] };
 	const stack = [root];
@@ -173,7 +240,7 @@ export function parseBBCode(source) {
 
 	append(source.slice(position));
 	while (stack.length > 1) preserveUnclosed();
-	return root.children;
+	return linkify(root.children);
 }
 
 const keepAChangelogHeading = /^(?:##[ \t]+\[?(?:unreleased|v?\d+\.\d+\.\d+)|###[ \t]+(?:added|changed|deprecated|removed|fixed|security)[ \t]*$)/im;

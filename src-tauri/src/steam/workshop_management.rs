@@ -485,6 +485,20 @@ fn search_addons(query: String, page: u32) -> Result<AddonSearch, String> {
 }
 
 #[tauri::command]
+pub async fn preview_workshop_item(item_id: String) -> Result<WorkshopItem, String> {
+	let id = parse_id(&item_id)?;
+	tauri::async_runtime::spawn_blocking(move || {
+		query_items(vec![id], false)?
+			.pop()
+			.flatten()
+			.map(|details| details.item)
+			.ok_or_else(|| format!("Workshop item {} is unavailable. It may be private or deleted.", id.0))
+	})
+	.await
+	.map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn workshop_details(addon_id: String) -> Result<WorkshopDetails, String> {
 	let id = parse_id(&addon_id)?;
 	tauri::async_runtime::spawn_blocking(move || load_details(id))

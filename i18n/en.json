@@ -550,7 +550,11 @@
 		"author": "Author",
 		"header": "Header",
 		"text": "Text",
-		"link_text": "Link text"
+		"link_text": "Link text",
+		"link_failed": "Could not open the link: {error}",
+		"widget_failed": "Could not load the preview: {error}",
+		"widget_youtube": "YouTube video",
+		"widget_store": "Steam store preview"
 	},
 	"addon_path": "Addon Path...",
 	"gma_file_name_placeholder": "publishedaddon",

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Show YouTube, Steam store, and Workshop widgets in live BBCode previews.
+
+### Fixed
+
+- Render BBCode in addon descriptions and make links clickable throughout previews.
+
 ### Removed
 
 - Remove the browser's right-click menu outside text boxes, and turn off developer tools.

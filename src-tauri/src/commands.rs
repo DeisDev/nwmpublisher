@@ -41,6 +41,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 		crate::steam::workshop::fetch_workshop_item,
 		crate::steam::workshop::browse_my_workshop,
 		crate::steam::workshop::workshop_item_channel,
+		crate::steam::workshop_management::preview_workshop_item,
 		crate::steam::workshop_management::workshop_details,
 		crate::steam::workshop_management::search_required_addons,
 		crate::steam::workshop_management::save_workshop_settings,

@@ -8,6 +8,7 @@
 	import LinkOut from '@lucide/svelte/icons/external-link';
 	import { invoke } from '@tauri-apps/api/core';
 	import WorkshopStats from './WorkshopStats.svelte';
+	import BBCode from './BBCode.svelte';
 	import { onDestroy } from 'svelte';
 	import { Transaction } from '../transactions.js';
 	import Loading from './Loading.svelte';
@@ -235,8 +236,8 @@
 						{#if (gma && gma.id) || workshop}
 							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut class="icon" size=".8rem"/></a></div>
 						{/if}
-						{#if workshop && workshop.description}
-							<p id="description" class="select">{workshop.description}</p>
+						{#if workshop?.description ?? gma?.description}
+							<div id="description"><BBCode value={workshop?.description ?? gma.description}/></div>
 						{/if}
 					</div>
 				</div>
@@ -312,7 +313,6 @@
 	#addon #description {
 		margin: 0;
 		margin-top: .8rem;
-		white-space: pre-line;
 		color: var(--text-subtle);
 	}
 

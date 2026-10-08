@@ -3,8 +3,8 @@
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import FileInput from '@lucide/svelte/icons/file-input';
 	import { createEventDispatcher, onDestroy } from 'svelte';
-	import { closingTag, linkText, listBreak, parseBBCode, unwrapTag } from '../bbcode';
-	import BBCodePreview from './BBCodePreview.svelte';
+	import { closingTag, linkText, listBreak, unwrapTag } from '../bbcode';
+	import BBCode from './BBCode.svelte';
 
 	export let id;
 	export let label;
@@ -45,7 +45,6 @@
 	let lastEdit = null;
 	let listItem = null;
 	$: syncHistory(value, historyKey);
-	$: nodes = parseBBCode(value);
 	$: describedBy = [help && `${id}-help`, size && `${id}-size`, error && `${id}-error`].filter(Boolean).join(' ') || undefined;
 	$: if (!active && fullscreen) closeFullscreen(false);
 
@@ -365,7 +364,7 @@
 		<div class="preview-heading"><span id={`${id}-preview-label`}>{$_('bbcode.preview')}</span><span class="live">{$_('bbcode.live')}</span></div>
 		<!-- Keep the scrollable preview focusable for keyboard scrolling. -->
 		<div class="preview select" role="region" aria-labelledby={`${id}-preview-label`} tabindex="0">
-			{#if value}<BBCodePreview {nodes}/>{:else}<span class="empty">{$_('bbcode.preview_empty')}</span>{/if}
+			{#if value}<BBCode {value} widgets={active}/>{:else}<span class="empty">{$_('bbcode.preview_empty')}</span>{/if}
 		</div>
 	</div>
 </div>
@@ -543,9 +542,6 @@
 		line-height: 1.5;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
-	}
-	.preview :global(*) {
-		user-select: text;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.chevron {
