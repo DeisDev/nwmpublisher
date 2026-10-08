@@ -259,6 +259,7 @@ pub struct Settings {
 	pub extract_overwrite_mode: ExtractionOverwriteMode,
 	pub addon_cleaner_permanent_delete: bool,
 	pub bbcode_preview_layout: PreviewLayout,
+	pub bbcode_sync_scroll: bool,
 	pub bbcode_syntax_highlighting: bool,
 	pub bbcode_autocomplete: bool,
 	pub bbcode_indent: bool,
@@ -309,6 +310,7 @@ impl Default for Settings {
 			extract_overwrite_mode: ExtractionOverwriteMode::default(),
 			addon_cleaner_permanent_delete: false,
 			bbcode_preview_layout: PreviewLayout::Vertical,
+			bbcode_sync_scroll: true,
 			bbcode_syntax_highlighting: true,
 			bbcode_autocomplete: true,
 			bbcode_indent: false,
@@ -906,6 +908,21 @@ mod tests {
 			assert_eq!(serde_json::to_value(settings).unwrap()["bbcode_preview_layout"], layout);
 		}
 		assert!(serde_json::from_value::<Settings>(serde_json::json!({"bbcode_preview_layout": "invalid"})).is_err());
+	}
+
+	#[test]
+	fn preview_scroll_sync_preserves_settings_and_round_trips() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false,"bbcode_preview_layout":"horizontal"}"#).unwrap();
+		assert!(defaults.bbcode_sync_scroll);
+		for enabled in [false, true] {
+			let patch = serde_json::json!({"bbcode_sync_scroll": enabled});
+			let settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+			let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+			assert_eq!(loaded.bbcode_sync_scroll, enabled);
+			assert_eq!(loaded.bbcode_preview_layout, super::PreviewLayout::Horizontal);
+			assert!(!loaded.sounds);
+		}
+		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"bbcode_sync_scroll": "yes"})).unwrap()).is_err());
 	}
 
 	#[test]

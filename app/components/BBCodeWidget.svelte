@@ -8,6 +8,7 @@
 
 	export let widget;
 	export let href;
+	export let sourceStart = undefined;
 	let timer;
 	$: workshopId = widget.type === 'workshop' ? widget.id : null;
 	$: item = loadWorkshop(workshopId);
@@ -21,7 +22,7 @@
 	}
 </script>
 
-<span class="widget">
+<span class="widget" data-source-start={sourceStart}>
 	{#if widget.type === 'workshop'}
 		<span class="workshop">
 			{#await item}

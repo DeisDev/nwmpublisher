@@ -137,6 +137,7 @@
 				<Setting {afterChange} id="bbcode_indent" type="bool" value={$settings.bbcode_indent} tooltip={$_('settings.editors.indent_help')}>{$_('settings.editors.indent')}</Setting>
 				<Setting {afterChange} id="bbcode_auto_close_tags" type="bool" value={$settings.bbcode_auto_close_tags} tooltip={$_('settings.general.bbcode_auto_close_tags_tooltip')}>{$_('settings.general.bbcode_auto_close_tags')}</Setting>
 				<Setting {afterChange} id="bbcode_wrap_selection" type="bool" value={$settings.bbcode_wrap_selection} tooltip={$_('settings.general.bbcode_wrap_selection_tooltip')}>{$_('settings.general.bbcode_wrap_selection')}</Setting>
+				<Setting {afterChange} id="bbcode_sync_scroll" type="bool" value={$settings.bbcode_sync_scroll}>{$_('bbcode.sync_scroll')}</Setting>
 				<Setting {afterChange} id="bbcode_preview_layout" type="select" value={$settings.bbcode_preview_layout} choices={layouts}>{$_('bbcode.layout')}</Setting>
 			</section>
 			<section>

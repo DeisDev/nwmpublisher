@@ -2,6 +2,7 @@
 	import { _ } from 'svelte-i18n';
 
 	export let source;
+	export let sourceStart = undefined;
 	let failed = false;
 	let src;
 	$: {
@@ -23,11 +24,11 @@
 
 {#key src}
 	{#if !src}
-		<span class="image-error" title={source}>{$_('bbcode.image_invalid')}</span>
+		<span class="image-error" title={source} data-source-start={sourceStart}>{$_('bbcode.image_invalid')}</span>
 	{:else if failed}
-		<span class="image-error" title={src}>{$_('bbcode.image_failed')}</span>
+		<span class="image-error" title={src} data-source-start={sourceStart}>{$_('bbcode.image_failed')}</span>
 	{:else}
-		<img {src} alt={$_('bbcode.img')} title={src} decoding="async" referrerpolicy="no-referrer" on:error={() => failed = true}/>
+		<img {src} data-source-start={sourceStart} alt={$_('bbcode.img')} title={src} decoding="async" referrerpolicy="no-referrer" on:error={() => failed = true}/>
 	{/if}
 {/key}
 

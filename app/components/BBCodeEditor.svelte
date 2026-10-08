@@ -1,6 +1,7 @@
 <script context="module">
 	import { writable } from 'svelte/store';
 	const savingLayout = writable(false);
+	const savingScrollSync = writable(false);
 </script>
 
 <script>
@@ -11,6 +12,7 @@
 	import FileInput from '@lucide/svelte/icons/file-input';
 	import { createEventDispatcher, onDestroy, tick, afterUpdate } from 'svelte';
 	import { closingTag, linkText, listBreak, unwrapTag, highlightBBCode, tagCompletions, completeTag, indentLines } from '../bbcode';
+	import { syncBBCodeScroll } from '../bbcodeScroll';
 	import SyntaxText from './SyntaxText.svelte';
 	import BBCode from './BBCode.svelte';
 
@@ -39,6 +41,19 @@
 			await message($_('settings_save_failed') + ': ' + String(error), { kind: 'error' });
 		} finally {
 			$savingLayout = false;
+		}
+	}
+
+	async function toggleScrollSync() {
+		const enabled = !$settings.bbcode_sync_scroll;
+		$savingScrollSync = true;
+		try {
+			await saveSettings({ bbcode_sync_scroll: enabled });
+			AppSettings.bbcode_sync_scroll = enabled;
+		} catch (error) {
+			await message($_('settings_save_failed') + ': ' + String(error), { kind: 'error' });
+		} finally {
+			$savingScrollSync = false;
 		}
 	}
 
@@ -492,6 +507,7 @@
 				<button type="button" class="formatting-toggle" aria-expanded={formattingOpen} aria-controls={`${id}-toolbar`} on:click={() => formattingOpen = !formattingOpen}>
 					<span class="chevron" class:expanded={formattingOpen}><ChevronRight class="icon" size=".85rem"/></span>{$_('bbcode.formatting')}
 				</button>
+				<button type="button" class="sync-toggle" aria-pressed={$settings.bbcode_sync_scroll} disabled={$savingScrollSync} on:click={toggleScrollSync}>{$_('bbcode.sync_scroll')}</button>
 				<select class="layout-select" aria-label={$_('bbcode.layout')} title={$_('bbcode.layout')} value={$settings.bbcode_preview_layout} disabled={$savingLayout} on:change={changeLayout}>
 					<option value="vertical">{$_('bbcode.vertical')}</option>
 					<option value="horizontal">{$_('bbcode.horizontal')}</option>
@@ -508,7 +524,7 @@
 				<button type="button" data-format={format.tag} title={`${$_('bbcode.' + format.tag)} (Ctrl/Cmd+${shortcut(format)})`} aria-label={$_('bbcode.' + format.tag)} aria-keyshortcuts={`Control+${shortcut(format)} Meta+${shortcut(format)}`} {disabled} on:click={() => formatText(format.tag)}>{format.label ?? $_('bbcode.' + format.tag)}</button>
 			{/each}
 		</div>
-		<div class="editor-panes" class:horizontal={$settings.bbcode_preview_layout === 'horizontal'}>
+		<div class="editor-panes" class:horizontal={$settings.bbcode_preview_layout === 'horizontal'} use:syncBBCodeScroll={{ enabled: active && $settings.bbcode_sync_scroll, value }}>
 			<div class="input-pane">
 				<div class="source-input">
 					<pre class="highlight" class:plain={!$settings.bbcode_syntax_highlighting} bind:this={highlight} aria-hidden="true"><SyntaxText tokens={highlighted}/>{'\n'}</pre>
@@ -535,7 +551,7 @@
 			<div class="preview-pane">
 				<div class="preview-heading"><span id={`${id}-preview-label`}>{$_('bbcode.preview')}</span><span class="live">{$_('bbcode.live')}</span></div>
 				<div class="preview select" role="region" aria-labelledby={`${id}-preview-label`} tabindex="0">
-					{#if value}<BBCode {value} widgets={active}/>{:else}<span class="empty">{$_('bbcode.preview_empty')}</span>{/if}
+					<div class="preview-content">{#if value}<BBCode {value} widgets={active} sourceMap={true}/>{:else}<span class="empty">{$_('bbcode.preview_empty')}</span>{/if}</div>
 				</div>
 			</div>
 		</div>
@@ -651,6 +667,10 @@
 	button:focus-visible, .layout-select:focus-visible, .preview:focus-visible {
 		outline: 2px solid #127cff;
 		outline-offset: 1px;
+	}
+	.sync-toggle[aria-pressed='true'] {
+		border-color: var(--text);
+		background: var(--control-hover);
 	}
 	button:disabled {
 		opacity: .5;

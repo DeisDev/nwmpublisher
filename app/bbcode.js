@@ -110,12 +110,12 @@ export function bbcodeWidget(href) {
 }
 
 function nodeText(nodes) {
-	return nodes.map(node => typeof node === 'string' ? node : node.text ?? nodeText(node.children ?? [])).join('');
+	return nodes.map(node => node.text ?? nodeText(node.children ?? [])).join('');
 }
 
 function linkify(nodes, insideLink = false) {
 	return nodes.flatMap(node => {
-		if (typeof node !== 'string') {
+		if (node.tag !== 'text') {
 			const link = node.tag === 'url';
 			if (link) node.href = insideLink ? null : bbcodeUrl(node.argument ?? nodeText(node.children));
 			if (node.children) node.children = linkify(node.children, insideLink || link);
@@ -124,16 +124,16 @@ function linkify(nodes, insideLink = false) {
 		if (insideLink) return [node];
 		const parts = [];
 		let position = 0;
-		for (const match of node.matchAll(/\b(?:https?:\/\/|www\.)[^\s<>\[\]"']+/gi)) {
+		for (const match of node.text.matchAll(/\b(?:https?:\/\/|www\.)[^\s<>\[\]"']+/gi)) {
 			let text = match[0].replace(/[.,!?;:]+$/, '');
 			while (text.endsWith(')') && text.split(')').length > text.split('(').length) text = text.slice(0, -1);
 			const href = bbcodeUrl(text);
 			if (!href) continue;
-			if (match.index > position) parts.push(node.slice(position, match.index));
-			parts.push({ tag: 'url', href, automatic: true, children: [text] });
+			if (match.index > position) parts.push({ tag: 'text', text: node.text.slice(position, match.index), start: node.start + position });
+			parts.push({ tag: 'url', href, automatic: true, start: node.start + match.index, children: [{ tag: 'text', text, start: node.start + match.index }] });
 			position = match.index + text.length;
 		}
-		if (position < node.length) parts.push(node.slice(position));
+		if (position < node.text.length) parts.push({ tag: 'text', text: node.text.slice(position), start: node.start + position });
 		return parts;
 	});
 }
@@ -145,26 +145,27 @@ export function parseBBCode(source) {
 	let position = 0;
 	let match;
 
-	function append(text) {
+	function append(text, start) {
 		if (!text) return;
 		const children = stack[stack.length - 1].children;
-		if (typeof children[children.length - 1] === 'string') children[children.length - 1] += text;
-		else children.push(text);
+		const previous = children[children.length - 1];
+		if (previous?.tag === 'text' && previous.start + previous.text.length === start) previous.text += text;
+		else children.push({ tag: 'text', text, start });
 	}
 
 	function preserveUnclosed() {
 		const node = stack.pop();
 		if (node.tag === 'item') {
 			const last = node.children.length - 1;
-			if (typeof node.children[last] === 'string') node.children[last] = node.children[last].replace(/\r?\n[\t ]*$/, '');
+			if (node.children[last]?.tag === 'text') node.children[last].text = node.children[last].text.replace(/\r?\n[\t ]*$/, '');
 		} else {
-			node.children.unshift(node.opening);
+			node.children.unshift({ tag: 'text', text: node.opening, start: node.start });
 			node.tag = null;
 		}
 	}
 
 	while ((match = tokens.exec(source))) {
-		append(source.slice(position, match.index));
+		append(source.slice(position, match.index), position);
 		position = tokens.lastIndex;
 		const [opening, closing, name, argument, attributes] = match;
 		const tag = name.toLowerCase();
@@ -174,11 +175,11 @@ export function parseBBCode(source) {
 			let listIndex = stack.length - 1;
 			while (listIndex > 0 && !['list', 'olist'].includes(stack[listIndex].tag)) listIndex--;
 			if (listIndex === 0) {
-				append(opening);
+				append(opening, match.index);
 				continue;
 			}
 			while (stack.length - 1 > listIndex) preserveUnclosed();
-			const item = { tag: 'item', children: [] };
+			const item = { tag: 'item', start: match.index, children: [] };
 			stack[listIndex].children.push(item);
 			stack.push(item);
 			continue;
@@ -187,20 +188,20 @@ export function parseBBCode(source) {
 		if (!supportedTags.has(tag)
 			|| (argument !== undefined && (closing || !['url', 'quote'].includes(tag)))
 			|| (attributes !== undefined && (closing || tag !== 'table' || options.some(option => !['noborder=1', 'equalcells=1'].includes(option))))) {
-			append(opening);
+			append(opening, match.index);
 			continue;
 		}
 
 		const parent = stack[stack.length - 1].tag;
 		if (!closing && ((tag === 'tr' && parent !== 'table') || (['th', 'td'].includes(tag) && parent !== 'tr'))) {
-			append(opening);
+			append(opening, match.index);
 			continue;
 		}
 
 		if (closing) {
 			if (['list', 'olist'].includes(tag) && stack[stack.length - 1].tag === 'item' && stack[stack.length - 2]?.tag === tag) preserveUnclosed();
 			if (stack.length > 1 && stack[stack.length - 1].tag === tag) stack.pop();
-			else append(opening);
+			else append(opening, match.index);
 			continue;
 		}
 
@@ -209,27 +210,27 @@ export function parseBBCode(source) {
 			endTag.lastIndex = position;
 			const end = endTag.exec(source);
 			if (!end) {
-				append(source.slice(match.index));
+				append(source.slice(match.index), match.index);
 				position = source.length;
 				break;
 			}
-			stack[stack.length - 1].children.push({ tag, text: source.slice(position, end.index) });
+			stack[stack.length - 1].children.push({ tag, text: source.slice(position, end.index), start: match.index, contentStart: position });
 			position = tokens.lastIndex = endTag.lastIndex;
 			continue;
 		}
 
 		if (tag === 'hr') {
-			stack[stack.length - 1].children.push({ tag });
+			stack[stack.length - 1].children.push({ tag, start: match.index });
 			if (source.slice(position, position + 5).toLowerCase() === '[/hr]') position = tokens.lastIndex += 5;
 			continue;
 		}
 
 		// Bound rendering depth for pasted descriptions with excessive nesting.
 		if (stack.length >= 32) {
-			append(opening);
+			append(opening, match.index);
 			continue;
 		}
-		const node = { tag, argument, opening, children: [] };
+		const node = { tag, argument, opening, start: match.index, children: [] };
 		if (tag === 'table') {
 			node.noborder = options.includes('noborder=1');
 			node.equalcells = options.includes('equalcells=1');
@@ -238,7 +239,7 @@ export function parseBBCode(source) {
 		stack.push(node);
 	}
 
-	append(source.slice(position));
+	append(source.slice(position), position);
 	while (stack.length > 1) preserveUnclosed();
 	return linkify(root.children);
 }

@@ -800,7 +800,7 @@
 				<button type="button" on:click={() => invoke('open_file_location', { path: packageResult })}>{$_('open_folder')}</button>
 			</div>
 		{/if}
-		<div class="file-options" hidden={activeTab !== 'files'}>
+		<div class="file-options">
 			<div class="path-container" id="gma-name-container" use:tippy={$_('gma_file_name_tip')}>
 				<input type="text" id="gma-name" aria-label={$_('gma_file_name_placeholder')} placeholder={$_('gma_file_name_placeholder')} bind:this={gmaNameInput} on:input={onGmaNameInput}/>
 				<div class="extension">.gma</div>
@@ -945,7 +945,7 @@
 		flex-direction: column;
 		overflow: auto;
 	}
-	.workspace-panel[hidden], .file-options[hidden] {
+	.workspace-panel[hidden] {
 		display: none;
 	}
 	.local-settings { flex: 1; min-height: 0; overflow: auto; padding: .25rem; }

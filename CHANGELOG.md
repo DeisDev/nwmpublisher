@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Keep matching text in view when scrolling description and changelog previews, with a saved sync toggle.
 - Add optional syntax highlighting, tag suggestions, and indentation to the BBCode editors.
 - Preview images, GIFs, audio, video, and read-only Lua and text files inside addons.
 - Show YouTube, Steam store, and Workshop widgets in live BBCode previews.
@@ -20,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make addon details easier to read with a compact header and clearer metadata.
 - Organize editor, changelog, and appearance settings into their own sections.
 - Give addon descriptions a full-width Details tab and give the publisher more editing space.
-- Move the GMA filename and ignored file patterns into the publisher sidebar.
+- Keep the GMA filename and ignored file patterns in the publisher sidebar on every tab.
 
 ### Fixed
 

@@ -10,50 +10,52 @@
 	import BBCodeWidget from './BBCodeWidget.svelte';
 	export let nodes;
 	export let widgets = false;
+	export let sourceMap = false;
 </script>
 
 {#each nodes as node}
-	{#if typeof node === 'string'}
-		{node}
+	{#if node.tag === 'text'}
+		{#if sourceMap}<span data-source-start={node.start} data-source-text>{node.text}</span>{:else}{node.text}{/if}
 	{:else if node.tag === 'img'}
-		<BBCodeImage source={node.text}/>
+		<BBCodeImage source={node.text} sourceStart={sourceMap ? node.start : undefined}/>
 	{:else if node.tag === 'code'}
-		<pre><code>{node.text}</code></pre>
+		<pre data-source-start={sourceMap ? node.start : undefined}><code data-source-start={sourceMap ? node.contentStart : undefined} data-source-text={sourceMap ? '' : undefined}>{node.text}</code></pre>
 	{:else if node.tag === 'noparse'}
-		{node.text}
+		{#if sourceMap}<span data-source-start={node.contentStart} data-source-text>{node.text}</span>{:else}{node.text}{/if}
 	{:else if node.tag === 'hr'}
-		<hr/>
+		<hr data-source-start={sourceMap ? node.start : undefined}/>
 	{:else if node.tag === 'url'}
 		{@const widget = widgets && node.automatic && node.href ? bbcodeWidget(node.href) : null}
 		{#if widget}
-			<BBCodeWidget {widget} href={node.href}/>
+			<BBCodeWidget {widget} href={node.href} sourceStart={sourceMap ? node.start : undefined}/>
 		{:else if node.href}
-			<BBCodeLink href={node.href}><svelte:self nodes={node.children}/></BBCodeLink>
+			<BBCodeLink href={node.href}><svelte:self nodes={node.children} {sourceMap}/></BBCodeLink>
 		{:else}
-			<svelte:self nodes={node.children}/>
+			<svelte:self nodes={node.children} {sourceMap}/>
 		{/if}
 	{:else if node.tag === 'spoiler'}
-		<details class="spoiler"><summary>{$_('bbcode.spoiler')}</summary><svelte:self nodes={node.children} {widgets}/></details>
+		<details class="spoiler" data-source-start={sourceMap ? node.start : undefined}><summary>{$_('bbcode.spoiler')}</summary><svelte:self nodes={node.children} {widgets} {sourceMap}/></details>
 	{:else if node.tag === 'quote'}
-		<blockquote>{#if node.argument}<cite>{node.argument}</cite>{/if}<svelte:self nodes={node.children} {widgets}/></blockquote>
+		<blockquote data-source-start={sourceMap ? node.start : undefined}>{#if node.argument}<cite>{node.argument}</cite>{/if}<svelte:self nodes={node.children} {widgets} {sourceMap}/></blockquote>
 	{:else if node.tag === 'list' || node.tag === 'olist'}
-		<svelte:element this={node.tag === 'list' ? 'ul' : 'ol'} class="list">
+		<svelte:element this={node.tag === 'list' ? 'ul' : 'ol'} class="list" data-source-start={sourceMap ? node.start : undefined}>
 			{#each node.children as child}
-				{#if typeof child !== 'string' || child.trim()}
-					<li><svelte:self nodes={child.tag === 'item' ? child.children : [child]} {widgets}/></li>
+				{#if child.tag !== 'text' || child.text.trim()}
+					<li data-source-start={sourceMap ? child.start : undefined}><svelte:self nodes={child.tag === 'item' ? child.children : [child]} {widgets} {sourceMap}/></li>
 				{/if}
 			{/each}
 		</svelte:element>
 	{:else if node.tag === 'table'}
-		<div class="table-scroll"><table class="formatted" class:noborder={node.noborder} class:equalcells={node.equalcells}><tbody><svelte:self nodes={node.children} {widgets}/></tbody></table></div>
+		<div class="table-scroll" data-source-start={sourceMap ? node.start : undefined}><table class="formatted" class:noborder={node.noborder} class:equalcells={node.equalcells}><tbody><svelte:self nodes={node.children} {widgets} {sourceMap}/></tbody></table></div>
 	{:else if elements[node.tag]}
-		<svelte:element this={elements[node.tag]} class="formatted" class:noborder={node.noborder} class:equalcells={node.equalcells}><svelte:self nodes={node.children} {widgets}/></svelte:element>
+		<svelte:element this={elements[node.tag]} data-source-start={sourceMap ? node.start : undefined} class="formatted" class:noborder={node.noborder} class:equalcells={node.equalcells}><svelte:self nodes={node.children} {widgets} {sourceMap}/></svelte:element>
 	{:else}
-		<svelte:self nodes={node.children} {widgets}/>
+		<svelte:self nodes={node.children} {widgets} {sourceMap}/>
 	{/if}
 {/each}
 
 <style>
+	span[data-source-text] { display: contents; }
 	.formatted {
 		overflow-wrap: anywhere;
 	}

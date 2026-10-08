@@ -4,10 +4,11 @@
 
 	export let value = '';
 	export let widgets = false;
+	export let sourceMap = false;
 	$: nodes = parseBBCode(value);
 </script>
 
-<div class="bbcode select"><BBCodePreview {nodes} {widgets}/></div>
+<div class="bbcode select"><BBCodePreview {nodes} {widgets} {sourceMap}/></div>
 
 <style>
 	.bbcode {
