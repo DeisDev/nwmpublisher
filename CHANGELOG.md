@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add Discord Rich Presence support for the current screen and active jobs.
 - Keep matching text in view when scrolling description and changelog previews, with a saved sync toggle.
 - Add optional syntax highlighting, tag suggestions, and indentation to the BBCode editors.
 - Preview images, GIFs, audio, video, and read-only Lua and text files inside addons.
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Sanitize local GMA package names and reject unsafe filenames.
 - Render BBCode in addon descriptions and make links clickable throughout previews.
 - Open file previews inside the publisher instead of launching another app.
 

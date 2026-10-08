@@ -188,6 +188,9 @@ fn package_archive(request: PackageRequest, ignore: Vec<String>, transaction: &T
 	if !destination.is_absolute() || !destination.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("gma")) {
 		return Err(GMAError::InvalidPackageDestination);
 	}
+	if !destination.file_name().and_then(|name| name.to_str()).is_some_and(super::filename::valid_gma_file_name) {
+		return Err(GMAError::InvalidPackageFileName);
+	}
 	let parent = destination.parent().ok_or(GMAError::InvalidPackageDestination)?;
 	let parent = dunce::canonicalize(parent).map_err(|error| GMAError::io("open package destination", parent, error))?;
 	let source = dunce::canonicalize(&content_path).map_err(|error| GMAError::io("open addon folder", &content_path, error))?;
@@ -316,6 +319,22 @@ mod tests {
 		let transaction = crate::transactions::new_publish();
 		assert!(matches!(package_archive(request, vec![], &transaction), Err(GMAError::InvalidPackageDestination)));
 		transaction.error("test", ());
+	}
+
+	#[test]
+	fn local_package_rejects_nonportable_names_without_touching_files() {
+		let root = tempfile::tempdir().unwrap();
+		fs::create_dir(root.path().join("source")).unwrap();
+		fs::write(root.path().join("publishedaddon.gma"), b"keep").unwrap();
+		for name in ["CON.gma", "nul.tar.gma", "COM¹.gma", "addon?.gma", "addon. .gma", " addon.gma"] {
+			let mut request = package_request(root.path());
+			request.destination = root.path().join(name);
+			let transaction = crate::transactions::new_publish();
+			assert!(matches!(package_archive(request, vec![], &transaction), Err(GMAError::InvalidPackageFileName)), "{name}");
+			transaction.error("test", ());
+		}
+		assert_eq!(fs::read(root.path().join("publishedaddon.gma")).unwrap(), b"keep");
+		assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
 	}
 
 	fn independent_crc(bytes: &[u8]) -> u32 {

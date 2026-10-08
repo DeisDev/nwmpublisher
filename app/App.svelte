@@ -12,6 +12,9 @@
 	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
 	import { Transaction } from './transactions.js';
+	import { publisherPresence, settingsPresence, updateDiscordPresence } from './discord.js';
+
+	$: updateDiscordPresence($settingsPresence ? 'settings' : $publisherPresence ?? $pages[$activeItem].name, $_);
 
 	onMount(() => {
 		const recover = ({ detail: snapshot }) => {

@@ -51,6 +51,7 @@ pub mod webview;
 
 mod cli;
 mod commands;
+mod discord;
 
 #[cfg(debug_assertions)]
 fn deadlock_watchdog() {
@@ -103,6 +104,7 @@ fn main() -> std::process::ExitCode {
 		.plugin(tauri_plugin_shell::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.setup(|app| {
+			discord::start();
 			let settings = APP_DATA.settings.read();
 
 			let window = app.get_webview_window("nwmpublisher").unwrap();
@@ -127,8 +129,11 @@ fn main() -> std::process::ExitCode {
 		.plugin(webview::ErrorReporter)
 		.plugin(appdata::Plugin)
 		.invoke_handler(commands::invoke_handler())
-		.run(tauri::generate_context!())
-		.unwrap();
+		.build(tauri::generate_context!())
+		.unwrap()
+		.run(|_, event| {
+			if matches!(event, tauri::RunEvent::Exit) { discord::stop(); }
+		});
 
 	println!("Goodbye!");
 	std::process::ExitCode::SUCCESS

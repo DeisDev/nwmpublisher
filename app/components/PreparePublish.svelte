@@ -35,6 +35,10 @@
 	import { translateError } from '../i18n';
 	import { Steam } from '../steam';
 	import { onMount, onDestroy } from 'svelte';
+	import { publisherPresence } from '../discord.js';
+
+	$: publisherPresence.set($preparePublish ? ($updatingAddon ? 'editing_addon' : 'preparing_addon') : null);
+	onDestroy(() => publisherPresence.set(null));
 
 	export let updatingAddon = null;
 	export let preparePublish;
@@ -448,13 +452,12 @@
 			addonType: addonTypeInput.value,
 			tags: chosenAddonTags.filter(Boolean),
 		};
-		const name = gmaNameFromTitle(gmaNameInput.value).replace(/\.gma$/i, '') || 'publishedaddon';
 		$isPublishing = true;
 		packageResult = null;
 		try {
 			const destination = await dialog.save({
 				title: $_('package_only'),
-				defaultPath: name + '.gma',
+				defaultPath: await invoke('resolve_gma_file_name', { gmaName: gmaNameInput.value }),
 				filters: [{ name: $_('gma_archive'), extensions: ['gma'] }],
 			});
 			if (!destination || session !== addonSession) {

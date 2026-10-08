@@ -176,6 +176,12 @@ pub fn transaction_snapshot(id: u32) -> Result<Option<JobSnapshot>, String> {
 	}
 }
 
+pub fn active_job_kinds() -> Vec<(String, JobState)> {
+	SNAPSHOTS.lock().values().filter(|snapshot| !snapshot.state.terminal()).filter_map(|snapshot| {
+		snapshot.context.as_ref()?.get("kind")?.as_str().map(|kind| (kind.to_owned(), snapshot.state))
+	}).collect()
+}
+
 #[tauri::command]
 pub fn transaction_snapshots() -> Result<Vec<JobSnapshot>, String> {
 	let mut snapshots = SNAPSHOTS.lock().clone();

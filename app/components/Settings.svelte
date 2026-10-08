@@ -11,6 +11,13 @@
 	import { switchLanguage } from '../i18n';
 	import { applyTheme } from '../theme';
 	import { saveSettings, settingsSave, settings } from '../settings.js';
+	import { settingsPresence } from '../discord.js';
+	import { onDestroy } from 'svelte';
+
+	let discordConfigured = null;
+	invoke('discord_configured').then(value => discordConfigured = value).catch(error => console.error('Discord presence:', error));
+	$: settingsPresence.set(active);
+	onDestroy(() => settingsPresence.set(false));
 
 	let active = false;
 	function toggle() {
@@ -124,6 +131,8 @@
 					<Setting id="language" type="select" value={AppSettings.language ?? 'default'} choices={languages} afterChange={chooseLanguage}>{$_('settings.language')}</Setting>
 					<Setting {afterChange} id="extract_overwrite_mode" type="select" value={AppSettings.extract_overwrite_mode} choices={extractOverwriteModes} tooltip={$_('settings.extract_overwrite_mode.tooltip')}>{$_('settings.extract_overwrite_mode.extract_overwrite_mode')}</Setting>
 					<Setting {afterChange} id="sounds" type="bool" value={AppSettings.sounds}>{$_('settings.general.sounds')}</Setting>
+					<Setting {afterChange} id="discord_rich_presence" type="bool" value={AppSettings.discord_rich_presence}>{$_('settings.general.discord_rich_presence')}</Setting>
+					{#if discordConfigured === false}<p class="discord-unavailable">{$_('discord.not_configured')}</p>{/if}
 					<Setting {afterChange} id="open_workshop_after_publish" type="bool" value={AppSettings.open_workshop_after_publish}>{$_('settings.general.open_workshop_after_publish')}</Setting>
 					<Setting {afterChange} id="open_folder_after_extract" type="bool" value={AppSettings.open_folder_after_extract} tooltip={$_('settings.general.open_folder_after_extract_tooltip')}>{$_('settings.general.open_folder_after_extract')}</Setting>
 				</div>
@@ -169,6 +178,7 @@
 <style>
 	h2 { margin: 0 0 1rem; font-size: 1.1rem; }
 	h3 { margin: 0 0 1.25rem; font-size: .95rem; }
+	.discord-unavailable { color: var(--text-muted); font-size: .8rem; margin: -.5rem 0 1rem; }
 	.save-status { margin: 0 0 1.5rem; font-size: .8rem; color: var(--text-muted); }
 	section { padding-bottom: 1.5rem; }
 	section + section { padding-top: 1.5rem; border-top: 1px solid var(--border); }

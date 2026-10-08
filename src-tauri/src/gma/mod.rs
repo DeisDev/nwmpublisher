@@ -32,6 +32,7 @@ pub enum GMAError {
 	InvalidContentPath,
 	InvalidPackageMetadata,
 	InvalidPackageDestination,
+	InvalidPackageFileName,
 	PackageInsideSource,
 	SourceChanged(PathBuf),
 	UnsafeEntry(String),
@@ -56,6 +57,7 @@ impl Display for GMAError {
 			InvalidContentPath => write!(f, "ERR_INVALID_CONTENT_PATH"),
 			InvalidPackageMetadata => write!(f, "ERR_PACKAGE_METADATA"),
 			InvalidPackageDestination => write!(f, "ERR_PACKAGE_DESTINATION"),
+			InvalidPackageFileName => write!(f, "ERR_PACKAGE_FILE_NAME"),
 			PackageInsideSource => write!(f, "ERR_PACKAGE_INSIDE_SOURCE"),
 			SourceChanged(path) => write!(f, "ERR_SOURCE_CHANGED:{}", path.display()),
 			UnsafeEntry(path) => write!(f, "ERR_UNSAFE_ENTRY:{}", path),
@@ -348,6 +350,7 @@ pub mod read;
 pub use read::*;
 
 pub mod write;
+pub mod filename;
 
 pub mod manifest;
 

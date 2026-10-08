@@ -234,6 +234,7 @@ pub struct Settings {
 	pub downloads: Option<PathBuf>,
 
 	pub sounds: bool,
+	pub discord_rich_presence: bool,
 
 	pub window_size: (f64, f64),
 	pub window_maximized: bool,
@@ -282,6 +283,7 @@ impl Default for Settings {
 
 			extract_destination: ExtractDestination::default(),
 			sounds: true,
+			discord_rich_presence: true,
 
 			window_size: (800., 600.),
 			window_maximized: false,
@@ -779,6 +781,16 @@ pub fn write_tauri_settings() -> Option<()> {
 
 #[cfg(test)]
 mod tests {
+	#[test]
+	fn discord_presence_defaults_on_and_preserves_opt_out() {
+		let settings: Settings = serde_json::from_str("{}").unwrap();
+		assert!(settings.discord_rich_presence);
+		let patch = serde_json::json!({ "discord_rich_presence": false }).as_object().unwrap().clone();
+		let settings = super::patched_settings(&settings, patch).unwrap();
+		let restored: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert!(!restored.discord_rich_presence);
+	}
+
 	#[test]
 	fn atomic_saves_keep_a_valid_backup_and_preserve_the_live_file_on_failure() {
 		let root = tempfile::tempdir().unwrap();

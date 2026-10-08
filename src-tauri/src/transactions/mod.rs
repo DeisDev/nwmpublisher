@@ -290,7 +290,9 @@ pub fn new_publish() -> Transaction {
 }
 
 pub fn new_extraction() -> Transaction {
-	new_with_state(JobState::Running, true)
+	let transaction = new_with_state(JobState::Running, true);
+	transaction.context(serde_json::json!({ "kind": "local_extract" }));
+	transaction
 }
 
 fn new_with_state(state: JobState, cooperative: bool) -> Transaction {
@@ -334,6 +336,7 @@ mod tests {
 	#[test]
 	fn extraction_cancellation_is_acknowledged_by_the_worker() {
 		let job = new_extraction();
+		assert_eq!(transaction_snapshot(job.id).unwrap().unwrap().context.unwrap()["kind"], "local_extract");
 		assert_eq!(job.cancel(), JobState::Cancelling);
 		assert!(!job.begin_commit());
 		assert_eq!(*job.state.lock(), JobState::Cancelling);

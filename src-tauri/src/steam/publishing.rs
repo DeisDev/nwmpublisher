@@ -1,3 +1,4 @@
+use crate::gma::filename::resolve_gma_file_name;
 use crate::{
 	gma::{manifest::ContentManifest, GMAEntry, GMAError, GMAFile, GMAFilePointers, GMAMetadata},
 	Transaction, GMOD_APP_ID,
@@ -668,56 +669,6 @@ pub fn publish_description(addon_id: PublishedFileId, description: String) -> Re
 	Ok(id)
 }
 
-const DEFAULT_GMA_FILE_NAME: &str = "publishedaddon";
-const GMA_FILE_NAME_MAX_CHARS: usize = 120;
-const GMA_FILE_NAME_MAX_BYTES: usize = 251;
-
-/// Turns an arbitrary string into a file name that is safe on every supported platform.
-/// Returns None when nothing usable is left, so that callers can fall back to another name.
-fn sanitize_gma_file_name(name: &str) -> Option<String> {
-	let mut bytes = 0;
-	let sanitized: String = name
-		.trim()
-		.chars()
-		.filter(|c| !c.is_control() && !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
-		.take(GMA_FILE_NAME_MAX_CHARS)
-		.take_while(|c| {
-			bytes += c.len_utf8();
-			bytes <= GMA_FILE_NAME_MAX_BYTES
-		})
-		.collect();
-
-	// Leave room for .gma and avoid Windows device names, even with multiple extensions.
-	let sanitized = sanitized.trim().trim_end_matches(|c: char| c == '.' || c.is_whitespace());
-	let base = sanitized.split('.').next().unwrap().trim_end().to_ascii_uppercase();
-	let reserved = matches!(base.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-		|| base
-			.strip_prefix("COM")
-			.or_else(|| base.strip_prefix("LPT"))
-			.is_some_and(|suffix| matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"));
-
-	if sanitized.is_empty() || sanitized.eq_ignore_ascii_case(".gma") || reserved {
-		None
-	} else {
-		Some(sanitized.to_owned())
-	}
-}
-
-/// Chooses the name of the .GMA file that gets packed and uploaded.
-/// The chosen name wins, otherwise "publishedaddon.gma" is used.
-fn resolve_gma_file_name(gma_name: Option<&str>) -> String {
-	let mut file_name = gma_name
-		.and_then(sanitize_gma_file_name)
-		.unwrap_or_else(|| DEFAULT_GMA_FILE_NAME.to_owned());
-
-	if file_name.to_ascii_lowercase().ends_with(".gma") {
-		file_name.truncate(file_name.len() - 4);
-	}
-	file_name.push_str(".gma");
-
-	file_name
-}
-
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishRequest {
@@ -1112,7 +1063,7 @@ mod tests {
 		for input in ["a".repeat(130), "🦀".repeat(120), "界".repeat(120)] {
 			let name = resolve_gma_file_name(Some(&input));
 			assert!(name.len() <= 255);
-			assert!(name.chars().count() <= GMA_FILE_NAME_MAX_CHARS + 4);
+			assert!(name.chars().count() <= crate::gma::filename::GMA_FILE_NAME_MAX_CHARS + 4);
 			assert!(name.ends_with(".gma"));
 			let archive = directory.path().join(name);
 			fs::write(&archive, b"archive").unwrap();
