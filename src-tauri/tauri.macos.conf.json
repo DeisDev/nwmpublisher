@@ -6,6 +6,7 @@
 	"bundle": {
 		"targets": ["dmg"],
 		"macOS": {
+			"minimumSystemVersion": "13.3",
 			"signingIdentity": "-",
 			"entitlements": "Entitlements.plist",
 			"files": {

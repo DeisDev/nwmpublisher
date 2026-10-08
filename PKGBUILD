@@ -9,7 +9,9 @@ arch=('x86_64')
 url="https://github.com/DeisDev/nwmpublisher"
 license=('GPL-3.0')
 
-depends=('webkit2gtk-4.1' 'gtk3' 'openssl' 'xdotool' 'hicolor-icon-theme')
+depends=('webkit2gtk-4.1' 'gtk3' 'openssl' 'xdotool' 'xz' 'hicolor-icon-theme'
+         'ca-certificates' 'dbus' 'xdg-utils'
+         'gst-plugins-base' 'gst-plugins-good' 'gst-plugins-bad' 'gst-libav')
 provides=("${_realname}")
 conflicts=("${_realname}")
 source=("${url}/releases/download/${pkgver}/${_realname}_${pkgver}_amd64.deb")

@@ -28,13 +28,15 @@ jobs:
         sudo apt-get install -y libwebkit2gtk-4.1-dev \
             build-essential curl wget file libssl-dev libgtk-3-dev \
             libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
-            patchelf libfuse2 rpm desktop-file-utils
+            patchelf libfuse2 rpm desktop-file-utils dbus xdg-utils \
+            gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-libav
 
     - name: Install NPM dependencies
       run: npm install --global npm@12.0.2 && npm ci
 
     - name: Build Linux packages
-      run: npm run tauri build -- -v -- --locked
+      run: npm run tauri build -- --ci -v -- --locked
       env:
         APPIMAGE_EXTRACT_AND_RUN: "1"
 
@@ -54,8 +56,15 @@ jobs:
         test -f "${appimages[0]}"
 
         dpkg-deb --info "${debs[0]}"
+        deb_dependencies=$(dpkg-deb --field "${debs[0]}" Depends | tr ',' '\n' | sed 's/^ *//; s/ *$//')
+        for dependency in ca-certificates dbus xdg-utils liblzma5 libwebkit2gtk-4.1-0 libgtk-3-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav; do
+          grep -Fx "$dependency" <<< "$deb_dependencies"
+        done
         dpkg-deb --extract "${debs[0]}" "$RUNNER_TEMP/deb"
-        rpm --query --package --requires "${rpms[0]}"
+        rpm_dependencies=$(rpm --query --package --requires "${rpms[0]}")
+        for dependency in ca-certificates dbus-tools xdg-utils 'liblzma.so.5()(64bit)' 'libwebkit2gtk-4.1.so.0()(64bit)' 'libgtk-3.so.0()(64bit)' gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugin-libav; do
+          grep -Fx "$dependency" <<< "$rpm_dependencies"
+        done
         rpm --checksig "${rpms[0]}"
         mkdir "$RUNNER_TEMP/rpm"
         cd "$RUNNER_TEMP/rpm"
@@ -70,8 +79,41 @@ jobs:
           env -u LD_LIBRARY_PATH "$RUNNER_TEMP/$package/usr/bin/nwmpublisher" --help
         done
         "${appimages[0]}" --appimage-extract > /dev/null
-        test -f squashfs-root/usr/lib/nwmpublisher/libsteam_api.so
-        env -u LD_LIBRARY_PATH "$RUNNER_TEMP/squashfs-root/AppRun" --help
+        appdir="$RUNNER_TEMP/squashfs-root"
+        test -f "$appdir/usr/lib/nwmpublisher/libsteam_api.so"
+        test -x "$appdir/usr/bin/xdg-open"
+        test -x "$appdir/usr/bin/xdg-mime"
+        test -x "$appdir/usr/bin/dbus-send"
+        test -x "$appdir/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
+        for helper in WebKitNetworkProcess WebKitWebProcess; do
+          test -n "$(find "$appdir/usr" -type f -name "$helper" -executable -print)"
+        done
+        test -n "$(find "$appdir/usr" -name libwebkit2gtkinjectedbundle.so -print)"
+        env -u LD_LIBRARY_PATH "$appdir/AppRun" --help
+
+        export LD_LIBRARY_PATH="$appdir/usr/lib:$appdir/usr/lib/nwmpublisher"
+        while IFS= read -r -d '' binary; do
+          [[ $(file -b "$binary") == ELF* ]] || continue
+          dynamic=$(readelf -d "$binary")
+          grep -q '(NEEDED)' <<< "$dynamic" || continue
+          dependencies=$(ldd "$binary")
+          if grep -q 'not found' <<< "$dependencies"; then
+            echo "::error::Missing AppImage dependency in $binary"
+            printf '%s\n' "$dependencies"
+            exit 1
+          fi
+        done < <(find "$appdir" -type f -print0)
+
+        export GST_PLUGIN_PATH_1_0="$appdir/usr/lib/gstreamer-1.0"
+        export GST_PLUGIN_SYSTEM_PATH_1_0="$GST_PLUGIN_PATH_1_0"
+        export GST_PLUGIN_SCANNER_1_0="$appdir/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
+        export GST_REGISTRY="$RUNNER_TEMP/bundled-gstreamer-registry.bin"
+        for element in autoaudiosink pulsesink appsrc appsink playbin wavparse vorbisdec oggdemux mpg123audiodec flacdec qtdemux matroskademux vp8dec vp9dec avdec_aac avdec_h264 aacparse h264parse; do
+          gst-inspect-1.0 "$element" > /dev/null
+        done
+        for sound in "$GITHUB_WORKSPACE"/public/sound/*; do
+          timeout 30s gst-launch-1.0 -q filesrc location="$sound" ! decodebin ! audioconvert ! fakesink
+        done
 
     - name: Upload Linux packages
       uses: actions/upload-artifact@v4
@@ -198,7 +240,7 @@ jobs:
           unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
         fi
 
-        npm run tauri build -- --target universal-apple-darwin -v -- --locked
+        npm run tauri build -- --ci --target universal-apple-darwin -v -- --locked
 
         dmgs=("$GITHUB_WORKSPACE"/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
         test "${#dmgs[@]}" -eq 1
@@ -209,19 +251,27 @@ jobs:
         trap 'hdiutil detach "$mount"' EXIT
         app="$RUNNER_TEMP/nwmpublisher.app"
         ditto "$mount/nwmpublisher.app" "$app"
-        for binary in "$app/Contents/MacOS/nwmpublisher" "$app/Contents/MacOS/libsteam_api.dylib"; do
+        test -x "$app/Contents/MacOS/nwmpublisher"
+        test -f "$app/Contents/MacOS/libsteam_api.dylib"
+        minimum=$(node -p "require('./src-tauri/tauri.macos.conf.json').bundle.macOS.minimumSystemVersion")
+        test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$app/Contents/Info.plist")" = "$minimum"
+        while IFS= read -r -d '' binary; do
+          [[ $(file -b "$binary") == *Mach-O* ]] || continue
           lipo "$binary" -verify_arch x86_64 arm64
-          dependencies=$(otool -L "$binary" | awk '/^\t/ {print $1}')
+          dependencies=$(otool -arch all -L "$binary" | awk '/^\t/ {print $1}')
           while IFS= read -r dependency; do
             case "$dependency" in
-              /System/Library/*|/usr/lib/*|@loader_path/libsteam_api.dylib) ;;
-              *) echo "::error::Unbundled macOS dependency: $dependency"; exit 1 ;;
+              /System/Library/*|/usr/lib/*) ;;
+              @loader_path/libsteam_api.dylib) test -f "$(dirname "$binary")/libsteam_api.dylib" ;;
+              *) echo "::error::Unbundled macOS dependency in $binary: $dependency"; exit 1 ;;
             esac
           done <<< "$dependencies"
-        done
+        done < <(find "$app/Contents" -type f -print0)
         codesign --verify --deep --strict --verbose=2 "$app"
         cd "$RUNNER_TEMP"
-        env -u DYLD_LIBRARY_PATH "$app/Contents/MacOS/nwmpublisher" --help
+        for architecture in arm64 x86_64; do
+          env -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH arch -"$architecture" "$app/Contents/MacOS/nwmpublisher" --help
+        done
         if [[ -n "${APPLE_ID:-}" ]]; then
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
@@ -279,7 +329,7 @@ jobs:
 
           - **Windows:** download and run the `.msi` installer.
           - **Windows portable:** extract the whole `x64_portable.zip` and run `nwmpublisher.exe`. It shares the installed app's settings and requires [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section).
-          - **macOS (Intel and Apple Silicon):** open the universal `.dmg`, drag nwmpublisher into Applications, then open it from Applications. Builds without Developer ID signing require approval in System Settings → Privacy & Security → Open Anyway after the first launch attempt.
+          - **macOS 13.3+ (Intel and Apple Silicon):** open the universal `.dmg`, drag nwmpublisher into Applications, then open it from Applications. Builds without Developer ID signing require approval in System Settings → Privacy & Security → Open Anyway after the first launch attempt.
           - **Ubuntu / Debian:** download the `.deb` and install it with `sudo apt install ./nwmpublisher_*.deb`.
           - **Fedora:** download the `.rpm` and install it with `sudo dnf install ./nwmpublisher-*.rpm`.
           - **Other Linux distributions / Steam Deck:** download the `.AppImage`, mark it executable in its file properties, and open it. Linux packages are x86_64 and built on Ubuntu 22.04.

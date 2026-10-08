@@ -24,7 +24,7 @@ Download the latest release from the [releases page](https://github.com/DeisDev/
 | --- | --- | --- |
 | Windows | `.msi` | Open the installer. |
 | Windows, portable | `x64_portable.zip` | Extract the whole ZIP, then run `nwmpublisher.exe` from the extracted folder. |
-| macOS, Intel or Apple Silicon | Universal `.dmg` | Open the disk image, drag nwmpublisher into Applications, then launch it from Applications. |
+| macOS 13.3+, Intel or Apple Silicon | Universal `.dmg` | Open the disk image, drag nwmpublisher into Applications, then launch it from Applications. |
 | Ubuntu / Debian | `amd64.deb` | Open a terminal in your download folder and run `sudo apt install ./nwmpublisher_*.deb`. This also installs required system libraries. |
 | Fedora | `x86_64.rpm` | Run `sudo dnf install ./nwmpublisher-*.rpm` in your download folder. |
 | Other Linux distributions / Steam Deck | `amd64.AppImage` | In the file's properties, allow it to run as a program, then open it. On Steam Deck, use Desktop Mode. |
@@ -145,8 +145,8 @@ Publishing and updating Workshop items are currently available only in the GUI.
 
 ## Supported Platforms
 
-* Windows
-* macOS
+* Windows 10/11
+* macOS 13.3 or newer
 * Linux
 
 Windows is the primary development and testing platform.

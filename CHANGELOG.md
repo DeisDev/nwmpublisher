@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Require macOS 13.3 or newer.
+
+### Fixed
+
+- Include missing audio and video libraries in the Linux AppImage.
+- Install missing Linux dependencies for media previews and opening files.
+
 ## [3.3.0] - 2026-10-08
 
 ### Added
