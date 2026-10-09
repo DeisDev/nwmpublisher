@@ -179,6 +179,7 @@ fn without_steam_identity(command: &mut std::process::Command) -> &mut std::proc
 	command.env_remove("SteamAppId").env_remove("SteamGameId")
 }
 
+#[cfg(not(target_os = "linux"))]
 pub fn open_file_location<P: AsRef<Path>>(path: P) {
 	let path = dunce::canonicalize(path.as_ref()).unwrap_or_else(|_| path.as_ref().to_path_buf());
 
@@ -189,39 +190,81 @@ pub fn open_file_location<P: AsRef<Path>>(path: P) {
 		#[cfg(target_os = "macos")]
 		return std::process::Command::new("open").arg("-R").arg(&path).spawn();
 
-		#[cfg(target_os = "linux")]
-		{
-			let path = path.to_string_lossy().into_owned();
-			if path.contains(',') || path.contains('"') || path.contains('\\') {
-				let new_path = match std::fs::metadata(&path).unwrap().is_dir() {
-					true => path,
-					false => {
-						let mut path2 = PathBuf::from(path);
-						path2.pop();
-						path2.into_os_string().into_string().unwrap()
-					}
-				};
-				return without_steam_identity(&mut std::process::Command::new("xdg-open")).arg(&new_path).spawn();
-			} else {
-				if let Ok(fork::Fork::Child) = fork::daemon(false, false) {
-					return without_steam_identity(&mut std::process::Command::new("dbus-send"))
-						.args([
-							"--session",
-							"--dest=org.freedesktop.FileManager1",
-							"--type=method_call",
-							"/org/freedesktop/FileManager1",
-							"org.freedesktop.FileManager1.ShowItems",
-							format!("array:string:\"file://{path}\"").as_str(),
-							"string:\"\"",
-						])
-						.spawn();
-				}
-			};
-		}
-
 		#[allow(unreachable_code)]
 		Err(std::io::Error::other("Unsupported OS"))
 	})().is_err() {
-		webview!().window().dialog().message(path.display().to_string()).title("File Location").show(|_| {});
+		show_file_location_dialog(&path);
+	}
+}
+
+#[cfg(target_os = "linux")]
+pub fn open_file_location<P: AsRef<Path>>(path: P) {
+	let path = dunce::canonicalize(path.as_ref()).unwrap_or_else(|_| path.as_ref().to_path_buf());
+
+	// Commands run on the main thread, and dbus-send waits for the file manager to reply.
+	std::thread::spawn(move || {
+		if path.exists() {
+			match show_item(&path) {
+				Ok(()) => return,
+				Err(error) => eprintln!("Failed to show \"{}\" in the file manager: {error}", path.display()),
+			}
+		}
+		if open_with_default_app(path.parent().unwrap_or(&path)).is_err() {
+			show_file_location_dialog(&path);
+		}
+	});
+}
+
+#[cfg(target_os = "linux")]
+fn show_item(path: &Path) -> std::io::Result<()> {
+	let status = without_steam_identity(&mut std::process::Command::new("dbus-send"))
+		.args([
+			"--session",
+			"--print-reply",
+			"--dest=org.freedesktop.FileManager1",
+			"--type=method_call",
+			"/org/freedesktop/FileManager1",
+			"org.freedesktop.FileManager1.ShowItems",
+		])
+		.arg(format!("array:string:{}", file_uri(path)))
+		.arg("string:")
+		.stdin(std::process::Stdio::null())
+		.stdout(std::process::Stdio::null())
+		.status()?;
+	if status.success() {
+		Ok(())
+	} else {
+		Err(std::io::Error::other(format!("dbus-send {status}")))
+	}
+}
+
+// dbus-send splits array values on commas, so encode everything outside RFC 3986's unreserved set.
+#[cfg(target_os = "linux")]
+fn file_uri(path: &Path) -> String {
+	use std::os::unix::ffi::OsStrExt;
+
+	let mut uri = String::from("file://");
+	for &byte in path.as_os_str().as_bytes() {
+		if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
+			uri.push(char::from(byte));
+		} else {
+			uri.push_str(&format!("%{byte:02X}"));
+		}
+	}
+	uri
+}
+
+fn show_file_location_dialog(path: &Path) {
+	webview!().window().dialog().message(path.display().to_string()).title("File Location").show(|_| {});
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+	use std::{ffi::OsStr, os::unix::ffi::OsStrExt, path::Path};
+
+	#[test]
+	fn file_uri_percent_encodes_reserved_and_non_utf8_bytes() {
+		let path = Path::new(OsStr::from_bytes(b"/tmp/100% #1, \"a\"\\b/caf\xC3\xA9/\xFF~x-y_z.gma"));
+		assert_eq!(super::file_uri(path), "file:///tmp/100%25%20%231%2C%20%22a%22%5Cb/caf%C3%A9/%FF~x-y_z.gma");
 	}
 }

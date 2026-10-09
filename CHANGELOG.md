@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Include missing audio and video libraries in the Linux AppImage.
 - Read the correct Workshop ID from GMA file names that end in the ID.
 - Install missing Linux dependencies for media previews and opening files.
+- On Linux, showing a file in the file manager no longer closes the app or fails for deleted files and names with special characters.
 
 ## [3.3.0] - 2026-10-08
 
