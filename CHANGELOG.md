@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Optionally name extracted folders after the Workshop title and ID, and save Workshop details to a text file.
+- Open `.gma` files from Linux file managers to extract them with nwmpublisher.
 
 ### Changed
 
 - Require macOS 13.3 or newer.
 - Show description and changelog previews side by side by default, keeping saved layouts.
+- On Linux, setting `WEBKIT_DISABLE_COMPOSITING_MODE=0` now turns accelerated rendering back on.
 
 ### Fixed
 

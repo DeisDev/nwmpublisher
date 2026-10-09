@@ -28,12 +28,18 @@ jobs:
         sudo apt-get install -y libwebkit2gtk-4.1-dev \
             build-essential curl wget file libssl-dev libgtk-3-dev \
             libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
-            patchelf libfuse2 rpm desktop-file-utils dbus xdg-utils \
+            patchelf libfuse2 rpm desktop-file-utils shared-mime-info dbus xdg-utils \
             gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad gstreamer1.0-libav
 
     - name: Install NPM dependencies
       run: npm install --global npm@12.0.2 && npm ci
+
+    - name: Run Rust tests
+      run: |
+        node src-tauri/copySharedLibs.js
+        cd src-tauri
+        cargo test --locked
 
     - name: Build Linux packages
       run: npm run tauri build -- --ci -v -- --locked
@@ -76,6 +82,11 @@ jobs:
         for package in deb rpm; do
           test -f "$package/usr/lib/nwmpublisher/libsteam_api.so"
           desktop-file-validate "$package/usr/share/applications/nwmpublisher.desktop"
+          desktop-file-validate "$package/usr/share/applications/nwmpublisher-extract.desktop"
+          mkdir -p "$package-mime/packages"
+          cp "$package/usr/share/mime/packages/nwmpublisher.xml" "$package-mime/packages/"
+          update-mime-database "$package-mime"
+          grep -Fx '50:application/x-gma:*.gma' "$package-mime/globs2"
           env -u LD_LIBRARY_PATH "$RUNNER_TEMP/$package/usr/bin/nwmpublisher" --help
         done
         "${appimages[0]}" --appimage-extract > /dev/null

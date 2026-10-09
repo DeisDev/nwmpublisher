@@ -154,15 +154,11 @@ pub(super) fn stdin() -> Option<ExitCode> {
 	}
 	let output = output.path;
 	if !matches.get_flag("no-open") && app_data!().settings.read().open_folder_after_extract {
-		if let Err(error) = opener::open(&output) {
-			let details = match error {
-				opener::OpenError::Io(error) => error.to_string(),
-				error => error.to_string(),
-			};
+		if let Err(error) = crate::path::open_with_default_app(&output) {
 			std::eprintln!(
 				"Extraction succeeded, but failed to open output folder \"{}\": {}. Open it manually or use --no-open.",
 				output.display(),
-				details
+				error
 			);
 			return Some(ExitCode::FAILURE);
 		}

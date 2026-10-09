@@ -21,6 +21,8 @@
 				],
 				"files": {
 					"/usr/lib/nwmpublisher/libsteam_api.so": "lib/steam_api/redistributable_bin/linux64/libsteam_api.so",
+					"/usr/share/applications/nwmpublisher-extract.desktop": "linux/nwmpublisher-extract.desktop",
+					"/usr/share/mime/packages/nwmpublisher.xml": "linux/nwmpublisher.xml",
 					"/usr/share/doc/nwmpublisher/copyright": "../LICENSE"
 				}
 			},
@@ -37,6 +39,8 @@
 				],
 				"files": {
 					"/usr/lib/nwmpublisher/libsteam_api.so": "lib/steam_api/redistributable_bin/linux64/libsteam_api.so",
+					"/usr/share/applications/nwmpublisher-extract.desktop": "linux/nwmpublisher-extract.desktop",
+					"/usr/share/mime/packages/nwmpublisher.xml": "linux/nwmpublisher.xml",
 					"/usr/share/licenses/nwmpublisher/LICENSE": "../LICENSE"
 				}
 			}

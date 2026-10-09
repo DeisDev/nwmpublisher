@@ -145,13 +145,38 @@ pub fn has_extension<P: AsRef<Path>, S: AsRef<str>>(path: P, extension: S) -> bo
 
 pub fn open<P: AsRef<Path>>(path: P) {
 	let path = path.as_ref();
-	if let Err(error) = opener::open(path) {
+	if let Err(error) = open_with_default_app(path) {
 		if *crate::cli::CLI_MODE {
 			eprintln!("Failed to open {}: {}", path.display(), error);
 			return;
 		}
 		webview!().window().dialog().message(path.to_string_lossy()).title("File").show(|_| {});
 	}
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn open_with_default_app(path: &Path) -> std::io::Result<()> {
+	opener::open(path).map_err(std::io::Error::other)
+}
+
+#[cfg(target_os = "linux")]
+pub fn open_with_default_app(path: &Path) -> std::io::Result<()> {
+	let status = without_steam_identity(&mut std::process::Command::new("xdg-open"))
+		.arg(path)
+		.stdin(std::process::Stdio::null())
+		.stdout(std::process::Stdio::null())
+		.status()?;
+	if status.success() {
+		Ok(())
+	} else {
+		Err(std::io::Error::other(format!("xdg-open {status}")))
+	}
+}
+
+// Steamworks leaves Garry's Mod's app ID in our environment, and clearing it there is unsound on Linux once threads run.
+#[cfg(target_os = "linux")]
+fn without_steam_identity(command: &mut std::process::Command) -> &mut std::process::Command {
+	command.env_remove("SteamAppId").env_remove("SteamGameId")
 }
 
 pub fn open_file_location<P: AsRef<Path>>(path: P) {
@@ -176,10 +201,10 @@ pub fn open_file_location<P: AsRef<Path>>(path: P) {
 						path2.into_os_string().into_string().unwrap()
 					}
 				};
-				return std::process::Command::new("xdg-open").arg(&new_path).spawn();
+				return without_steam_identity(&mut std::process::Command::new("xdg-open")).arg(&new_path).spawn();
 			} else {
 				if let Ok(fork::Fork::Child) = fork::daemon(false, false) {
-					return std::process::Command::new("dbus-send")
+					return without_steam_identity(&mut std::process::Command::new("dbus-send"))
 						.args([
 							"--session",
 							"--dest=org.freedesktop.FileManager1",

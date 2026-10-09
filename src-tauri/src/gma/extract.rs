@@ -532,7 +532,11 @@ mod tests {
 		assert_eq!(extract(ExtractDestination::NamedDirectory(parent.clone()), &named(3, None)).path, parent.join("test"));
 		let exact = root.join("exact");
 		assert_eq!(extract(ExtractDestination::Directory(exact.clone()), &named(1, Some("Café: Addon"))).path, exact);
-		assert_eq!(names(&parent), ["Café Addon [1]", "Café Addon [2]", "test"]);
+		let (retained, entries): (Vec<_>, Vec<_>) = names(&parent).into_iter().partition(|name| name.starts_with(".nwmpublisher-extract-"));
+		// Unix keeps the replaced "test" folder for recovery instead of recycling it.
+		assert_eq!(retained.len(), usize::from(cfg!(unix)));
+		assert!(retained.iter().all(|name| parent.join(name).join("previous/lua/test.lua").is_file()));
+		assert_eq!(entries, ["Café Addon [1]", "Café Addon [2]", "test"]);
 		assert_eq!(fs::read(parent.join("Café Addon [2]/lua/test.lua")).unwrap(), b"test");
 		fs::remove_dir_all(root).unwrap();
 	}

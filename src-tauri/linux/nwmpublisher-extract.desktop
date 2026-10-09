@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=nwmpublisher
+Comment=Extract Garry's Mod addons
+Exec=nwmpublisher -e %f
+Icon=nwmpublisher
+Terminal=false
+NoDisplay=true
+MimeType=application/x-gma;

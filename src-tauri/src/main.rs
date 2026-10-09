@@ -76,7 +76,8 @@ fn deadlock_watchdog() {
 
 fn main() -> std::process::ExitCode {
 	// https://github.com/WilliamVenner/gmpublisher/issues/210
-	if cfg!(target_os = "linux") {
+	// Keep a user's own value so WEBKIT_DISABLE_COMPOSITING_MODE=0 can re-enable compositing.
+	if cfg!(target_os = "linux") && std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
 		std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
 	}
 
