@@ -317,7 +317,7 @@ impl Default for Settings {
 
 			extract_overwrite_mode: ExtractionOverwriteMode::default(),
 			addon_cleaner_permanent_delete: false,
-			bbcode_preview_layout: PreviewLayout::Vertical,
+			bbcode_preview_layout: PreviewLayout::Horizontal,
 			bbcode_sync_scroll: true,
 			bbcode_syntax_highlighting: true,
 			bbcode_autocomplete: true,
@@ -927,8 +927,10 @@ mod tests {
 	#[test]
 	fn preview_layout_preserves_existing_settings_and_round_trips() {
 		let settings: Settings = serde_json::from_value(serde_json::json!({"sounds": false})).unwrap();
-		assert_eq!(settings.bbcode_preview_layout, super::PreviewLayout::Vertical);
+		assert_eq!(settings.bbcode_preview_layout, super::PreviewLayout::Horizontal);
 		assert!(!settings.sounds);
+		let saved: Settings = serde_json::from_value(serde_json::to_value(Settings { bbcode_preview_layout: super::PreviewLayout::Vertical, ..Settings::default() }).unwrap()).unwrap();
+		assert_eq!(saved.bbcode_preview_layout, super::PreviewLayout::Vertical);
 		for layout in ["vertical", "horizontal"] {
 			let settings: Settings = serde_json::from_value(serde_json::json!({"bbcode_preview_layout": layout})).unwrap();
 			assert_eq!(serde_json::to_value(settings).unwrap()["bbcode_preview_layout"], layout);

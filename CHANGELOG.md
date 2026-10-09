@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Require macOS 13.3 or newer.
+- Show description and changelog previews side by side by default, keeping saved layouts.
 
 ### Fixed
 
