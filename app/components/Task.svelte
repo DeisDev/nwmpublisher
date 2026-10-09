@@ -64,6 +64,10 @@
 		subscriptions.push(() => clearTimeout(delay));
 	}
 
+	function warningText(transaction) {
+		return transaction?.warnings?.map(warning => translateError(warning)).join('\n') || undefined;
+	}
+
 	function cancel() {
 		if (finished || cancelled || destroyed || expired || !transaction.cancellable) return;
 		transaction.cancel();
@@ -137,7 +141,7 @@
 				{$_('cancelled')}
 			{:else if finished}
 				{#if transaction}
-					{$_(transaction.warnings?.length || transaction.result?.cleanupWarnings?.length ? 'job_cleanup_warning' : 'done')}
+					<span class="error-message" title={warningText(transaction)}>{$_(transaction.warnings?.length || transaction.result?.cleanupWarnings?.length ? 'job_cleanup_warning' : 'done')}</span>
 				{:else}
 					{statusTextFn}
 				{/if}

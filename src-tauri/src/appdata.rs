@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-	gma::{ExtractDestination, ExtractionOverwriteMode},
+	gma::{filename::DEFAULT_METADATA_FILE_NAME, ExtractDestination, ExtractionOverwriteMode},
 	steam::workshop::WorkshopVisibility,
 	RwLockCow,
 };
@@ -243,6 +243,9 @@ pub struct Settings {
 	pub destinations: Vec<PathBuf>,
 	pub create_folder_on_extract: bool,
 	pub open_folder_after_extract: bool,
+	pub extract_workshop_title: bool,
+	pub extract_workshop_metadata: bool,
+	pub extract_metadata_filename: String,
 
 	pub ignore_globs: Vec<String>,
 
@@ -291,6 +294,9 @@ impl Default for Settings {
 			destinations: Vec::new(),
 			create_folder_on_extract: true,
 			open_folder_after_extract: true,
+			extract_workshop_title: false,
+			extract_workshop_metadata: false,
+			extract_metadata_filename: DEFAULT_METADATA_FILE_NAME.to_owned(),
 
 			ignore_globs: Vec::new(),
 			my_workshop_local_paths: HashMap::new(),
@@ -403,6 +409,9 @@ impl Settings {
 		}
 
 		self.destinations.truncate(20);
+		if !crate::gma::filename::valid_metadata_file_name(&self.extract_metadata_filename) {
+			self.extract_metadata_filename = DEFAULT_METADATA_FILE_NAME.to_owned();
+		}
 	}
 }
 
@@ -587,13 +596,18 @@ pub fn change_settings<T>(change: impl FnOnce(&mut Settings) -> Result<T, String
 fn patched_settings(settings: &Settings, patch: serde_json::Map<String, serde_json::Value>) -> Result<Settings, String> {
 	let mut value = serde_json::to_value(settings).map_err(|error| error.to_string())?;
 	let fields = value.as_object_mut().unwrap();
+	let metadata_name = patch.contains_key("extract_metadata_filename");
 	for (key, value) in patch {
 		if !fields.contains_key(&key) || matches!(key.as_str(), "window_size" | "window_maximized" | "changelogs" | "my_workshop_local_paths") {
 			return Err(format!("ERR_SETTINGS_FIELD:{}", key));
 		}
 		fields.insert(key, value);
 	}
-	serde_json::from_value(value).map_err(|error| error.to_string())
+	let settings: Settings = serde_json::from_value(value).map_err(|error| error.to_string())?;
+	if metadata_name && !crate::gma::filename::valid_metadata_file_name(&settings.extract_metadata_filename) {
+		return Err("ERR_METADATA_FILE_NAME".into());
+	}
+	Ok(settings)
 }
 
 #[tauri::command]
@@ -1020,6 +1034,30 @@ mod tests {
 		let settings: Settings = serde_json::from_str(r#"{"open_folder_after_extract":false}"#).unwrap();
 		assert!(settings.open_workshop_after_publish);
 		assert!(!settings.open_folder_after_extract);
+	}
+
+	#[test]
+	fn workshop_extraction_preferences_default_off_validate_and_round_trip() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false,"open_folder_after_extract":false}"#).unwrap();
+		assert!(!defaults.extract_workshop_title);
+		assert!(!defaults.extract_workshop_metadata);
+		assert_eq!(defaults.extract_metadata_filename, "workshop.txt");
+		assert!(!defaults.open_folder_after_extract);
+		let patch = serde_json::json!({"extract_workshop_title": true, "extract_workshop_metadata": true, "extract_metadata_filename": "Info 模型.TXT"});
+		let settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert!(loaded.extract_workshop_title && loaded.extract_workshop_metadata);
+		assert_eq!(loaded.extract_metadata_filename, "Info 模型.TXT");
+		assert!(!loaded.sounds);
+		for name in ["", "workshop", "../workshop.txt", "CON.txt", "a:b.txt", "workshop.txt "] {
+			let patch = serde_json::json!({"extract_metadata_filename": name});
+			assert_eq!(super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap_err(), "ERR_METADATA_FILE_NAME", "{name:?}");
+		}
+		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"extract_metadata_filename": null})).unwrap()).is_err());
+		let mut damaged: Settings = serde_json::from_str(r#"{"extract_metadata_filename":"a/b.txt","extract_workshop_metadata":true}"#).unwrap();
+		damaged.sanitize();
+		assert_eq!(damaged.extract_metadata_filename, "workshop.txt");
+		assert!(damaged.extract_workshop_metadata);
 	}
 
 	#[test]

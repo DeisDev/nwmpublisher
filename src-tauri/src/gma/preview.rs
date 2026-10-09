@@ -1,7 +1,7 @@
 use std::{io::{Read, SeekFrom}, path::{Path, PathBuf}, sync::Arc};
 use serde::Serialize;
 
-use super::{extract::ExtractGMAImmut, manifest::ContentManifest, output::Directory, ExtractDestination, GMAEntry, GMAError, GMAFile, GMAReader};
+use super::{extract::ExtractGMAImmut, manifest::ContentManifest, output::Directory, ExtractDestination, ExtractOptions, GMAEntry, GMAError, GMAFile, GMAReader};
 use parking_lot::Mutex;
 
 lazy_static! {
@@ -79,8 +79,10 @@ pub fn extract_preview_gma(gma_path: PathBuf, dest: ExtractDestination) -> Optio
 		}
 
 		let gma_ref = gma.clone();
+		let mut options = ExtractOptions::from_settings();
 		rayon::spawn(move || {
-			ignore! { gma_ref.extract(dest, &transaction, true, true) };
+			if !crate::steam::item_info::attach(&mut options, gma_ref.inferred_ws_id(), true, None, &transaction) { return transaction.cancelled(); }
+			ignore! { gma_ref.extract(dest, &transaction, true, true, &options) };
 		});
 
 		Some(id)

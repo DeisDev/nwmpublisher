@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Optionally name extracted folders after the Workshop title and ID, and save Workshop details to a text file.
+
 ### Changed
 
 - Require macOS 13.3 or newer.
@@ -14,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Include missing audio and video libraries in the Linux AppImage.
+- Read the correct Workshop ID from GMA file names that end in the ID.
 - Install missing Linux dependencies for media previews and opening files.
 
 ## [3.3.0] - 2026-10-08

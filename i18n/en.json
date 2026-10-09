@@ -133,6 +133,16 @@
 	"ERR_ARCHIVE_LIMIT": "The archive exceeds a supported resource limit.",
 	"ERR_NO_SAFE_DESTINATION": "No safe extraction destination is available.",
 	"ERR_RECYCLE_RETAINED": "The previous directory was retained for recovery. Move it to the trash manually if it is no longer needed.",
+	"ERR_WORKSHOP_ID_UNKNOWN": "No Workshop ID was found, so Workshop details were not added.",
+	"ERR_WORKSHOP_STEAM_UNAVAILABLE": "Steam is not available, so Workshop details were not added.",
+	"ERR_WORKSHOP_LOOKUP": "Workshop details could not be loaded.",
+	"ERR_WORKSHOP_LOOKUP_TIMEOUT": "Steam did not return Workshop details within 30 seconds.",
+	"ERR_WORKSHOP_ITEM_MISSING": "Steam returned no details for this Workshop item.",
+	"ERR_WORKSHOP_ITEM_MISMATCH": "Steam returned details for a different item, so they were not used.",
+	"ERR_WORKSHOP_OWNER_UNAVAILABLE": "The owner's name could not be loaded.",
+	"ERR_WORKSHOP_FOLDER_NAME": "The Workshop title is unavailable, so the usual folder name was used.",
+	"ERR_WORKSHOP_METADATA_RENAMED": "Workshop details were saved as {data} because the usual name was taken.",
+	"ERR_METADATA_FILE_NAME": "Use a short .txt filename without reserved names or these characters: < > : \" / \\ | ? *. Avoid spaces or periods at the ends of the name.",
 	"ERR_SETTINGS_SAVE": "Settings could not be saved.",
 	"ERR_SETTINGS_FIELD": "This settings field cannot be changed by this operation.",
 	"ERR_SETTINGS_WINDOW_SIZE": "The window size is invalid.",
@@ -450,6 +460,15 @@
 			"bbcode_convert_pasted_changelogs_tooltip": "In the changelog editor, pasted Markdown in the Keep a Changelog format (headings like ## [1.2.0] or ### Added, with - list items) is converted to BBCode. Undo once to keep the original text."
 		},
 
+		"extraction": {
+			"title": "Extraction",
+			"workshop_title": "Use Workshop folder names",
+			"workshop_title_tooltip": "Name new addon folders like “Title [123456789]”.",
+			"workshop_metadata": "Save Workshop metadata",
+			"workshop_metadata_tooltip": "Save the title, link, owner and description in a text file with the addon.",
+			"metadata_filename": "Metadata filename"
+		},
+
 		"resets": {
 			"resets": "Resets",
 			"settings": "Reset Settings",
@@ -731,8 +750,33 @@
 	"locating": "Locating",
 	"decompressing": "Decompressing {progress}",
 	"reading_metadata": "Reading Metadata",
+	"fetching_workshop_info": "Getting Workshop details",
 
 	"publish_icon": "Publish New Icon (Will NOT update the addon)",
 
-	"copy_path": "Copy Path"
+	"copy_path": "Copy Path",
+
+	"workshop_export": {
+		"title": "Title: {value}",
+		"archive_title": "Archive title: {value}",
+		"id": "Workshop ID: {value}",
+		"id_inferred": "Workshop ID: {value} (inferred from the file path)",
+		"url": "URL: {value}",
+		"owner": "Owner: {value}",
+		"owner_id": "Owner Steam ID: {value}",
+		"owner_profile": "Owner profile: {value}",
+		"retrieved": "Retrieved (UTC): {value}",
+		"description": "Description:",
+		"description_unavailable": "Description: Unavailable",
+		"unavailable": "Unavailable"
+	},
+
+	"cli": {
+		"out_parent": "Create the addon folder inside PATH",
+		"workshop_title": "Name the addon folder \"Workshop Title [ID]\" (uses Steam)",
+		"workshop_metadata": "Save Workshop details to workshop.txt (uses Steam)",
+		"metadata_name": "Use NAME as the Workshop details filename (.txt)",
+		"workshop_id": "Use this Workshop ID instead of the one in the file name",
+		"metadata_saved": "Saved Workshop details to \"{path}\""
+	}
 }

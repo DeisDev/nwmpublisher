@@ -8,7 +8,7 @@
 	import ChangelogDefaults from './ChangelogDefaults.svelte';
 	import { playSound } from '../sounds';
 	import { invoke } from '@tauri-apps/api/core';
-	import { switchLanguage } from '../i18n';
+	import { switchLanguage, translateError } from '../i18n';
 	import { applyTheme } from '../theme';
 	import { saveSettings, settingsSave, settings } from '../settings.js';
 	import { settingsPresence } from '../discord.js';
@@ -27,6 +27,7 @@
 	let activeItem = 'general';
 	const sections = [
 		['general', 'settings.general.general'],
+		['extraction', 'settings.extraction.title'],
 		['editors', 'settings.editors.title'],
 		['changelog', 'changelog_defaults.nav'],
 		['paths', 'settings.paths.paths'],
@@ -102,6 +103,17 @@
 		applyTheme(AppSettings.theme);
 	}
 
+	let saveMetadata = AppSettings.extract_workshop_metadata;
+	$: if (activeItem === 'extraction') saveMetadata = AppSettings.extract_workshop_metadata;
+	function changeSaveMetadata() {
+		afterChange.call(this);
+		saveMetadata = this.checked;
+	}
+	function changeMetadataName() {
+		const name = this.value;
+		saveSettings({ extract_metadata_filename: name }).then(() => AppSettings.extract_metadata_filename = name, () => {});
+	}
+
 	const extractOverwriteModes = [
 		['Overwrite', ['settings.extract_overwrite_mode.overwrite']],
 		['Recycle', ['settings.extract_overwrite_mode.recycle']],
@@ -124,20 +136,24 @@
 	<form id="content" class="hide-scroll" on:submit={preventSubmit} bind:this={form}>
 		<h2>{$_(sections.find(([section]) => section === activeItem)[1])}</h2>
 		<p class="save-status" role="status">{$_('settings_save_' + $settingsSave.state)}</p>
-		{#if $settingsSave.error}<p role="alert">{$settingsSave.error}</p>{/if}
+		{#if $settingsSave.error}<p role="alert">{translateError($settingsSave.error)}</p>{/if}
 		{#if activeItem === 'general'}
 			<div id="open-count">
 				<div>
 					<Setting id="language" type="select" value={AppSettings.language ?? 'default'} choices={languages} afterChange={chooseLanguage}>{$_('settings.language')}</Setting>
-					<Setting {afterChange} id="extract_overwrite_mode" type="select" value={AppSettings.extract_overwrite_mode} choices={extractOverwriteModes} tooltip={$_('settings.extract_overwrite_mode.tooltip')}>{$_('settings.extract_overwrite_mode.extract_overwrite_mode')}</Setting>
 					<Setting {afterChange} id="sounds" type="bool" value={AppSettings.sounds}>{$_('settings.general.sounds')}</Setting>
 					<Setting {afterChange} id="discord_rich_presence" type="bool" value={AppSettings.discord_rich_presence}>{$_('settings.general.discord_rich_presence')}</Setting>
 					{#if discordConfigured === false}<p class="discord-unavailable">{$_('discord.not_configured')}</p>{/if}
 					<Setting {afterChange} id="open_workshop_after_publish" type="bool" value={AppSettings.open_workshop_after_publish}>{$_('settings.general.open_workshop_after_publish')}</Setting>
-					<Setting {afterChange} id="open_folder_after_extract" type="bool" value={AppSettings.open_folder_after_extract} tooltip={$_('settings.general.open_folder_after_extract_tooltip')}>{$_('settings.general.open_folder_after_extract')}</Setting>
 				</div>
 				<div>{$_('open_count', { values: { count: AppData.open_count } })}</div>
 			</div>
+		{:else if activeItem === 'extraction'}
+			<Setting {afterChange} id="extract_overwrite_mode" type="select" value={AppSettings.extract_overwrite_mode} choices={extractOverwriteModes} tooltip={$_('settings.extract_overwrite_mode.tooltip')}>{$_('settings.extract_overwrite_mode.extract_overwrite_mode')}</Setting>
+			<Setting {afterChange} id="open_folder_after_extract" type="bool" value={AppSettings.open_folder_after_extract} tooltip={$_('settings.general.open_folder_after_extract_tooltip')}>{$_('settings.general.open_folder_after_extract')}</Setting>
+			<Setting {afterChange} id="extract_workshop_title" type="bool" value={AppSettings.extract_workshop_title} tooltip={$_('settings.extraction.workshop_title_tooltip')}>{$_('settings.extraction.workshop_title')}</Setting>
+			<Setting afterChange={changeSaveMetadata} id="extract_workshop_metadata" type="bool" value={saveMetadata} tooltip={$_('settings.extraction.workshop_metadata_tooltip')}>{$_('settings.extraction.workshop_metadata')}</Setting>
+			<Setting afterChange={changeMetadataName} id="extract_metadata_filename" type="text" value={AppSettings.extract_metadata_filename} disabled={!saveMetadata}>{$_('settings.extraction.metadata_filename')}</Setting>
 		{:else if activeItem === 'editors'}
 			<section>
 				<h3>{$_('settings.editors.shared')}</h3>

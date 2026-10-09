@@ -107,7 +107,7 @@ pub struct TransactionInner {
 }
 impl TransactionInner {
 	pub fn warning(&self, message: String) {
-		if *crate::cli::CLI_MODE { eprintln!("{}", message); return; }
+		if *crate::cli::CLI_MODE { eprintln!("{}", crate::util::english::message(&message)); return; }
 		self.emit(TransactionMessage::Warning(self.id, message));
 	}
 	pub fn context(&self, context: serde_json::Value) {

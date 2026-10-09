@@ -11,7 +11,7 @@ use std::{
 use steamworks::{ItemState, PublishedFileId, QueryResults};
 
 use crate::{
-	gma::{ExtractDestination, ExtractGMAMut},
+	gma::{workshop::WorkshopItemDetails, ExtractDestination, ExtractGMAMut, ExtractOptions},
 	transactions::Transaction,
 	GMAFile, GMOD_APP_ID,
 };
@@ -28,6 +28,8 @@ pub struct DownloadInner {
 	sent_total: AtomicBool,
 	progress: Mutex<(u64, Instant)>,
 	extract_destination: ExtractDestination,
+	extract_options: ExtractOptions,
+	workshop: Option<Result<WorkshopItemDetails, String>>,
 }
 impl std::hash::Hash for DownloadInner {
 	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -67,6 +69,11 @@ impl From<Vec<PublishedFileId>> for IDList {
 	}
 }
 
+enum BatchItem {
+	Collection(Vec<PublishedFileId>),
+	Item(Option<Result<WorkshopItemDetails, String>>),
+}
+
 struct Scheduler {
 	pending: VecDeque<Download>,
 	active: HashMap<PublishedFileId, Download>,
@@ -103,7 +110,7 @@ impl Downloads {
 		transaction.error(message, detail);
 	}
 
-	fn extract(folder: PathBuf, item: PublishedFileId, extract_destination: ExtractDestination) {
+	fn extract(folder: PathBuf, item: PublishedFileId, extract_destination: ExtractDestination, mut options: ExtractOptions, workshop: Option<Result<WorkshopItemDetails, String>>) {
 		let transaction = crate::transactions::new_extraction();
 		transaction.context(serde_json::json!({ "kind": "extract", "workshopId": item, "sourcePath": folder }));
 		transaction.status("queued");
@@ -167,11 +174,12 @@ impl Downloads {
 			transaction.status("reading_metadata");
 			transaction.data((Some(gma.metadata.as_ref().map(|metadata| metadata.title().to_owned())), gma.size));
 
-			let _ = gma.extract(extract_destination, &transaction, false, true);
+			if !super::item_info::attach(&mut options, Some(item), false, workshop, &transaction) { return transaction.cancelled(); }
+			let _ = gma.extract(extract_destination, &transaction, false, true, &options);
 		});
 	}
 
-	fn push_download(item: PublishedFileId, destination: &ExtractDestination) {
+	fn push_download(item: PublishedFileId, destination: &ExtractDestination, options: &ExtractOptions, workshop: Option<Result<WorkshopItemDetails, String>>) {
 		let mut queue = downloads!().queue.lock();
 		if queue.active.contains_key(&item) || queue.pending.iter().any(|job| job.item == item) {
 			drop(queue);
@@ -184,6 +192,7 @@ impl Downloads {
 		transaction.data((0, item));
 		queue.pending.push_back(Arc::new(DownloadInner {
 			item, transaction, sent_total: AtomicBool::new(false), progress: Mutex::new((0, Instant::now())), extract_destination: destination.clone(),
+			extract_options: options.clone(), workshop,
 		}));
 		downloads!().watchdog.notify_one();
 	}
@@ -191,6 +200,7 @@ impl Downloads {
 	pub fn download<IDs: Into<IDList>>(&self, ids: IDs) {
 		let ids: Vec<PublishedFileId> = ids.into().into();
 		let destination = app_data!().settings.read().extract_destination.clone();
+		let options = ExtractOptions::from_settings();
 		std::thread::spawn(move || {
 			let mut seen = HashSet::new();
 			let mut pending: VecDeque<_> = ids.into_iter().filter(|id| seen.insert(*id)).collect();
@@ -207,14 +217,16 @@ impl Downloads {
 				let reply = Arc::new(Mutex::new(None));
 				let callback = reply.clone();
 				let expected = batch.clone();
+				let details = options.enabled();
+				let query = if details { query.include_long_desc(true).allow_cached_response(0) } else { query };
 				query.include_children(true).fetch(move |result: Result<QueryResults<'_>, steamworks::SteamError>| {
 					let result = result.map_err(|error| error.to_string()).map(|results| {
 						expected.iter().enumerate().map(|(index, id)| {
 							let item = results.get(index as u32).ok_or_else(|| "ERR_ITEM_NOT_FOUND".to_owned())?;
 							if item.file_type == steamworks::FileType::Collection {
-								Ok((*id, Some(results.get_children(index as u32).ok_or_else(|| "ERR_COLLECTION_EXPANSION".to_owned())?)))
-							} else { Ok((*id, None)) }
-						}).collect::<Vec<Result<(PublishedFileId, Option<Vec<PublishedFileId>>), String>>>()
+								Ok((*id, BatchItem::Collection(results.get_children(index as u32).ok_or_else(|| "ERR_COLLECTION_EXPANSION".to_owned())?)))
+							} else { Ok((*id, BatchItem::Item(details.then(|| super::item_info::query_details(*id, &results, index as u32))))) }
+						}).collect::<Vec<Result<(PublishedFileId, BatchItem), String>>>()
 					});
 					*callback.lock() = Some(result);
 				});
@@ -228,8 +240,8 @@ impl Downloads {
 					Err(error) => for id in batch { Self::failure(id, "ERR_COLLECTION_EXPANSION", error.clone()); },
 					Ok(items) => for (index, item) in items.into_iter().enumerate() {
 						match item {
-							Ok((_, Some(children))) => for child in children { if seen.insert(child) { pending.push_back(child); } },
-							Ok((id, None)) => Self::push_download(id, &destination),
+							Ok((_, BatchItem::Collection(children))) => for child in children { if seen.insert(child) { pending.push_back(child); } },
+							Ok((id, BatchItem::Item(workshop))) => Self::push_download(id, &destination, &options, workshop),
 							Err(error) => Self::failure(batch[index], "ERR_COLLECTION_EXPANSION", error),
 						}
 					},
@@ -243,7 +255,7 @@ impl Downloads {
 		if let Some(error) = error { download.transaction.error("ERR_STEAM_ERROR", error); }
 		else if let Some(info) = steam!().client().ugc().item_install_info(download.item) {
 			download.transaction.finished(turbonone!());
-			Self::extract(PathBuf::from(info.folder), download.item, download.extract_destination.clone());
+			Self::extract(PathBuf::from(info.folder), download.item, download.extract_destination.clone(), download.extract_options.clone(), download.workshop.clone());
 		} else { download.transaction.error("ERR_DOWNLOAD_MISSING", turbonone!()); }
 	}
 
@@ -304,6 +316,7 @@ mod tests {
 		Arc::new(DownloadInner {
 			item: PublishedFileId(id), transaction: crate::transactions::new(), sent_total: AtomicBool::new(false),
 			progress: Mutex::new((0, Instant::now())), extract_destination: ExtractDestination::Temp,
+			extract_options: ExtractOptions::default(), workshop: None,
 		})
 	}
 

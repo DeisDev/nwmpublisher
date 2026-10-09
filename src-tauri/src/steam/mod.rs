@@ -19,6 +19,7 @@ use crate::{
 
 pub mod default_icon;
 pub mod downloads;
+pub mod item_info;
 pub mod publishing;
 pub mod publish_jobs;
 pub mod subscriptions;

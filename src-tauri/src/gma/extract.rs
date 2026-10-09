@@ -6,11 +6,11 @@ use std::{
 
 use crate::transactions::Transaction;
 
-use super::{whitelist, GMAEntry, GMAError, GMAFile, GMAMetadata, GMAReader};
+use super::{whitelist, workshop::WorkshopInfo, GMAEntry, GMAError, GMAFile, GMAMetadata, GMAReader};
 
 use lazy_static::lazy_static;
 use rayon::ThreadPool;
-use super::{output::Directory, staging::ExtractionStage};
+use super::{output::Directory, staging::{ExtractionStage, StagedMetadata, METADATA_LEAF}};
 use serde::{Deserialize, Serialize};
 
 lazy_static! {
@@ -37,6 +37,34 @@ pub enum ExtractDestination {
 	NamedDirectory(PathBuf),
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct ExtractOptions {
+	pub workshop_title: bool,
+	/// The metadata filename, when metadata export is enabled.
+	pub metadata_name: Option<String>,
+	pub workshop: Option<WorkshopInfo>,
+}
+impl ExtractOptions {
+	pub fn from_settings() -> Self {
+		let settings = app_data!().settings.read();
+		Self {
+			workshop_title: settings.extract_workshop_title,
+			metadata_name: settings.extract_workshop_metadata.then(|| settings.extract_metadata_filename.clone()),
+			workshop: None,
+		}
+	}
+
+	pub fn enabled(&self) -> bool {
+		self.workshop_title || self.metadata_name.is_some()
+	}
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Extracted {
+	pub path: PathBuf,
+	pub metadata: Option<PathBuf>,
+}
+
 fn extraction_temp_dir() -> Result<PathBuf, GMAError> {
 	if let Some(path) = app_data!().settings.read().temp.clone() { return Ok(path); }
 	// Resolve the OS-provided base (notably /var on macOS), then enforce no-follow
@@ -47,6 +75,10 @@ fn extraction_temp_dir() -> Result<PathBuf, GMAError> {
 }
 
 impl ExtractDestination {
+	fn creates_folder(&self) -> bool {
+		!matches!(self, Self::Directory(_))
+	}
+
 	fn prepare(self, extracted_name: &str) -> Result<(Directory, PathBuf, ExtractionOverwriteMode), GMAError> {
 		let mode = if matches!(self, Self::Directory(_)) { ExtractionOverwriteMode::Overwrite } else { app_data!().settings.read().extract_overwrite_mode.clone() };
 		let path = match self {
@@ -146,7 +178,7 @@ impl GMAFile {
 }
 
 impl GMAFile {
-	fn extract_staged(&self, destination: ExtractDestination, transaction: &Transaction, open: bool, ignore_whitelist: bool, single: Option<String>) -> Result<PathBuf, GMAError> {
+	fn extract_staged(&self, destination: ExtractDestination, transaction: &Transaction, open: bool, ignore_whitelist: bool, single: Option<String>, options: &ExtractOptions) -> Result<Extracted, GMAError> {
 		let result = (|| {
 			if transaction.aborted() { return Err(GMAError::Cancelled); }
 			self.validate_payloads(transaction)?;
@@ -168,7 +200,18 @@ impl GMAFile {
 			if json.is_some() { files.retain(|entry| !entry.path.eq_ignore_ascii_case("addon.json")); }
 			let mut paths: Vec<String> = files.iter().map(|entry| entry.path.clone()).collect();
 			if json.is_some() { paths.push("addon.json".into()); }
-			let (parent, name, mode) = destination.prepare(&self.extracted_name)?;
+			let workshop = options.workshop.clone().unwrap_or_default();
+			let name = if single.is_none() && options.workshop_title && destination.creates_folder() {
+				workshop.folder_name().unwrap_or_else(|| {
+					transaction.warning("ERR_WORKSHOP_FOLDER_NAME".into());
+					self.extracted_name.clone()
+				})
+			} else { self.extracted_name.clone() };
+			let workshop_file = options.metadata_name.as_ref().filter(|_| single.is_none()).map(|name| {
+				let reserved = paths.iter().map(|path| path.split('/').next().unwrap().to_lowercase()).collect();
+				(StagedMetadata { name: name.clone(), reserved }, workshop.render(self.metadata.as_ref().map(GMAMetadata::title)))
+			});
+			let (parent, name, mode) = destination.prepare(&name)?;
 			let mut staging = ExtractionStage::new(parent)?;
 			let extraction = (|| {
 				let mut reader = self.read()?;
@@ -183,22 +226,31 @@ impl GMAFile {
 					let mut file = staging.directory.create_file(&leaf).map_err(|error| GMAError::io("create metadata", &staging.directory.path.join(&leaf), error))?;
 					file.write_all(&json).and_then(|_| file.sync_all()).map_err(|error| GMAError::io("write metadata", &staging.directory.path.join(&leaf), error))?;
 				}
+				if let Some((_, text)) = &workshop_file {
+					let leaf = staging.directory.path.join(METADATA_LEAF);
+					let mut file = staging.directory.create_file(Path::new(METADATA_LEAF)).map_err(|error| GMAError::io("create Workshop metadata", &leaf, error))?;
+					file.write_all(text.as_bytes()).and_then(|_| file.sync_all()).map_err(|error| GMAError::io("write Workshop metadata", &leaf, error))?;
+				}
 				if !transaction.begin_commit() { return Err(GMAError::Cancelled); }
-				staging.commit(&name, mode, &paths)
+				staging.commit(&name, mode, &paths, workshop_file.as_ref().map(|(staged, _)| staged))
 			})();
 			for warning in &staging.warnings { transaction.warning(warning.clone()); }
 			let cleanup = staging.cleanup();
-			match (extraction, cleanup) {
-				(Ok(path), Ok(())) => Ok(single.as_ref().map_or(path.clone(), |entry| path.join(entry))),
-				(Ok(path), Err(error)) => { transaction.warning(error.to_string()); Ok(single.as_ref().map_or(path.clone(), |entry| path.join(entry))) },
-				(Err(error), Ok(())) => Err(error),
-				(Err(error), Err(cleanup)) => Err(GMAError::MetadataError(format!("{}; {}", error, cleanup))),
+			let (path, metadata_path) = match (extraction, cleanup) {
+				(Ok(extracted), Ok(())) => extracted,
+				(Ok(extracted), Err(error)) => { transaction.warning(error.to_string()); extracted },
+				(Err(error), Ok(())) => return Err(error),
+				(Err(error), Err(cleanup)) => return Err(GMAError::MetadataError(format!("{}; {}", error, cleanup))),
+			};
+			if let (Some(file), Some((staged, _))) = (metadata_path.as_ref().and_then(|path| path.file_name()), &workshop_file) {
+				if file != staged.name.as_str() { transaction.warning(format!("ERR_WORKSHOP_METADATA_RENAMED:{}", file.to_string_lossy())); }
 			}
+			Ok(Extracted { path: single.as_ref().map_or(path.clone(), |entry| path.join(entry)), metadata: metadata_path })
 		})();
 		match &result {
-			Ok(path) => {
-				transaction.finished(path.clone());
-				if open && (single.is_some() || app_data!().settings.read().open_folder_after_extract) { crate::path::open(path); }
+			Ok(extracted) => {
+				transaction.finished(extracted.path.clone());
+				if open && (single.is_some() || app_data!().settings.read().open_folder_after_extract) { crate::path::open(&extracted.path); }
 			}
 			Err(GMAError::Cancelled) => transaction.cancelled(),
 			Err(error) => transaction.error(error.to_string(), turbonone!()),
@@ -214,7 +266,8 @@ pub trait ExtractGMAImmut {
 		transaction: &Transaction,
 		open_after_extract: bool,
 		ignore_whitelist: bool,
-	) -> Result<PathBuf, GMAError>;
+		options: &ExtractOptions,
+	) -> Result<Extracted, GMAError>;
 	fn extract_entry(&self, entry_path: String, transaction: &Transaction, open_after_extract: bool) -> Result<PathBuf, GMAError>;
 	fn extract_entry_with_handle(
 		&self,
@@ -231,7 +284,8 @@ pub trait ExtractGMAMut {
 		transaction: &Transaction,
 		open_after_extract: bool,
 		ignore_whitelist: bool,
-	) -> Result<PathBuf, GMAError>;
+		options: &ExtractOptions,
+	) -> Result<Extracted, GMAError>;
 	fn extract_entry(&mut self, entry_path: String, transaction: &Transaction, open_after_extract: bool) -> Result<PathBuf, GMAError>;
 }
 impl ExtractGMAImmut for GMAFile {
@@ -241,8 +295,9 @@ impl ExtractGMAImmut for GMAFile {
 		transaction: &Transaction,
 		open_after_extract: bool,
 		ignore_whitelist: bool,
-	) -> Result<PathBuf, GMAError> {
-		THREAD_POOL.install(|| self.extract_staged(dest, transaction, open_after_extract, ignore_whitelist, None))
+		options: &ExtractOptions,
+	) -> Result<Extracted, GMAError> {
+		THREAD_POOL.install(|| self.extract_staged(dest, transaction, open_after_extract, ignore_whitelist, None, options))
 	}
 
 	fn extract_entry_with_handle(
@@ -253,7 +308,8 @@ impl ExtractGMAImmut for GMAFile {
 		_handle: Option<GMAReader>,
 	) -> Result<PathBuf, GMAError> {
 		let parent = extraction_temp_dir()?.join("nwmpublisher").join(&self.extracted_name);
-		self.extract_staged(ExtractDestination::Directory(parent), transaction, open_after_extract, true, Some(entry_path))
+		self.extract_staged(ExtractDestination::Directory(parent), transaction, open_after_extract, true, Some(entry_path), &ExtractOptions::default())
+			.map(|extracted| extracted.path)
 	}
 
 	fn extract_entry(&self, entry_path: String, transaction: &Transaction, open_after_extract: bool) -> Result<PathBuf, GMAError> {
@@ -267,14 +323,15 @@ impl ExtractGMAMut for GMAFile {
 		transaction: &Transaction,
 		open_after_extract: bool,
 		ignore_whitelist: bool,
-	) -> Result<PathBuf, GMAError> {
+		options: &ExtractOptions,
+	) -> Result<Extracted, GMAError> {
 		THREAD_POOL.install(move || {
 			self.entries().inspect_err(|error| {
 				if !transaction.aborted() {
 					transaction.error(error.to_string(), turbonone!());
 				}
 			})?;
-			(*self).extract(dest, transaction, open_after_extract, ignore_whitelist)
+			(*self).extract(dest, transaction, open_after_extract, ignore_whitelist, options)
 		})
 	}
 	fn extract_entry(&mut self, entry_path: String, transaction: &Transaction, open_after_extract: bool) -> Result<PathBuf, GMAError> {
@@ -289,13 +346,22 @@ impl ExtractGMAMut for GMAFile {
 	}
 }
 
+impl GMAFile {
+	/// A Workshop ID inferred from the archive's file name or Workshop content folder.
+	pub fn inferred_ws_id(&self) -> Option<steamworks::PublishedFileId> {
+		self.id.or_else(|| crate::GameAddons::workshop_content_id(&self.path))
+	}
+}
+
 #[tauri::command]
 pub fn extract_gma(gma_path: PathBuf, dest: ExtractDestination) -> Option<u32> {
 	let transaction = crate::transactions::new_extraction();
 	let id = transaction.id;
+	let mut options = ExtractOptions::from_settings();
 	rayon::spawn(move || match GMAFile::open(gma_path) {
 		Ok(mut gma) => {
-			let _ = ExtractGMAMut::extract(&mut gma, dest, &transaction, true, true);
+			if !crate::steam::item_info::attach(&mut options, gma.inferred_ws_id(), true, None, &transaction) { return transaction.cancelled(); }
+			let _ = ExtractGMAMut::extract(&mut gma, dest, &transaction, true, true, &options);
 		}
 		Err(error) => transaction.error(error.to_string(), turbonone!()),
 	});
@@ -345,7 +411,7 @@ mod tests {
 		fs::write(destination.join("lua"), b"blocks directory creation").unwrap();
 		let transaction = transaction!();
 		let error = gma
-			.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true)
+			.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true, &ExtractOptions::default())
 			.unwrap_err();
 		assert!(error.to_string().contains("create directory"));
 		assert!(error.to_string().contains("lua"));
@@ -356,7 +422,7 @@ mod tests {
 		fs::create_dir(destination.join("addon.json")).unwrap();
 		let transaction = transaction!();
 		let error = gma
-			.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true)
+			.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true, &ExtractOptions::default())
 			.unwrap_err();
 		assert!(matches!(error, GMAError::UnsafeEntry(_)));
 		assert!(error.to_string().contains("addon.json"));
@@ -365,9 +431,9 @@ mod tests {
 		fs::remove_dir(destination.join("addon.json")).unwrap();
 		let transaction = transaction!();
 		assert_eq!(
-			gma.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true)
+			gma.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true, &ExtractOptions::default())
 				.unwrap(),
-			destination
+			Extracted { path: destination.clone(), metadata: None }
 		);
 		assert_eq!(fs::read(destination.join("lua/test.lua")).unwrap(), b"test");
 		let metadata: serde_json::Value = serde_json::from_slice(&fs::read(destination.join("addon.json")).unwrap()).unwrap();
@@ -380,7 +446,7 @@ mod tests {
 		let (gma, root) = fixture("truncated-extraction", b"x".to_vec());
 		let transaction = transaction!();
 		let error = gma
-			.extract(ExtractDestination::Directory(root.join("output")), &transaction, false, true)
+			.extract(ExtractDestination::Directory(root.join("output")), &transaction, false, true, &ExtractOptions::default())
 			.unwrap_err();
 		assert!(
 			matches!(error, GMAError::IOError(ref details) if details.operation == "read archive entry" && details.source.kind() == std::io::ErrorKind::UnexpectedEof)
@@ -419,16 +485,105 @@ mod tests {
 		let (mut gma, root) = fixture("empty-extraction", Vec::new());
 		gma.entries.as_mut().unwrap().clear();
 		let transaction = transaction!();
-		gma.extract(ExtractDestination::Directory(root.join("output")), &transaction, false, true)
+		gma.extract(ExtractDestination::Directory(root.join("output")), &transaction, false, true, &ExtractOptions::default())
 			.unwrap();
 		assert!(root.join("output/addon.json").is_file());
 		let transaction = transaction!();
 		transaction.cancel();
 		assert!(matches!(
-			gma.extract(ExtractDestination::Directory(root.join("cancelled")), &transaction, false, true),
+			gma.extract(ExtractDestination::Directory(root.join("cancelled")), &transaction, false, true, &ExtractOptions::default()),
 			Err(GMAError::Cancelled)
 		));
 		assert!(!root.join("cancelled").exists());
+		fs::remove_dir_all(root).unwrap();
+	}
+
+	fn workshop(id: u64, title: Option<&str>) -> WorkshopInfo {
+		WorkshopInfo {
+			id: Some(steamworks::PublishedFileId(id)),
+			id_inferred: false,
+			item: title.map(|title| super::super::workshop::WorkshopItemDetails {
+				title: title.into(),
+				description: "[b]Description[/b]".into(),
+				owner: steamworks::SteamId::from_raw(76561197960287930),
+				retrieved: chrono::Utc::now(),
+			}),
+			owner_name: Some("Owner".into()),
+		}
+	}
+
+	fn names(path: &Path) -> Vec<String> {
+		let mut names: Vec<_> = fs::read_dir(path).unwrap().map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned()).collect();
+		names.sort();
+		names
+	}
+
+	#[test]
+	fn workshop_folder_names_apply_only_to_generated_folders() {
+		let (gma, root) = fixture("workshop-folder-names", b"test".to_vec());
+		let parent = root.join("parent");
+		let extract = |destination, options: &ExtractOptions| gma.extract(destination, &transaction!(), false, true, options).unwrap();
+		assert_eq!(extract(ExtractDestination::NamedDirectory(parent.clone()), &ExtractOptions::default()), Extracted { path: parent.join("test"), metadata: None });
+		assert_eq!(names(&parent.join("test")), ["addon.json", "lua"]);
+
+		let named = |id, title| ExtractOptions { workshop_title: true, workshop: Some(workshop(id, title)), ..Default::default() };
+		assert_eq!(extract(ExtractDestination::NamedDirectory(parent.clone()), &named(1, Some("Café: Addon"))).path, parent.join("Café Addon [1]"));
+		assert_eq!(extract(ExtractDestination::NamedDirectory(parent.clone()), &named(2, Some("Café: Addon"))).path, parent.join("Café Addon [2]"));
+		assert_eq!(extract(ExtractDestination::NamedDirectory(parent.clone()), &named(3, None)).path, parent.join("test"));
+		let exact = root.join("exact");
+		assert_eq!(extract(ExtractDestination::Directory(exact.clone()), &named(1, Some("Café: Addon"))).path, exact);
+		assert_eq!(names(&parent), ["Café Addon [1]", "Café Addon [2]", "test"]);
+		assert_eq!(fs::read(parent.join("Café Addon [2]/lua/test.lua")).unwrap(), b"test");
+		fs::remove_dir_all(root).unwrap();
+	}
+
+	#[test]
+	fn metadata_is_numbered_around_archive_content_and_existing_entries() {
+		let (mut gma, root) = fixture("workshop-metadata", b"testarchive".to_vec());
+		gma.entries.as_mut().unwrap().insert("workshop.txt".into(), GMAEntry { path: "workshop.txt".into(), size: 7, crc: 0, index: 4 });
+		let destination = root.join("output");
+		let options = ExtractOptions { metadata_name: Some("workshop.txt".into()), workshop: Some(workshop(42, Some("Addon"))), ..Default::default() };
+		let extracted = gma.extract(ExtractDestination::Directory(destination.clone()), &transaction!(), false, true, &options).unwrap();
+		assert_eq!(extracted.metadata, Some(destination.join("workshop (2).txt")));
+		assert_eq!(fs::read(destination.join("workshop.txt")).unwrap(), b"archive");
+		let text = fs::read_to_string(destination.join("workshop (2).txt")).unwrap();
+		assert!(text.starts_with("Title: Addon\nWorkshop ID: 42\n"));
+		assert!(text.ends_with("Description:\n[b]Description[/b]\n"));
+
+		fs::create_dir(destination.join("workshop (3).txt")).unwrap();
+		let extracted = gma.extract(ExtractDestination::Directory(destination.clone()), &transaction!(), false, true, &options).unwrap();
+		assert_eq!(extracted.metadata, Some(destination.join("workshop (4).txt")));
+		assert_eq!(fs::read_to_string(destination.join("workshop (2).txt")).unwrap(), text);
+		assert!(destination.join("workshop (3).txt").is_dir());
+
+		let disabled = gma.extract(ExtractDestination::Directory(root.join("disabled")), &transaction!(), false, true, &ExtractOptions::default()).unwrap();
+		assert_eq!(disabled.metadata, None);
+		assert_eq!(names(&root.join("disabled")), ["addon.json", "lua", "workshop.txt"]);
+		fs::remove_dir_all(root).unwrap();
+	}
+
+	#[test]
+	fn metadata_failure_rolls_back_extracted_files() {
+		let (gma, root) = fixture("workshop-metadata-rollback", b"test".to_vec());
+		let destination = root.join("output");
+		fs::create_dir_all(destination.join("lua")).unwrap();
+		fs::write(destination.join("lua/test.lua"), b"original").unwrap();
+		for number in 1..=255 { fs::write(destination.join(super::super::filename::numbered_metadata_file_name("info.txt", number)), b"keep").unwrap(); }
+		let options = ExtractOptions { metadata_name: Some("info.txt".into()), ..Default::default() };
+		let transaction = transaction!();
+		let error = gma.extract(ExtractDestination::Directory(destination.clone()), &transaction, false, true, &options).unwrap_err();
+		assert!(matches!(error, GMAError::NoSafeDestination(_)));
+		assert!(transaction.aborted());
+		assert_eq!(fs::read(destination.join("lua/test.lua")).unwrap(), b"original");
+		assert!(!destination.join("addon.json").exists());
+		assert_eq!(fs::read(destination.join("info.txt")).unwrap(), b"keep");
+		assert_eq!(names(&destination).len(), 256);
+
+		let fresh = root.join("fresh");
+		let options = ExtractOptions { metadata_name: Some("info.txt".into()), workshop_title: true, ..Default::default() };
+		let extracted = gma.extract(ExtractDestination::NamedDirectory(fresh.clone()), &transaction!(), false, true, &options).unwrap();
+		assert_eq!(extracted, Extracted { path: fresh.join("test"), metadata: Some(fresh.join("test/info.txt")) });
+		assert!(fs::read_to_string(fresh.join("test/info.txt")).unwrap().starts_with("Title: Unavailable\nArchive title: Test\nWorkshop ID: Unavailable\n"));
 		fs::remove_dir_all(root).unwrap();
 	}
 }

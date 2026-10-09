@@ -1,6 +1,7 @@
 <script>
 	import Cross from '@lucide/svelte/icons/x';
 	import LinkChain from '@lucide/svelte/icons/link';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import Dead from "./Dead.svelte";
 	import { _, locale } from 'svelte-i18n';
 	import { translateError } from '../i18n';
@@ -31,6 +32,8 @@
 		}
 	}
 
+	$: warnings = job.transaction.warnings?.map(warning => translateError(warning)).join(' ');
+
 	function deadCallback() {
 		if (!job.transaction.error && !job.transaction.finished) {
 			job.transaction.setError("ERR_ITEM_NOT_FOUND");
@@ -42,8 +45,11 @@
 	<td class="controls">
 		<span on:click={cancelJob}><Cross class="icon" size="1rem"/></span>
 		<a target="_blank" href="https://steamcommunity.com/sharedfiles/filedetails/?id={job.ws_id}"><LinkChain class="icon" size="1rem"/></a>
-		{#if job.transaction.error}
+		{#if job.transaction.error || warnings}
 			<JobDiagnostics transaction={job.transaction} context={{ workshopId: job.ws_id, fileName: job.fileName, sourcePath: job.srcPath, path: job.path, type: job.type }}/>
+		{/if}
+		{#if warnings}
+			<span class="warning" role="img" aria-label={warnings} use:tippyFollow={warnings}><CircleAlert class="icon" size="1rem"/></span>
 		{/if}
 	</td>
 	<td class="details">
@@ -182,6 +188,9 @@
 	}
 	.controls :global(.icon) {
 		cursor: pointer;
+	}
+	.controls .warning :global(.icon) {
+		cursor: default;
 	}
 	.controls > :global(*:not(:last-child)) {
 		margin-right: .2rem;

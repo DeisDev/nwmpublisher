@@ -15,6 +15,7 @@
 	export let beforeChange = null;
 	export let afterChange = null;
 	export let tooltip = null;
+	export let disabled = false;
 
 	if (!beforeChange && type === 'directory') {
 		beforeChange = async (before, after) => {
@@ -97,6 +98,8 @@
 				<input type="text" {id} name={id} placeholder={initial} {value} on:change={beforeChange || afterChange ? change : null} required={initial == null ? true : null}/>
 				<div class="browse icon-button" on:click={browse}><Folder class="icon" size="1rem"/></div>
 			</div>
+		{:else if type === 'text'}
+			<input type="text" {id} name={id} {value} {disabled} spellcheck="false" on:change={beforeChange || afterChange ? change : null}/>
 		{/if}
 	{/if}
 </setting>
@@ -143,6 +146,10 @@
 	input[type='text']:focus {
 		outline: none;
 		box-shadow: inset 0 0 0px 1.5px #127cff;
+	}
+	input[type='text']:disabled {
+		opacity: .5;
+		cursor: not-allowed;
 	}
 	.path-container {
 		display: flex;

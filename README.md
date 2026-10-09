@@ -89,6 +89,7 @@ nwmpublisher --help
 nwmpublisher --version
 nwmpublisher --extract "addon.gma"
 nwmpublisher --extract "addon.gma" --out "extracted-addon" --no-open
+nwmpublisher --extract "addon.gma" --out-parent "addons" --workshop-title --workshop-metadata
 ```
 
 `-e` and `-o` are aliases for `--extract` and `--out`. Output goes directly into
@@ -96,6 +97,18 @@ nwmpublisher --extract "addon.gma" --out "extracted-addon" --no-open
 `--out`, extraction uses an addon-named folder in the application's configured
 temporary directory (by default, `nwmpublisher` inside the system temporary directory).
 This default destination follows the application's overwrite/recycle setting.
+`--out-parent PATH` creates the addon folder inside `PATH` instead. `--out` can't be
+combined with `--out-parent` or `--workshop-title`.
+
+Workshop options use Steam and are off unless you pass them:
+
+* `--workshop-title` names the addon folder `Workshop Title [123456789]`.
+* `--workshop-metadata` saves the title, link, owner, and BBCode description to `workshop.txt`.
+  If that name is taken, it uses `workshop (2).txt` and so on. `--metadata-name NAME` picks
+  another `.txt` name.
+* `--workshop-id ID` sets the Workshop item instead of reading the ID from the file name.
+
+If Workshop details are unavailable, extraction still succeeds and warnings go to standard error.
 
 Successful extraction prints the output path. The folder opens according to the
 application's **Open folder after extraction** preference; `--no-open` always suppresses

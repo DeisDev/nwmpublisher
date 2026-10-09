@@ -351,6 +351,7 @@ pub use read::*;
 
 pub mod write;
 pub mod filename;
+pub mod workshop;
 
 pub mod manifest;
 

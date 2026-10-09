@@ -261,7 +261,7 @@ mod tests {
 		transaction.finished(());
 		let mut archive = GMAFile::open(&path).unwrap();
 		let extraction = transaction!();
-		archive.extract(crate::gma::ExtractDestination::Directory(root.join("extracted")), &extraction, false, true).unwrap();
+		archive.extract(crate::gma::ExtractDestination::Directory(root.join("extracted")), &extraction, false, true, &Default::default()).unwrap();
 		extraction.cancel();
 		assert_eq!(fs::read(root.join("extracted/lua/main.lua")).unwrap(), b"print('local')");
 		assert!(!root.join("extracted/lua/skip.lua").exists());
@@ -463,7 +463,7 @@ mod tests {
 		let transaction = transaction!();
 		let destination = root.join("extracted");
 		packed
-			.extract(crate::gma::ExtractDestination::Directory(destination.clone()), &transaction, false, true)
+			.extract(crate::gma::ExtractDestination::Directory(destination.clone()), &transaction, false, true, &Default::default())
 			.unwrap();
 		let entries = packed.entries.as_ref().unwrap();
 		assert_eq!(entries.len(), preview.len());

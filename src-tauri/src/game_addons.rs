@@ -15,7 +15,7 @@ use rayon::ThreadPool;
 use serde::ser::SerializeTuple;
 use steamworks::PublishedFileId;
 
-use crate::{gma::extract::ExtractGMAMut, webview::Addon, GMAFile};
+use crate::{gma::extract::{ExtractGMAMut, ExtractOptions}, webview::Addon, GMAFile};
 
 lazy_static! {
 	static ref DISCOVERY_POOL: ThreadPool = thread_pool!(4);
@@ -91,24 +91,17 @@ impl GameAddons {
 	}
 
 	fn extract_suffix_ws_id<S: AsRef<str>>(file_name: S) -> u64 {
-		let mut id = 0u64;
-		for char in file_name.as_ref()
-			.chars()
-			.rev() // Reverse iterator so we're looking at the suffix (the PublishedFileId)
-			.take_while(|c| c.is_ascii_digit())
-			.collect::<Vec<char>>()
-			.into_iter()
-			.rev()
-		{
-			match id.checked_add(char::to_digit(char, 10).unwrap() as u64) {
-				None => return 0,
-				Some(id_op) => match 10_u64.checked_mul(id_op) {
-					None => return 0,
-					Some(id_op) => id = id_op,
-				},
-			}
-		}
-		id
+		let file_name = file_name.as_ref();
+		let digits = file_name.trim_end_matches(|c: char| c.is_ascii_digit()).len();
+		file_name[digits..].parse().unwrap_or(0)
+	}
+
+	/// Workshop content is stored in `workshop/content/4000/<id>/`.
+	pub fn workshop_content_id(path: &Path) -> Option<PublishedFileId> {
+		let folder = path.parent()?;
+		let app = folder.parent()?;
+		if app.file_name()? != "4000" || app.parent()?.file_name()? != "content" { return None; }
+		folder.file_name()?.to_str()?.parse().ok().filter(|id| *id != 0).map(PublishedFileId)
 	}
 
 	fn get_workshop_content_dir<P: AsRef<Path>>(gmod: P) -> Option<PathBuf> {
@@ -188,7 +181,7 @@ impl GameAddons {
 				let id = GameAddons::extract_suffix_ws_id(file_name);
 
 				tx_addons_metadata
-					.send((path, if id == 0 { None } else { Some(PublishedFileId(id / 10)) }))
+					.send((path, if id == 0 { None } else { Some(PublishedFileId(id)) }))
 					.unwrap();
 			}
 		});
@@ -368,6 +361,7 @@ pub fn get_installed_addon(path: PathBuf) -> Option<Arc<Addon>> {
 #[tauri::command]
 pub fn downloader_extract_gmas(paths: Vec<PathBuf>) {
 	let destination = app_data!().settings.read().extract_destination.clone();
+	let options = ExtractOptions::from_settings();
 	for path in paths.into_iter() {
 		if match path.extension() {
 			Some(extension) => extension.to_string_lossy().eq_ignore_ascii_case("gma"),
@@ -386,10 +380,12 @@ pub fn downloader_extract_gmas(paths: Vec<PathBuf>) {
 				)
 			);
 			let destination = destination.clone();
+			let mut options = options.clone();
 			crate::gma::extract::THREAD_POOL.spawn(move || match gma {
 				Ok(mut gma) => {
 					transaction.data((turbonone!(), gma.size));
-					let _ = gma.extract(destination.clone(), &transaction, false, true);
+					if !crate::steam::item_info::attach(&mut options, gma.inferred_ws_id(), true, None, &transaction) { return transaction.cancelled(); }
+					let _ = gma.extract(destination.clone(), &transaction, false, true, &options);
 				}
 				Err(error) => transaction.error(error.to_string(), turbonone!()),
 			});
@@ -404,4 +400,21 @@ pub fn free_caches() {
 	*paths = HashMap::new();
 	*pages = Vec::new();
 	crate::game_addons!().discovered.store(Discovered::No.into(), Ordering::Release);
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn workshop_ids_are_read_from_file_names_and_content_folders() {
+		for (name, id) in [("123456", Some(123456)), ("ds_789", Some(789)), ("my_addon_123456", Some(123456)), ("addon2_0042", Some(42)), ("addon", None), ("addon_99999999999999999999", None)] {
+			assert_eq!(GameAddons::get_ws_id(name), id.map(PublishedFileId), "{name}");
+		}
+		let content = Path::new("steamapps/workshop/content/4000");
+		assert_eq!(GameAddons::workshop_content_id(&content.join("123/addon.gma")), Some(PublishedFileId(123)));
+		for path in [content.join("abc/addon.gma"), content.join("0/addon.gma"), Path::new("content/4001/123/addon.gma").to_owned(), Path::new("downloads/123/addon.gma").to_owned()] {
+			assert_eq!(GameAddons::workshop_content_id(&path), None, "{}", path.display());
+		}
+	}
 }
