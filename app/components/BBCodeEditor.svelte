@@ -11,7 +11,7 @@
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import FileInput from '@lucide/svelte/icons/file-input';
 	import { createEventDispatcher, onDestroy, tick, afterUpdate } from 'svelte';
-	import { closingTag, linkText, listBreak, unwrapTag, highlightBBCode, tagCompletions, completeTag, indentLines } from '../bbcode';
+	import { canLinkSelection, closingTag, linkText, listBreak, unwrapTag, highlightBBCode, tagCompletions, completeTag, indentLines } from '../bbcode';
 	import { syncBBCodeScroll } from '../bbcodeScroll';
 	import SyntaxText from './SyntaxText.svelte';
 	import BBCode from './BBCode.svelte';
@@ -29,6 +29,7 @@
 	export let convertPaste = null;
 	export let importLabel = '';
 	export let importDisabled = false;
+	export let changelog = false;
 
 	async function changeLayout(event) {
 		const layout = event.currentTarget.value;
@@ -333,7 +334,7 @@
 		}
 		const selected = input.value.slice(start, end);
 		const link = linkText(text);
-		if (!selected.trim() || !link || linkText(selected)) return;
+		if (!selected.trim() || !link || linkText(selected) || !canLinkSelection(input.value, start)) return;
 		event.preventDefault();
 		const before = snapshot();
 		input.setRangeText(`[url=${link}]${selected}[/url]`, start, end, 'end');
@@ -550,8 +551,8 @@
 			</div>
 			<div class="preview-pane">
 				<div class="preview-heading"><span id={`${id}-preview-label`}>{$_('bbcode.preview')}</span><span class="live">{$_('bbcode.live')}</span></div>
-				<div class="preview select" role="region" aria-labelledby={`${id}-preview-label`} tabindex="0">
-					<div class="preview-content">{#if value}<BBCode {value} widgets={active} sourceMap={true}/>{:else}<span class="empty">{$_('bbcode.preview_empty')}</span>{/if}</div>
+				<div class="preview select" class:steam-colors={$settings.bbcode_steam_colors} role="region" aria-labelledby={`${id}-preview-label`} tabindex="0">
+					<div class="preview-content" class:changelog={changelog && value}>{#if value}<BBCode {value} widgets={active} sourceMap={true} steam={true}/>{:else}<span class="empty">{$_('bbcode.preview_empty')}</span>{/if}</div>
 				</div>
 			</div>
 		</div>
@@ -813,6 +814,29 @@
 		line-height: 1.5;
 		white-space: pre-wrap;
 		overflow-wrap: anywhere;
+	}
+	.preview.steam-colors {
+		--text: #acb2b8;
+		--text-muted: #7e8391;
+		--link: #ebebeb;
+		--border: #4d4d4d;
+		--border-muted: #4d4d4d;
+		--bg-subtle: rgb(0 0 0 / 20%);
+		--bbcode-heading: #5aa9d6;
+		--bbcode-link-hover: #66c0f4;
+		--bbcode-quote-border: #56707f;
+		--bbcode-code-border: #535354;
+		color-scheme: dark;
+		background: #1b2838;
+		color: var(--text);
+	}
+	.changelog {
+		padding: 16px;
+		background: var(--fill);
+	}
+	.steam-colors .changelog {
+		background: rgb(0 0 0 / 20%);
+		color: #cfd8e1;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.chevron {

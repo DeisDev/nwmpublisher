@@ -165,6 +165,7 @@
 				<Setting {afterChange} id="bbcode_wrap_selection" type="bool" value={$settings.bbcode_wrap_selection} tooltip={$_('settings.general.bbcode_wrap_selection_tooltip')}>{$_('settings.general.bbcode_wrap_selection')}</Setting>
 				<Setting {afterChange} id="bbcode_sync_scroll" type="bool" value={$settings.bbcode_sync_scroll}>{$_('bbcode.sync_scroll')}</Setting>
 				<Setting {afterChange} id="bbcode_preview_layout" type="select" value={$settings.bbcode_preview_layout} choices={layouts}>{$_('bbcode.layout')}</Setting>
+				<Setting {afterChange} id="bbcode_steam_colors" type="bool" value={$settings.bbcode_steam_colors} tooltip={$_('settings.editors.steam_colors_help')}>{$_('settings.editors.steam_colors')}</Setting>
 			</section>
 			<section>
 				<h3>{$_('settings.editors.description')}</h3>

@@ -140,7 +140,7 @@
 	{#if draftError}
 		<div class="error" role="alert">{$_('changelog_defaults.draft_error', { values: { error: draftError } })}<button type="button" disabled={pendingDrafts > 0} on:click={remember}>{$_('changelog_defaults.retry')}</button></div>
 	{/if}
-	<BBCodeEditor bind:this={editor} id="changes" label={$_('changelog_optional')} {value} on:input={onInput} disabled={disabled || loading || !!error || !state} error={invalid} size={$_('workshop_description_size', { values: { bytes, max: changelogMaxBytes } })} bind:formattingOpen active={active && editorActive} {historyKey} {convertPaste} importLabel={$_('addon_document.import', { values: { file: 'CHANGELOG.md' } })} importDisabled={!contentPath || importing} on:import={importChangelog}/>
+	<BBCodeEditor bind:this={editor} id="changes" changelog label={$_('changelog_optional')} {value} on:input={onInput} disabled={disabled || loading || !!error || !state} error={invalid} size={$_('workshop_description_size', { values: { bytes, max: changelogMaxBytes } })} bind:formattingOpen active={active && editorActive} {historyKey} {convertPaste} importLabel={$_('addon_document.import', { values: { file: 'CHANGELOG.md' } })} importDisabled={!contentPath || importing} on:import={importChangelog}/>
 	{#if state?.mode === 'last_entered'}<p class="draft-status" role="status">{$_(draftError ? 'changelog_defaults.unsaved_draft' : 'changelog_defaults.remember_help')}</p>{/if}
 </div>
 

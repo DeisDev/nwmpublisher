@@ -274,6 +274,7 @@ pub struct Settings {
 	pub addon_cleaner_permanent_delete: bool,
 	pub bbcode_preview_layout: PreviewLayout,
 	pub bbcode_sync_scroll: bool,
+	pub bbcode_steam_colors: bool,
 	pub bbcode_syntax_highlighting: bool,
 	pub bbcode_autocomplete: bool,
 	pub bbcode_indent: bool,
@@ -332,6 +333,7 @@ impl Default for Settings {
 			addon_cleaner_permanent_delete: false,
 			bbcode_preview_layout: PreviewLayout::Horizontal,
 			bbcode_sync_scroll: true,
+			bbcode_steam_colors: true,
 			bbcode_syntax_highlighting: true,
 			bbcode_autocomplete: true,
 			bbcode_indent: false,
@@ -982,6 +984,19 @@ mod tests {
 			assert!(!loaded.sounds);
 		}
 		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"bbcode_sync_scroll": "yes"})).unwrap()).is_err());
+	}
+
+	#[test]
+	fn preview_steam_colors_default_on_and_round_trip() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
+		assert!(defaults.bbcode_steam_colors);
+		for enabled in [false, true] {
+			let patch = serde_json::json!({"bbcode_steam_colors": enabled});
+			let settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+			let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+			assert_eq!(loaded.bbcode_steam_colors, enabled);
+			assert!(!loaded.sounds);
+		}
 	}
 
 	#[test]

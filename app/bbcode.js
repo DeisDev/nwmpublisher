@@ -48,6 +48,21 @@ export function unwrapTag(value, start, end, tag) {
 	const before = new RegExp(`${opening}$`, 'i').exec(value.slice(0, start));
 	const after = new RegExp(`^${closing}`, 'i').exec(value.slice(end));
 	if (before && after && balanced(selected, opening, closing)) return { start: before.index, end: end + after[0].length, text: selected };
+	return argumentTags.has(tag) ? unwrapArgument(value, start, end, tag, opening, closing) : null;
+}
+
+function unwrapArgument(value, start, end, tag, opening, closing) {
+	const head = new RegExp(`\\[${tag}=[^\\]\\r\\n]*$`, 'i').exec(value.slice(0, start));
+	const tail = /^[^\]\r\n]*\]/.exec(value.slice(start));
+	if (!head || !tail || end >= start + tail[0].length) return null;
+	const contentStart = start + tail[0].length;
+	let depth = 1;
+	for (const match of value.slice(contentStart).matchAll(new RegExp(`${opening}|(${closing})`, 'gi'))) {
+		depth += match[1] ? -1 : 1;
+		if (depth) continue;
+		const contentEnd = contentStart + match.index;
+		return { start: head.index, end: contentEnd + match[0].length, text: value.slice(contentStart, contentEnd) };
+	}
 	return null;
 }
 
@@ -107,6 +122,11 @@ export function bbcodeWidget(href) {
 		if (id && /^[1-9]\d{0,19}$/.test(id) && BigInt(id) <= 18446744073709551615n) return { type: 'workshop', id };
 	}
 	return null;
+}
+
+export function externalHost(href) {
+	const { hostname } = new URL(href);
+	return /(?:^|\.)(?:steamcommunity|steampowered)\.com$/.test(hostname) ? null : hostname;
 }
 
 function nodeText(nodes) {
@@ -439,16 +459,26 @@ export function highlightBBCode(value) {
 	return parts;
 }
 
-export function tagCompletions(value, caret) {
-	const prefix = /\[(\/?)([a-z0-9*]*)$/i.exec(value.slice(0, caret));
-	if (!prefix) return null;
+function openTags(value) {
 	const open = [];
-	for (const token of sourceTags(value.slice(0, prefix.index))) {
+	for (const token of sourceTags(value)) {
 		if (token.closing) {
 			const index = open.lastIndexOf(token.tag);
 			if (index !== -1) open.length = index;
 		} else if (!['*', 'hr'].includes(token.tag)) open.push(token.tag);
 	}
+	return open;
+}
+
+export function canLinkSelection(value, start) {
+	const before = value.slice(0, start);
+	return !/\[\/?[a-z*][^[\]\r\n]*$/i.test(before) && !openTags(before).some(tag => tag === 'url' || literalTags.has(tag));
+}
+
+export function tagCompletions(value, caret) {
+	const prefix = /\[(\/?)([a-z0-9*]*)$/i.exec(value.slice(0, caret));
+	if (!prefix) return null;
+	const open = openTags(value.slice(0, prefix.index));
 	const literal = literalTags.has(open[open.length - 1]);
 	if (literal && !prefix[1]) return null;
 	const names = prefix[1] ? [...new Set(open.reverse())] : [...supportedTags, '*'];

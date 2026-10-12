@@ -433,7 +433,9 @@
 			"autocomplete": "BBCode suggestions",
 			"autocomplete_help": "Suggest Steam tags as you type [. Use arrow keys to choose, Enter or Tab to insert, and Escape to dismiss.",
 			"indent": "Indent with Tab",
-			"indent_help": "Use Tab and Shift+Tab to indent lines, and keep indentation on Enter. Press Escape then Tab to leave the editor."
+			"indent_help": "Use Tab and Shift+Tab to indent lines, and keep indentation on Enter. Press Escape then Tab to leave the editor.",
+			"steam_colors": "Steam colors in previews",
+			"steam_colors_help": "Turn off to use the app theme in description and changelog previews."
 		},
 		"saved": "Saved!",
 		"settings": "Settings",
@@ -626,6 +628,8 @@
 		"text": "Text",
 		"link_text": "Link text",
 		"link_failed": "Could not open the link: {error}",
+		"link_host": "[{host}]",
+		"quote_author": "Originally posted by {author}:",
 		"widget_failed": "Could not load the preview: {error}",
 		"widget_youtube": "YouTube video",
 		"widget_store": "Steam store preview"

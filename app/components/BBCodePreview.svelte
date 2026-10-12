@@ -4,13 +4,14 @@
 
 <script>
 	import { _ } from 'svelte-i18n';
-	import { bbcodeWidget } from '../bbcode';
+	import { bbcodeWidget, externalHost } from '../bbcode';
 	import BBCodeImage from './BBCodeImage.svelte';
 	import BBCodeLink from './BBCodeLink.svelte';
 	import BBCodeWidget from './BBCodeWidget.svelte';
 	export let nodes;
 	export let widgets = false;
 	export let sourceMap = false;
+	export let steam = false;
 </script>
 
 {#each nodes as node}
@@ -29,28 +30,32 @@
 		{#if widget}
 			<BBCodeWidget {widget} href={node.href} sourceStart={sourceMap ? node.start : undefined}/>
 		{:else if node.href}
-			<BBCodeLink href={node.href}><svelte:self nodes={node.children} {sourceMap}/></BBCodeLink>
+			{@const host = steam ? externalHost(node.href) : null}
+			<BBCodeLink href={node.href}><svelte:self nodes={node.children} {sourceMap} {steam}/></BBCodeLink>{#if host}<span class="link-host">{$_('bbcode.link_host', { values: { host } })}</span>{/if}
 		{:else}
-			<svelte:self nodes={node.children} {sourceMap}/>
+			<svelte:self nodes={node.children} {sourceMap} {steam}/>
 		{/if}
+	{:else if node.tag === 'spoiler' && steam}
+		<span class="spoiler-bar" title={$_('bbcode.spoiler')} data-source-start={sourceMap ? node.start : undefined}><span><svelte:self nodes={node.children} {widgets} {sourceMap} {steam}/></span></span>
 	{:else if node.tag === 'spoiler'}
-		<details class="spoiler" data-source-start={sourceMap ? node.start : undefined}><summary>{$_('bbcode.spoiler')}</summary><svelte:self nodes={node.children} {widgets} {sourceMap}/></details>
+		<details class="spoiler" data-source-start={sourceMap ? node.start : undefined}><summary>{$_('bbcode.spoiler')}</summary><svelte:self nodes={node.children} {widgets} {sourceMap} {steam}/></details>
 	{:else if node.tag === 'quote'}
-		<blockquote data-source-start={sourceMap ? node.start : undefined}>{#if node.argument}<cite>{node.argument}</cite>{/if}<svelte:self nodes={node.children} {widgets} {sourceMap}/></blockquote>
+		{@const [authorBefore, authorAfter] = steam ? $_('bbcode.quote_author', { values: { author: '\u0000' } }).split('\u0000') : []}
+		<blockquote data-source-start={sourceMap ? node.start : undefined}>{#if node.argument && steam}<div class="quote-author">{authorBefore}<b>{node.argument}</b>{authorAfter}</div>{:else if node.argument}<cite>{node.argument}</cite>{/if}<svelte:self nodes={node.children} {widgets} {sourceMap} {steam}/></blockquote>
 	{:else if node.tag === 'list' || node.tag === 'olist'}
 		<svelte:element this={node.tag === 'list' ? 'ul' : 'ol'} class="list" data-source-start={sourceMap ? node.start : undefined}>
 			{#each node.children as child}
 				{#if child.tag !== 'text' || child.text.trim()}
-					<li data-source-start={sourceMap ? child.start : undefined}><svelte:self nodes={child.tag === 'item' ? child.children : [child]} {widgets} {sourceMap}/></li>
+					<li data-source-start={sourceMap ? child.start : undefined}><svelte:self nodes={child.tag === 'item' ? child.children : [child]} {widgets} {sourceMap} {steam}/></li>
 				{/if}
 			{/each}
 		</svelte:element>
 	{:else if node.tag === 'table'}
-		<div class="table-scroll" data-source-start={sourceMap ? node.start : undefined}><table class="formatted" class:noborder={node.noborder} class:equalcells={node.equalcells}><tbody><svelte:self nodes={node.children} {widgets} {sourceMap}/></tbody></table></div>
+		<div class="table-scroll" data-source-start={sourceMap ? node.start : undefined}><table class="formatted" class:noborder={node.noborder} class:equalcells={node.equalcells}><tbody><svelte:self nodes={node.children} {widgets} {sourceMap} {steam}/></tbody></table></div>
 	{:else if elements[node.tag]}
-		<svelte:element this={elements[node.tag]} data-source-start={sourceMap ? node.start : undefined} class="formatted" class:noborder={node.noborder} class:equalcells={node.equalcells}><svelte:self nodes={node.children} {widgets} {sourceMap}/></svelte:element>
+		<svelte:element this={elements[node.tag]} data-source-start={sourceMap ? node.start : undefined} class="formatted" class:noborder={node.noborder} class:equalcells={node.equalcells}><svelte:self nodes={node.children} {widgets} {sourceMap} {steam}/></svelte:element>
 	{:else}
-		<svelte:self nodes={node.children} {widgets} {sourceMap}/>
+		<svelte:self nodes={node.children} {widgets} {sourceMap} {steam}/>
 	{/if}
 {/each}
 
@@ -140,5 +145,83 @@
 	summary:focus-visible {
 		outline: 2px solid #127cff;
 		outline-offset: 2px;
+	}
+	:global(.bbcode.steam) h1.formatted, :global(.bbcode.steam) h2.formatted, :global(.bbcode.steam) h3.formatted {
+		margin: 8px 0 6px;
+		color: var(--bbcode-heading, var(--link));
+		font-weight: 400;
+	}
+	:global(.bbcode.steam) h1.formatted {
+		margin: 0 0 10px;
+		font-size: 20px;
+		line-height: 23px;
+	}
+	:global(.bbcode.steam) h2.formatted {
+		font-size: 18px;
+		line-height: 21px;
+	}
+	:global(.bbcode.steam) h3.formatted {
+		font-size: 16px;
+		line-height: 19px;
+		font-weight: 300;
+	}
+	:global(.bbcode.steam a) {
+		color: var(--link);
+		text-decoration: none;
+	}
+	:global(.bbcode.steam a:hover) {
+		color: var(--bbcode-link-hover, var(--link));
+	}
+	.link-host {
+		padding: 4px;
+		color: var(--text-muted);
+		font-size: 10px;
+	}
+	:global(.bbcode.steam) blockquote {
+		display: table;
+		margin: 8px;
+		padding: 12px;
+		border: 1px solid var(--bbcode-quote-border, var(--border-muted));
+		border-radius: 3px;
+		font-size: 92%;
+	}
+	.quote-author {
+		font-size: 92%;
+		font-style: italic;
+	}
+	:global(.bbcode.steam) pre {
+		margin: 8px;
+		padding: 12px;
+		border: 1px solid var(--bbcode-code-border, var(--border-muted));
+		border-radius: 3px;
+		background: none;
+		font: 11px Consolas, monospace;
+	}
+	:global(.bbcode.steam) pre code {
+		font-family: inherit;
+	}
+	:global(.bbcode.steam) table.formatted {
+		font-size: 12px;
+	}
+	:global(.bbcode.steam) th.formatted, :global(.bbcode.steam) td.formatted {
+		padding: 4px;
+		background: none;
+	}
+	:global(.bbcode.steam) td.formatted {
+		vertical-align: middle;
+	}
+	.spoiler-bar {
+		padding: 0 8px;
+		background: #000;
+		color: #000;
+	}
+	.spoiler-bar > span {
+		visibility: hidden;
+	}
+	.spoiler-bar:hover, .spoiler-bar:focus-within, :global(:focus-visible) .spoiler-bar {
+		color: #fff;
+	}
+	.spoiler-bar:hover > span, .spoiler-bar:focus-within > span, :global(:focus-visible) .spoiler-bar > span {
+		visibility: visible;
 	}
 </style>

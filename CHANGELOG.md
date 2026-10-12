@@ -12,8 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sort installed addons by type and filter them by type, such as maps or weapons.
 - Optionally save an addon's Workshop icon when extracting it.
 
+### Changed
+
+- Description and changelog previews now look like Steam, with an option to use the app theme instead.
+
 ### Fixed
 
+- Fix pasting a link after using the Link button adding a second link tag.
 - Fix the Linux AppImage opening a blank window on Arch, Fedora and other newer distributions.
 
 ## [3.4.0] - 2026-10-09
