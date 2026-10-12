@@ -27,12 +27,18 @@ Download the latest release from the [releases page](https://github.com/DeisDev/
 | macOS 13.3+, Intel or Apple Silicon | Universal `.dmg` | Open the disk image, drag nwmpublisher into Applications, then launch it from Applications. |
 | Ubuntu / Debian | `amd64.deb` | Open a terminal in your download folder and run `sudo apt install ./nwmpublisher_*.deb`. This also installs required system libraries. |
 | Fedora | `x86_64.rpm` | Run `sudo dnf install ./nwmpublisher-*.rpm` in your download folder. |
+| Arch Linux | [`PKGBUILD`](PKGBUILD) from this repository | Save it in an empty folder and run `makepkg -si` there. This also installs required system libraries. |
 | Other Linux distributions / Steam Deck | `amd64.AppImage` | In the file's properties, allow it to run as a program, then open it. On Steam Deck, use Desktop Mode. |
 
 The portable Windows build shares settings with the installed app in `%APPDATA%\nwmpublisher`.
 It does not add shortcuts or `.gma` file associations.
 It requires [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section),
 which is already present on most Windows PCs.
+
+On Linux, if the window stays blank, install the package for your distribution instead of the AppImage.
+If the window looks wrong on Wayland, start nwmpublisher with `GDK_BACKEND=x11`, for example
+`GDK_BACKEND=x11 nwmpublisher`. Accelerated rendering is off by default; start it with
+`WEBKIT_DISABLE_COMPOSITING_MODE=0` to turn it on.
 
 
 
@@ -160,7 +166,7 @@ Publishing and updating Workshop items are currently available only in the GUI.
 
 * Windows 10/11
 * macOS 13.3 or newer
-* Linux
+* Linux x86_64: Ubuntu 22.04, Debian 12 or a newer distribution
 
 Windows is the primary development and testing platform.
 

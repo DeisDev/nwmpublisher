@@ -1,0 +1,123 @@
+name: build macos
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_macos:
+    runs-on: macos-15
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Install Rust targets
+      working-directory: src-tauri
+      run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
+
+    - name: Install NPM dependencies
+      run: npm install --global npm@12.0.2 && npm ci
+
+    - name: Build universal macOS disk image
+      shell: bash
+      # Leave all six secrets unset for ad-hoc signing (no Apple account needed).
+      # To sign and notarize, supply all six: a base64 Developer ID Application
+      # .p12, its password, certificate identity, Apple ID, app-specific password,
+      # and team ID. Partial configuration must not produce an unsigned release.
+      env:
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        set -euo pipefail
+        if [[ -n "$APPLE_CERTIFICATE$APPLE_CERTIFICATE_PASSWORD$APPLE_SIGNING_IDENTITY$APPLE_ID$APPLE_PASSWORD$APPLE_TEAM_ID" ]]; then
+          for key in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!key}" ]]; then
+              echo "::error::Optional macOS signing is incomplete: set $key or remove all six signing secrets."
+              exit 1
+            fi
+          done
+          if [[ "$APPLE_SIGNING_IDENTITY" != "Developer ID Application:"* ]]; then
+            echo "::error::APPLE_SIGNING_IDENTITY must be a Developer ID Application certificate identity."
+            exit 1
+          fi
+          keychain="$RUNNER_TEMP/nwmpublisher-signing.keychain-db"
+          keychain_password=$(openssl rand -hex 32)
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -k "$keychain" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          # The pre-build hook signs the Steam dylib using this same identity.
+          # Tauri uses the imported identity without importing the .p12 again.
+          unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD
+        else
+          unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+        fi
+
+        npm run tauri build -- --ci --target universal-apple-darwin -v -- --locked
+
+        dmgs=("$GITHUB_WORKSPACE"/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+        test "${#dmgs[@]}" -eq 1
+        test -f "${dmgs[0]}"
+        hdiutil verify "${dmgs[0]}"
+        mount="$RUNNER_TEMP/nwmpublisher-dmg"
+        hdiutil attach "${dmgs[0]}" -readonly -nobrowse -mountpoint "$mount"
+        trap 'hdiutil detach "$mount"' EXIT
+        app="$RUNNER_TEMP/nwmpublisher.app"
+        ditto "$mount/nwmpublisher.app" "$app"
+        test -x "$app/Contents/MacOS/nwmpublisher"
+        test -f "$app/Contents/MacOS/libsteam_api.dylib"
+        minimum=$(node -p "require('./src-tauri/tauri.macos.conf.json').bundle.macOS.minimumSystemVersion")
+        test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$app/Contents/Info.plist")" = "$minimum"
+        while IFS= read -r -d '' binary; do
+          [[ $(file -b "$binary") == *Mach-O* ]] || continue
+          lipo "$binary" -verify_arch x86_64 arm64
+          dependencies=$(otool -arch all -L "$binary" | awk '/^\t/ {print $1}')
+          while IFS= read -r dependency; do
+            case "$dependency" in
+              /System/Library/*|/usr/lib/*) ;;
+              @loader_path/libsteam_api.dylib) test -f "$(dirname "$binary")/libsteam_api.dylib" ;;
+              *) echo "::error::Unbundled macOS dependency in $binary: $dependency"; exit 1 ;;
+            esac
+          done <<< "$dependencies"
+        done < <(find "$app/Contents" -type f -print0)
+        codesign --verify --deep --strict --verbose=2 "$app"
+        cd "$RUNNER_TEMP"
+        for architecture in arm64 x86_64; do
+          env -u DYLD_LIBRARY_PATH -u DYLD_FALLBACK_LIBRARY_PATH arch -"$architecture" "$app/Contents/MacOS/nwmpublisher" --help
+        done
+        if [[ -n "${APPLE_ID:-}" ]]; then
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+        fi
+
+    - name: Remove temporary signing credentials
+      if: always()
+      shell: bash
+      run: |
+        if [[ -f "$RUNNER_TEMP/nwmpublisher-signing.keychain-db" ]]; then
+          security delete-keychain "$RUNNER_TEMP/nwmpublisher-signing.keychain-db"
+        fi
+        rm -f "$RUNNER_TEMP/certificate.p12"
+
+    - name: Upload macOS disk image
+      uses: actions/upload-artifact@v4
+      with:
+        name: packages-macos
+        if-no-files-found: error
+        path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg

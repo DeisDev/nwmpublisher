@@ -1,0 +1,135 @@
+name: build linux
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_linux:
+    # Keep the glibc baseline compatible with Ubuntu 22.04 / Debian 12.
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev \
+            build-essential curl wget file libssl-dev libgtk-3-dev \
+            libxdo-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf libfuse2 rpm desktop-file-utils shared-mime-info dbus xdg-utils \
+            gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-libav
+
+    - name: Install NPM dependencies
+      run: npm install --global npm@12.0.2 && npm ci
+
+    - name: Run Rust tests
+      run: |
+        node src-tauri/copySharedLibs.js
+        cd src-tauri
+        cargo test --locked
+
+    - name: Build Linux packages
+      run: npm run tauri build -- --ci -v -- --locked
+      env:
+        APPIMAGE_EXTRACT_AND_RUN: "1"
+
+    - name: Verify packaged libraries and launchers
+      shell: bash
+      run: |
+        set -euo pipefail
+        bundle="$GITHUB_WORKSPACE/src-tauri/target/release/bundle"
+        debs=("$bundle"/deb/*.deb)
+        rpms=("$bundle"/rpm/*.rpm)
+        appimages=("$bundle"/appimage/*.AppImage)
+        test "${#debs[@]}" -eq 1
+        test -f "${debs[0]}"
+        test "${#rpms[@]}" -eq 1
+        test -f "${rpms[0]}"
+        test "${#appimages[@]}" -eq 1
+        test -f "${appimages[0]}"
+
+        dpkg-deb --info "${debs[0]}"
+        deb_dependencies=$(dpkg-deb --field "${debs[0]}" Depends | tr ',' '\n' | sed 's/^ *//; s/ *$//')
+        for dependency in ca-certificates dbus xdg-utils liblzma5 libwebkit2gtk-4.1-0 libgtk-3-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav; do
+          grep -Fx "$dependency" <<< "$deb_dependencies"
+        done
+        dpkg-deb --extract "${debs[0]}" "$RUNNER_TEMP/deb"
+        rpm_dependencies=$(rpm --query --package --requires "${rpms[0]}")
+        for dependency in ca-certificates dbus-tools xdg-utils 'liblzma.so.5()(64bit)' 'libwebkit2gtk-4.1.so.0()(64bit)' 'libgtk-3.so.0()(64bit)' gstreamer1-plugins-base gstreamer1-plugins-good gstreamer1-plugins-bad-free gstreamer1-plugin-libav; do
+          grep -Fx "$dependency" <<< "$rpm_dependencies"
+        done
+        rpm --checksig "${rpms[0]}"
+        mkdir "$RUNNER_TEMP/rpm"
+        cd "$RUNNER_TEMP/rpm"
+        # Ubuntu 22.04's rpm2cpio rejects packages without legacy archive-size tags.
+        rpm2archive - < "${rpms[0]}" | tar -xz
+
+        # Launch away from the build tree without a library-path override.
+        cd "$RUNNER_TEMP"
+        for package in deb rpm; do
+          test -f "$package/usr/lib/nwmpublisher/libsteam_api.so"
+          desktop-file-validate "$package/usr/share/applications/nwmpublisher.desktop"
+          desktop-file-validate "$package/usr/share/applications/nwmpublisher-extract.desktop"
+          mkdir -p "$package-mime/packages"
+          cp "$package/usr/share/mime/packages/nwmpublisher.xml" "$package-mime/packages/"
+          update-mime-database "$package-mime"
+          grep -Fx '50:application/x-gma:*.gma' "$package-mime/globs2"
+          env -u LD_LIBRARY_PATH "$RUNNER_TEMP/$package/usr/bin/nwmpublisher" --help
+        done
+        "${appimages[0]}" --appimage-extract > /dev/null
+        appdir="$RUNNER_TEMP/squashfs-root"
+        test -f "$appdir/usr/lib/nwmpublisher/libsteam_api.so"
+        test -x "$appdir/usr/bin/xdg-open"
+        test -x "$appdir/usr/bin/xdg-mime"
+        test -x "$appdir/usr/bin/dbus-send"
+        test -x "$appdir/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
+        for helper in WebKitNetworkProcess WebKitWebProcess; do
+          test -n "$(find "$appdir/usr" -type f -name "$helper" -executable -print)"
+        done
+        test -n "$(find "$appdir/usr" -name libwebkit2gtkinjectedbundle.so -print)"
+        env -u LD_LIBRARY_PATH "$appdir/AppRun" --help
+
+        export LD_LIBRARY_PATH="$appdir/usr/lib:$appdir/usr/lib/nwmpublisher"
+        while IFS= read -r -d '' binary; do
+          [[ $(file -b "$binary") == ELF* ]] || continue
+          dynamic=$(readelf -d "$binary")
+          grep -q '(NEEDED)' <<< "$dynamic" || continue
+          dependencies=$(ldd "$binary")
+          if grep -q 'not found' <<< "$dependencies"; then
+            echo "::error::Missing AppImage dependency in $binary"
+            printf '%s\n' "$dependencies"
+            exit 1
+          fi
+        done < <(find "$appdir" -type f -print0)
+
+        export GST_PLUGIN_PATH_1_0="$appdir/usr/lib/gstreamer-1.0"
+        export GST_PLUGIN_SYSTEM_PATH_1_0="$GST_PLUGIN_PATH_1_0"
+        export GST_PLUGIN_SCANNER_1_0="$appdir/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
+        export GST_REGISTRY="$RUNNER_TEMP/bundled-gstreamer-registry.bin"
+        for element in autoaudiosink pulsesink appsrc appsink playbin wavparse vorbisdec oggdemux mpg123audiodec flacdec qtdemux matroskademux vp8dec vp9dec avdec_aac avdec_h264 aacparse h264parse; do
+          gst-inspect-1.0 "$element" > /dev/null
+        done
+        for sound in "$GITHUB_WORKSPACE"/public/sound/*; do
+          timeout 30s gst-launch-1.0 -q filesrc location="$sound" ! decodebin ! audioconvert ! fakesink
+        done
+
+    - name: Upload Linux packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: packages-linux
+        if-no-files-found: error
+        path: |
+          src-tauri/target/release/bundle/appimage/*.AppImage
+          src-tauri/target/release/bundle/deb/*.deb
+          src-tauri/target/release/bundle/rpm/*.rpm

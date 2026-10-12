@@ -1,0 +1,69 @@
+name: build windows
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .node-version
+
+    - name: Install NPM dependencies
+      run: npm install --global npm@12.0.2 && npm ci
+
+    - name: Build
+      run: npm run tauri build -- -v -- --locked
+      env:
+        RUSTFLAGS: -Ctarget-feature=+crt-static
+
+    - name: Package and verify Windows portable ZIP
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+        $packageDir = 'src-tauri/target/release/bundle/portable'
+        New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+        $archive = "$packageDir/nwmpublisher_${version}_x64_portable.zip"
+        $files = @(
+          'src-tauri/target/release/nwmpublisher.exe'
+          'src-tauri/target/release/steam_api64.dll'
+          'LICENSE'
+        )
+        Compress-Archive -LiteralPath $files -DestinationPath $archive -CompressionLevel Optimal -Force
+
+        $extracted = Join-Path $env:RUNNER_TEMP 'nwmpublisher portable'
+        Expand-Archive -LiteralPath $archive -DestinationPath $extracted
+        foreach ($file in $files) {
+          $copy = Join-Path $extracted (Split-Path -Leaf $file)
+          if ((Get-FileHash -LiteralPath $file).Hash -ne (Get-FileHash -LiteralPath $copy).Hash) {
+            throw "Portable ZIP contains a damaged file: $file"
+          }
+        }
+
+        # Launch the extracted GUI-subsystem executable away from the build tree.
+        foreach ($argument in @('--help', '--version')) {
+          $cliProcess = Start-Process -FilePath "$extracted/nwmpublisher.exe" -ArgumentList $argument -WorkingDirectory $env:RUNNER_TEMP -WindowStyle Hidden -Wait -PassThru
+          if ($cliProcess.ExitCode -ne 0) {
+            throw "Portable launch failed for $argument with exit code $($cliProcess.ExitCode)"
+          }
+        }
+
+    - name: Upload Windows packages
+      uses: actions/upload-artifact@v4
+      with:
+        name: packages-windows
+        if-no-files-found: error
+        path: |
+          src-tauri/target/release/bundle/msi/nwmpublisher_*.msi
+          src-tauri/target/release/bundle/portable/nwmpublisher_*_x64_portable.zip
