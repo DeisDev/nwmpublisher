@@ -21,7 +21,7 @@
 	"devDependencies": {
 		"@lucide/svelte": "^1.47.0",
 		"@sveltejs/vite-plugin-svelte": "^7.3.0",
-		"@tauri-apps/cli": "^2.11.5",
+		"@tauri-apps/cli": "^2.12.2",
 		"filesize": "^6.1.0",
 		"luxon": "^1.26.0",
 		"steamid": "^1.1.3",
