@@ -142,6 +142,11 @@
 	"ERR_WORKSHOP_OWNER_UNAVAILABLE": "The owner's name could not be loaded.",
 	"ERR_WORKSHOP_FOLDER_NAME": "The Workshop title is unavailable, so the usual folder name was used.",
 	"ERR_WORKSHOP_METADATA_RENAMED": "Workshop details were saved as {data} because the usual name was taken.",
+	"ERR_WORKSHOP_ICON_RENAMED": "The Workshop icon was saved as {data} because the usual name was taken.",
+	"ERR_WORKSHOP_ICON_MISSING": "This Workshop item has no icon.",
+	"ERR_WORKSHOP_ICON_DOWNLOAD": "The Workshop icon could not be downloaded.",
+	"ERR_WORKSHOP_ICON_TOO_LARGE": "The Workshop icon is too large, so it was not saved.",
+	"ERR_WORKSHOP_ICON_FORMAT": "The Workshop icon is not a JPG, PNG or GIF image, so it was not saved.",
 	"ERR_METADATA_FILE_NAME": "Use a short .txt filename without reserved names or these characters: < > : \" / \\ | ? *. Avoid spaces or periods at the ends of the name.",
 	"ERR_SETTINGS_SAVE": "Settings could not be saved.",
 	"ERR_SETTINGS_FIELD": "This settings field cannot be changed by this operation.",
@@ -296,6 +301,11 @@
 	"workshop_incomplete": "Steam returned an empty page before all addons were loaded. Try loading again.",
 	"workshop_save_error": "Could not save your Workshop preferences. Your previous choices have been restored. {error}",
 	"workshop_retry": "Try again",
+	"installed_types": "Show types",
+	"installed_sort_modified": "Last modified (newest first)",
+	"installed_sort_type": "Type",
+	"installed_no_types": "No types selected. Check a type in Filters to show addons.",
+	"installed_save_error": "Could not save your preferences. Your previous choices have been restored. {error}",
 	"loading": "Loading...",
 	"gmod_dir": {
 		"name": "Garry's Mod Directory",
@@ -466,7 +476,9 @@
 			"workshop_title_tooltip": "Name new addon folders like “Title [123456789]”.",
 			"workshop_metadata": "Save Workshop metadata",
 			"workshop_metadata_tooltip": "Save the title, link, owner and description in a text file with the addon.",
-			"metadata_filename": "Metadata filename"
+			"metadata_filename": "Metadata filename",
+			"workshop_icon": "Save Workshop icon",
+			"workshop_icon_tooltip": "Save the addon's Workshop icon as an image in the addon folder."
 		},
 
 		"resets": {
@@ -635,7 +647,8 @@
 		"tool": "Tool",
 		"effects": "Effects",
 		"model": "Model",
-		"entity": "Entity"
+		"entity": "Entity",
+		"other": "Other"
 	},
 
 	"tag_1": "Tag 1",

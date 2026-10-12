@@ -1,4 +1,5 @@
 use std::{
+	io::Read,
 	sync::Arc,
 	time::{Duration, Instant},
 };
@@ -8,11 +9,12 @@ use parking_lot::Mutex;
 use steamworks::{Client, PersonaChange, PersonaStateChange, PublishedFileId, QueryResult, QueryResults, SteamError, SteamId};
 
 use crate::{
-	gma::{workshop::{WorkshopInfo, WorkshopItemDetails}, ExtractOptions},
+	gma::{workshop::{WorkshopIcon, WorkshopInfo, WorkshopItemDetails}, ExtractOptions},
 	Transaction, GMOD_APP_ID,
 };
 
 const LOOKUP_TIMEOUT: Duration = Duration::from_secs(30);
+const ICON_MAX_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, PartialEq)]
 enum Wait<T> {
@@ -58,7 +60,7 @@ impl<T> Reply<T> {
 	}
 }
 
-fn item_details(requested: PublishedFileId, result: Option<QueryResult>, retrieved: DateTime<Utc>) -> Result<WorkshopItemDetails, String> {
+fn item_details(requested: PublishedFileId, result: Option<QueryResult>, preview_url: Option<String>, retrieved: DateTime<Utc>) -> Result<WorkshopItemDetails, String> {
 	let item = result.ok_or("ERR_WORKSHOP_ITEM_MISSING")?;
 	if item.published_file_id != requested || item.consumer_app_id != Some(GMOD_APP_ID) {
 		return Err("ERR_WORKSHOP_ITEM_MISMATCH".into());
@@ -67,13 +69,14 @@ fn item_details(requested: PublishedFileId, result: Option<QueryResult>, retriev
 		title: item.title,
 		description: item.description,
 		owner: item.owner,
+		preview_url: preview_url.filter(|url| !url.is_empty()),
 		retrieved,
 	})
 }
 
 /// Validates a result from a download batch query.
 pub fn query_details(requested: PublishedFileId, results: &QueryResults<'_>, index: u32) -> Result<WorkshopItemDetails, String> {
-	item_details(requested, results.get(index), Utc::now())
+	item_details(requested, results.get(index), results.preview_url(index), Utc::now())
 }
 
 fn query(client: &Client, id: PublishedFileId, deadline: Instant, cancelled: &dyn Fn() -> bool, pump: &mut dyn FnMut()) -> Wait<Result<WorkshopItemDetails, String>> {
@@ -87,7 +90,7 @@ fn query(client: &Client, id: PublishedFileId, deadline: Instant, cancelled: &dy
 		.include_long_desc(true)
 		.allow_cached_response(0)
 		.fetch(move |result: Result<QueryResults<'_>, SteamError>| {
-			sender.send(result.map(|results| item_details(id, results.get(0), Utc::now())).unwrap_or_else(|error| Err(format!("ERR_WORKSHOP_LOOKUP:{error}"))));
+			sender.send(result.map(|results| item_details(id, results.get(0), results.preview_url(0), Utc::now())).unwrap_or_else(|error| Err(format!("ERR_WORKSHOP_LOOKUP:{error}"))));
 		});
 	reply.wait(deadline, cancelled, pump)
 }
@@ -152,6 +155,26 @@ fn collect(
 	Some((info, warnings))
 }
 
+fn icon_from_bytes(bytes: Vec<u8>) -> Result<WorkshopIcon, String> {
+	let extension = match image::guess_format(&bytes) {
+		Ok(image::ImageFormat::Jpeg) => "jpg",
+		Ok(image::ImageFormat::Png) => "png",
+		Ok(image::ImageFormat::Gif) => "gif",
+		_ => return Err("ERR_WORKSHOP_ICON_FORMAT".into()),
+	};
+	Ok(WorkshopIcon { bytes, extension })
+}
+
+fn download_icon(url: &str) -> Result<WorkshopIcon, String> {
+	let response = ureq::get(url).timeout(LOOKUP_TIMEOUT).call().map_err(|error| format!("ERR_WORKSHOP_ICON_DOWNLOAD:{error}"))?;
+	let mut bytes = Vec::new();
+	response.into_reader().take(ICON_MAX_BYTES + 1).read_to_end(&mut bytes).map_err(|error| format!("ERR_WORKSHOP_ICON_DOWNLOAD:{error}"))?;
+	if bytes.len() as u64 > ICON_MAX_BYTES {
+		return Err("ERR_WORKSHOP_ICON_TOO_LARGE".into());
+	}
+	icon_from_bytes(bytes)
+}
+
 /// Attaches Workshop details for the desktop's extraction jobs. Returns false when cancelled.
 pub fn attach(options: &mut ExtractOptions, id: Option<PublishedFileId>, id_inferred: bool, prefetched: Option<Result<WorkshopItemDetails, String>>, transaction: &Transaction) -> bool {
 	if !options.enabled() {
@@ -159,11 +182,20 @@ pub fn attach(options: &mut ExtractOptions, id: Option<PublishedFileId>, id_infe
 	}
 	transaction.status("fetching_workshop_info");
 	let client = steam!().connected().then(|| steam!().client());
-	let Some((info, warnings)) = collect(client.as_deref().map(|interface| &**interface), id, id_inferred, prefetched, &|| transaction.aborted(), &mut || steam!().run_callbacks()) else {
+	let Some((mut info, warnings)) = collect(client.as_deref().map(|interface| &**interface), id, id_inferred, prefetched, &|| transaction.aborted(), &mut || steam!().run_callbacks()) else {
 		return false;
 	};
 	for warning in warnings {
 		transaction.warning(warning);
+	}
+	if let Some(url) = info.item.as_ref().filter(|_| options.icon).map(|item| item.preview_url.clone()) {
+		match url.ok_or_else(|| "ERR_WORKSHOP_ICON_MISSING".to_owned()).and_then(|url| download_icon(&url)) {
+			Ok(icon) => info.icon = Some(icon),
+			Err(warning) => transaction.warning(warning),
+		}
+		if transaction.aborted() {
+			return false;
+		}
 	}
 	options.workshop = Some(info);
 	true
@@ -229,11 +261,24 @@ mod tests {
 	#[test]
 	fn details_reject_missing_wrong_and_non_gmod_items() {
 		let now = Utc::now();
-		let item = item_details(PublishedFileId(7), Some(result(7, Some(4000))), now).unwrap();
+		let item = item_details(PublishedFileId(7), Some(result(7, Some(4000))), Some("https://example.com/icon.jpg".into()), now).unwrap();
 		assert_eq!((item.title.as_str(), item.description.as_str(), item.retrieved), ("Addon", "[b]Description[/b]", now));
-		assert_eq!(item_details(PublishedFileId(7), None, now).unwrap_err(), "ERR_WORKSHOP_ITEM_MISSING");
+		assert_eq!(item.preview_url.as_deref(), Some("https://example.com/icon.jpg"));
+		assert_eq!(item_details(PublishedFileId(7), Some(result(7, Some(4000))), Some(String::new()), now).unwrap().preview_url, None);
+		assert_eq!(item_details(PublishedFileId(7), None, None, now).unwrap_err(), "ERR_WORKSHOP_ITEM_MISSING");
 		for wrong in [result(8, Some(4000)), result(7, Some(4001)), result(7, None)] {
-			assert_eq!(item_details(PublishedFileId(7), Some(wrong), now).unwrap_err(), "ERR_WORKSHOP_ITEM_MISMATCH");
+			assert_eq!(item_details(PublishedFileId(7), Some(wrong), None, now).unwrap_err(), "ERR_WORKSHOP_ITEM_MISMATCH");
+		}
+	}
+
+	#[test]
+	fn icons_keep_their_image_format_and_reject_other_data() {
+		for (bytes, extension) in [(&b"\xFF\xD8\xFFdata"[..], "jpg"), (b"\x89PNG\r\n\x1a\ndata", "png"), (b"GIF89adata", "gif")] {
+			let icon = icon_from_bytes(bytes.to_vec()).unwrap();
+			assert_eq!((icon.bytes.as_slice(), icon.extension), (bytes, extension));
+		}
+		for bytes in [&b"<html>"[..], b"RIFF\0\0\0\0WEBPdata", b""] {
+			assert_eq!(icon_from_bytes(bytes.to_vec()).unwrap_err(), "ERR_WORKSHOP_ICON_FORMAT");
 		}
 	}
 
@@ -276,7 +321,7 @@ mod tests {
 		assert_eq!((info.id, info.id_inferred, info.item.is_none()), (Some(PublishedFileId(7)), true, true));
 		assert_eq!(warnings, ["ERR_WORKSHOP_STEAM_UNAVAILABLE"]);
 
-		let prefetched = item_details(PublishedFileId(7), Some(result(7, Some(4000))), Utc::now());
+		let prefetched = item_details(PublishedFileId(7), Some(result(7, Some(4000))), None, Utc::now());
 		let (info, warnings) = collect(None, Some(PublishedFileId(7)), false, Some(prefetched), &|| false, &mut unused_pump).unwrap();
 		assert_eq!(info.item.unwrap().title, "Addon");
 		assert_eq!(info.owner_name, None);

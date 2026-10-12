@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Sort installed addons by type and filter them by type, such as maps or weapons.
+- Optionally save an addon's Workshop icon when extracting it.
+
 ### Fixed
 
 - Fix the Linux AppImage opening a blank window on Arch, Fedora and other newer distributions.

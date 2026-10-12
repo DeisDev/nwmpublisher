@@ -128,6 +128,55 @@ impl GMAMetadata {
 	}
 }
 
+/// Variant order is the order of the "Type" sort, following gmad's type list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AddonType {
+	Gamemode,
+	Map,
+	Weapon,
+	Vehicle,
+	Npc,
+	Entity,
+	Tool,
+	Effects,
+	Model,
+	#[serde(rename = "ServerContent")]
+	ServerContent,
+	Other,
+}
+impl AddonType {
+	pub const ALL: [AddonType; 11] = [
+		Self::Gamemode,
+		Self::Map,
+		Self::Weapon,
+		Self::Vehicle,
+		Self::Npc,
+		Self::Entity,
+		Self::Tool,
+		Self::Effects,
+		Self::Model,
+		Self::ServerContent,
+		Self::Other,
+	];
+
+	pub fn of(metadata: Option<&GMAMetadata>) -> Self {
+		match metadata.and_then(GMAMetadata::addon_type).map(str::to_ascii_lowercase).as_deref() {
+			Some("gamemode") => Self::Gamemode,
+			Some("map") => Self::Map,
+			Some("weapon") => Self::Weapon,
+			Some("vehicle") => Self::Vehicle,
+			Some("npc") => Self::Npc,
+			Some("entity") => Self::Entity,
+			Some("tool") => Self::Tool,
+			Some("effects") => Self::Effects,
+			Some("model") => Self::Model,
+			Some("servercontent") => Self::ServerContent,
+			_ => Self::Other,
+		}
+	}
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct GMAEntry {
 	pub path: String,
@@ -363,6 +412,17 @@ pub mod preview;
 mod tests {
 	use super::*;
 	use std::{error::Error, io};
+
+	#[test]
+	fn addon_types_are_read_from_metadata_ignoring_case() {
+		let standard = |addon_type: &str| GMAMetadata::Standard { title: String::new(), addon_type: addon_type.into(), tags: Vec::new(), ignore: Vec::new() };
+		assert_eq!(AddonType::of(Some(&standard("Weapon"))), AddonType::Weapon);
+		assert_eq!(AddonType::of(Some(&standard("servercontent"))), AddonType::ServerContent);
+		assert_eq!(AddonType::of(Some(&standard("unknown"))), AddonType::Other);
+		assert_eq!(AddonType::of(Some(&GMAMetadata::Legacy { title: String::new(), description: String::new() })), AddonType::Other);
+		assert_eq!(AddonType::of(None), AddonType::Other);
+		assert_eq!(serde_json::to_value(AddonType::ALL).unwrap(), serde_json::json!(["gamemode", "map", "weapon", "vehicle", "npc", "entity", "tool", "effects", "model", "ServerContent", "other"]));
+	}
 
 	#[test]
 	fn io_errors_preserve_context_source_and_wire_message() {

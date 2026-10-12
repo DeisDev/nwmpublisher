@@ -75,11 +75,11 @@ pub fn valid_metadata_file_name(name: &str) -> bool {
 }
 
 /// `workshop.txt` for 1, then `workshop (2).txt`, `workshop (3).txt`, ...
-pub fn numbered_metadata_file_name(name: &str, number: u32) -> String {
+pub fn numbered_file_name(name: &str, number: u32) -> String {
 	if number <= 1 {
 		return name.to_owned();
 	}
-	let (stem, extension) = name.split_at(name.len() - 4);
+	let (stem, extension) = name.split_at(name.rfind('.').unwrap_or(name.len()));
 	format!("{stem} ({number}){extension}")
 }
 
@@ -156,9 +156,10 @@ mod tests {
 		}
 		let longest = format!("{}.txt", "界".repeat(76));
 		assert!(valid_metadata_file_name(&longest));
-		assert!(numbered_metadata_file_name(&longest, 255).len() <= 240);
-		assert_eq!(numbered_metadata_file_name("workshop.txt", 1), "workshop.txt");
-		assert_eq!(numbered_metadata_file_name("Info.TXT", 2), "Info (2).TXT");
+		assert!(numbered_file_name(&longest, 255).len() <= 240);
+		assert_eq!(numbered_file_name("workshop.txt", 1), "workshop.txt");
+		assert_eq!(numbered_file_name("Info.TXT", 2), "Info (2).TXT");
+		assert_eq!(numbered_file_name("icon.webp", 3), "icon (3).webp");
 	}
 
 	#[test]

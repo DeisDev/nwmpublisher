@@ -132,6 +132,7 @@ pub(super) fn stdin() -> Option<ExitCode> {
 		metadata_name: matches
 			.get_flag("workshop-metadata")
 			.then(|| matches.get_one::<String>("metadata-name").cloned().unwrap_or_else(|| DEFAULT_METADATA_FILE_NAME.to_owned())),
+		icon: false,
 		workshop: None,
 	};
 	let transaction = transaction!();

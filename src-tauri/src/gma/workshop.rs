@@ -8,7 +8,14 @@ pub struct WorkshopItemDetails {
 	pub title: String,
 	pub description: String,
 	pub owner: SteamId,
+	pub preview_url: Option<String>,
 	pub retrieved: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkshopIcon {
+	pub bytes: Vec<u8>,
+	pub extension: &'static str,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -17,6 +24,7 @@ pub struct WorkshopInfo {
 	pub id_inferred: bool,
 	pub item: Option<WorkshopItemDetails>,
 	pub owner_name: Option<String>,
+	pub icon: Option<WorkshopIcon>,
 }
 
 impl WorkshopInfo {
@@ -64,13 +72,14 @@ mod tests {
 			title: "Café [b]Addon[/b]".into(),
 			description: "[h1]Hello[/h1]\n[url=https://example.com/a?b=1]Link[/url]\n[img]https://example.com/i.png[/img]".into(),
 			owner: SteamId::from_raw(76561197960287930),
+			preview_url: None,
 			retrieved: Utc.with_ymd_and_hms(2026, 10, 9, 12, 34, 56).unwrap(),
 		}
 	}
 
 	#[test]
 	fn renders_complete_metadata_with_original_bbcode() {
-		let info = WorkshopInfo { id: Some(PublishedFileId(123)), id_inferred: false, item: Some(details()), owner_name: Some("Owner Name".into()) };
+		let info = WorkshopInfo { id: Some(PublishedFileId(123)), id_inferred: false, item: Some(details()), owner_name: Some("Owner Name".into()), icon: None };
 		assert_eq!(
 			info.render(Some("Archive")),
 			"Title: Café [b]Addon[/b]\n\
@@ -89,12 +98,12 @@ mod tests {
 
 	#[test]
 	fn renders_partial_metadata_and_marks_missing_fields() {
-		let info = WorkshopInfo { id: Some(PublishedFileId(123)), id_inferred: true, item: Some(details()), owner_name: None };
+		let info = WorkshopInfo { id: Some(PublishedFileId(123)), id_inferred: true, item: Some(details()), owner_name: None, icon: None };
 		let text = info.render(None);
 		assert!(text.contains("\nWorkshop ID: 123 (inferred from the file path)\n"));
 		assert!(text.contains("\nOwner: Unavailable\nOwner Steam ID: 76561197960287930\nOwner profile: https://steamcommunity.com/profiles/76561197960287930\n"));
 
-		let info = WorkshopInfo { id: Some(PublishedFileId(123)), id_inferred: true, item: None, owner_name: None };
+		let info = WorkshopInfo { id: Some(PublishedFileId(123)), id_inferred: true, item: None, owner_name: None, icon: None };
 		assert_eq!(
 			info.render(Some("Embedded title")),
 			"Title: Unavailable\n\

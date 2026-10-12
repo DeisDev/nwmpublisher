@@ -1,12 +1,15 @@
 use std::{collections::HashSet, io, path::{Path, PathBuf}, sync::atomic::{AtomicU64, Ordering}};
-use super::{filename::numbered_metadata_file_name, output::{Directory, Kind}, ExtractionOverwriteMode, GMAError};
+use super::{filename::numbered_file_name, output::{Directory, Kind}, ExtractionOverwriteMode, GMAError};
 
 static NEXT_STAGE: AtomicU64 = AtomicU64::new(0);
 pub(super) const METADATA_LEAF: &str = "new-metadata";
+pub(super) const ICON_LEAF: &str = "new-icon";
 
-pub(super) struct StagedMetadata {
+/// A generated file, such as Workshop metadata, added beside the archive's files.
+pub(super) struct StagedFile {
+	pub leaf: &'static str,
 	pub name: String,
-	/// Lowercase top-level archive names that the metadata file must not take.
+	/// Lowercase top-level archive names that the file must not take.
 	pub reserved: HashSet<String>,
 }
 
@@ -43,7 +46,7 @@ impl ExtractionStage {
 		parent.remove_tree(&name).map_err(|error| GMAError::io("clean extraction staging (retained for recovery)", &path, error))
 	}
 
-	pub fn commit(&mut self, name: &Path, mode: ExtractionOverwriteMode, files: &[String], metadata: Option<&StagedMetadata>) -> Result<(PathBuf, Option<PathBuf>), GMAError> {
+	pub fn commit(&mut self, name: &Path, mode: ExtractionOverwriteMode, files: &[String], generated: &[&StagedFile]) -> Result<(PathBuf, Vec<PathBuf>), GMAError> {
 		let mut name = name.to_owned();
 		let original = self.parent.path.join(&name);
 		let kind = self.parent.kind(&name).map_err(|error| GMAError::io("inspect extraction destination", &original, error))?;
@@ -72,11 +75,11 @@ impl ExtractionStage {
 			created = true;
 		}
 		let result = match self.parent.child(&name, false) {
-			Ok(target) => self.merge(&target, files, metadata),
+			Ok(target) => self.merge(&target, files, generated),
 			Err(error) => Err(GMAError::io("open extraction destination", &original, error)),
 		};
-		let metadata = match result {
-			Ok(metadata) => metadata,
+		let generated = match result {
+			Ok(generated) => generated,
 			Err(error) => {
 				if created && !self.preserve {
 					if let Err(cleanup) = self.parent.remove_tree(&name) {
@@ -108,14 +111,14 @@ impl ExtractionStage {
 			}
 		}
 		let path = self.parent.path.join(name);
-		Ok((path.clone(), metadata.map(|metadata| path.join(metadata))))
+		Ok((path.clone(), generated.into_iter().map(|name| path.join(name)).collect()))
 	}
 
-	fn merge(&mut self, target: &Directory, files: &[String], metadata: Option<&StagedMetadata>) -> Result<Option<String>, GMAError> {
+	fn merge(&mut self, target: &Directory, files: &[String], generated: &[&StagedFile]) -> Result<Vec<String>, GMAError> {
 		let mut journal: Vec<(Directory, PathBuf, PathBuf, bool, bool)> = Vec::new();
 		let mut directories: Vec<(Directory, PathBuf)> = Vec::new();
-		let mut metadata_file: Option<PathBuf> = None;
-		let result = (|| -> Result<Option<String>, GMAError> {
+		let mut generated_files: Vec<PathBuf> = Vec::new();
+		let result = (|| -> Result<Vec<String>, GMAError> {
 			for (index, path) in files.iter().enumerate() {
 				let mut parent = target.clone();
 				let path = Path::new(path);
@@ -140,36 +143,40 @@ impl ExtractionStage {
 					.map_err(|error| GMAError::io("commit extracted file", &parent.path.join(&*leaf), error))?;
 				*installed = true;
 			}
-			let Some(metadata) = metadata else { return Ok(None); };
-			let staged = self.directory.path.join(METADATA_LEAF);
-			let mut source = self.directory.read_file(Path::new(METADATA_LEAF)).map_err(|error| GMAError::io("read staged Workshop metadata", &staged, error))?;
-			for number in 1..=255 {
-				let name = numbered_metadata_file_name(&metadata.name, number);
-				if metadata.reserved.contains(&name.to_lowercase()) { continue; }
-				let leaf = PathBuf::from(&name);
-				match target.kind(&leaf) {
-					Ok(None) => {}
-					// Links and other non-regular entries are reported as InvalidInput.
-					Ok(Some(_)) => continue,
-					Err(error) if error.kind() == io::ErrorKind::InvalidInput => continue,
-					Err(error) => return Err(GMAError::io("inspect Workshop metadata target", &target.path.join(&leaf), error)),
+			let mut names = Vec::new();
+			'generated: for generated in generated {
+				let staged = self.directory.path.join(generated.leaf);
+				let mut source = self.directory.read_file(Path::new(generated.leaf)).map_err(|error| GMAError::io("read staged Workshop file", &staged, error))?;
+				for number in 1..=255 {
+					let name = numbered_file_name(&generated.name, number);
+					if generated.reserved.contains(&name.to_lowercase()) { continue; }
+					let leaf = PathBuf::from(&name);
+					match target.kind(&leaf) {
+						Ok(None) => {}
+						// Links and other non-regular entries are reported as InvalidInput.
+						Ok(Some(_)) => continue,
+						Err(error) if error.kind() == io::ErrorKind::InvalidInput => continue,
+						Err(error) => return Err(GMAError::io("inspect Workshop file target", &target.path.join(&leaf), error)),
+					}
+					// Exclusive creation also covers entries created after the check. A rename
+					// could replace them.
+					let mut file = match target.create_file(&leaf) {
+						Ok(file) => file,
+						Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+						Err(error) => return Err(GMAError::io("create Workshop file", &target.path.join(&leaf), error)),
+					};
+					generated_files.push(leaf);
+					io::copy(&mut source, &mut file).and_then(|_| file.sync_all()).map_err(|error| GMAError::io("write Workshop file", &target.path.join(&name), error))?;
+					names.push(name);
+					continue 'generated;
 				}
-				// Exclusive creation also covers entries created after the check. A rename
-				// could replace them.
-				let mut file = match target.create_file(&leaf) {
-					Ok(file) => file,
-					Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-					Err(error) => return Err(GMAError::io("create Workshop metadata", &target.path.join(&leaf), error)),
-				};
-				metadata_file = Some(leaf);
-				io::copy(&mut source, &mut file).and_then(|_| file.sync_all()).map_err(|error| GMAError::io("write Workshop metadata", &target.path.join(&name), error))?;
-				return Ok(Some(name));
+				return Err(GMAError::NoSafeDestination(target.path.join(&generated.name)));
 			}
-			Err(GMAError::NoSafeDestination(target.path.join(&metadata.name)))
+			Ok(names)
 		})();
 		if let Err(error) = result {
 			let rollback = (|| -> io::Result<()> {
-				if let Some(leaf) = metadata_file.take() { target.remove(&leaf, false)?; }
+				for leaf in generated_files.drain(..).rev() { target.remove(&leaf, false)?; }
 				for (index, (parent, leaf, backup, existed, installed)) in journal.iter().enumerate().rev() {
 					if *installed { parent.rename(leaf, &self.directory, Path::new(&format!("new-{index}")))?; }
 					if *existed { self.directory.rename(backup, parent, leaf)?; }
@@ -215,7 +222,7 @@ mod tests {
 		let mut stage = ExtractionStage::new(parent).unwrap();
 		stage.directory.create_file(Path::new("new-0")).unwrap().write_all(b"replacement").unwrap();
 		stage.directory.create_file(Path::new("new-1")).unwrap().write_all(b"blocked").unwrap();
-		assert!(stage.commit(Path::new("output"), ExtractionOverwriteMode::Overwrite, &["a".into(), "blocked".into()], None).is_err());
+		assert!(stage.commit(Path::new("output"), ExtractionOverwriteMode::Overwrite, &["a".into(), "blocked".into()], &[]).is_err());
 		assert_eq!(std::fs::read(root.path().join("output/a")).unwrap(), b"original");
 		assert!(root.path().join("output/blocked").is_dir());
 		stage.cleanup().unwrap();

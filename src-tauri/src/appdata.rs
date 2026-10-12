@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-	gma::{filename::DEFAULT_METADATA_FILE_NAME, ExtractDestination, ExtractionOverwriteMode},
+	gma::{filename::DEFAULT_METADATA_FILE_NAME, AddonType, ExtractDestination, ExtractionOverwriteMode},
 	steam::workshop::WorkshopVisibility,
 	RwLockCow,
 };
@@ -225,6 +225,13 @@ pub enum WorkshopSort {
 	TitleDesc,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InstalledAddonsSort {
+	Modified,
+	Type,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Settings {
@@ -246,12 +253,15 @@ pub struct Settings {
 	pub extract_workshop_title: bool,
 	pub extract_workshop_metadata: bool,
 	pub extract_metadata_filename: String,
+	pub extract_workshop_icon: bool,
 
 	pub ignore_globs: Vec<String>,
 
 	pub my_workshop_local_paths: HashMap<PublishedFileId, PathBuf>,
 	pub my_workshop_visibility: Vec<WorkshopVisibility>,
 	pub my_workshop_sort: WorkshopSort,
+	pub installed_addons_sort: InstalledAddonsSort,
+	pub installed_addons_types: Vec<AddonType>,
 	pub upscale_addon_icon: bool,
 	pub workshop_update_mode: WorkshopUpdateMode,
 	pub open_workshop_after_publish: bool,
@@ -297,6 +307,7 @@ impl Default for Settings {
 			extract_workshop_title: false,
 			extract_workshop_metadata: false,
 			extract_metadata_filename: DEFAULT_METADATA_FILE_NAME.to_owned(),
+			extract_workshop_icon: false,
 
 			ignore_globs: Vec::new(),
 			my_workshop_local_paths: HashMap::new(),
@@ -307,6 +318,8 @@ impl Default for Settings {
 				WorkshopVisibility::Unlisted,
 			],
 			my_workshop_sort: WorkshopSort::UpdatedDesc,
+			installed_addons_sort: InstalledAddonsSort::Modified,
+			installed_addons_types: AddonType::ALL.to_vec(),
 			upscale_addon_icon: true,
 			workshop_update_mode: WorkshopUpdateMode::Description,
 			open_workshop_after_publish: true,
@@ -839,9 +852,10 @@ mod tests {
 		assert!(super::patched_settings(&settings, patch).is_err());
 	}
 	use super::{
-		changelog_key, validate_changelog_key, ChangelogDefaults, ChangelogMode, ChangelogSettings, Settings, WorkshopSort, WorkshopUpdateMode,
-		WorkshopVisibility,
+		changelog_key, validate_changelog_key, ChangelogDefaults, ChangelogMode, ChangelogSettings, InstalledAddonsSort, Settings, WorkshopSort,
+		WorkshopUpdateMode, WorkshopVisibility,
 	};
+	use crate::gma::AddonType;
 	use std::fs::{self, File};
 	use steamworks::PublishedFileId;
 
@@ -902,6 +916,23 @@ mod tests {
 	fn workshop_browsing_preferences_reject_invalid_values() {
 		assert!(serde_json::from_value::<Settings>(serde_json::json!({"my_workshop_sort": "invalid"})).is_err());
 		assert!(serde_json::from_value::<Settings>(serde_json::json!({"my_workshop_visibility": ["invalid"]})).is_err());
+	}
+
+	#[test]
+	fn installed_addons_preferences_default_round_trip_and_reject_invalid_values() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
+		assert_eq!(defaults.installed_addons_sort, InstalledAddonsSort::Modified);
+		assert_eq!(defaults.installed_addons_types, AddonType::ALL.to_vec());
+		assert!(!defaults.extract_workshop_icon);
+		let patch = serde_json::json!({"installed_addons_sort": "type", "installed_addons_types": ["map", "ServerContent", "other"], "extract_workshop_icon": true});
+		let settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert_eq!(loaded.installed_addons_sort, InstalledAddonsSort::Type);
+		assert_eq!(loaded.installed_addons_types, [AddonType::Map, AddonType::ServerContent, AddonType::Other]);
+		assert!(loaded.extract_workshop_icon && !loaded.sounds);
+		for patch in [serde_json::json!({"installed_addons_sort": "invalid"}), serde_json::json!({"installed_addons_types": ["Map"]})] {
+			assert!(super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).is_err());
+		}
 	}
 
 	#[test]

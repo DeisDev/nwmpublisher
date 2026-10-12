@@ -10,12 +10,11 @@ use std::{
 };
 
 use lazy_static::lazy_static;
-use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
+use parking_lot::{RwLock, RwLockReadGuard};
 use rayon::ThreadPool;
-use serde::ser::SerializeTuple;
 use steamworks::PublishedFileId;
 
-use crate::{gma::extract::{ExtractGMAMut, ExtractOptions}, webview::Addon, GMAFile};
+use crate::{appdata::InstalledAddonsSort, gma::{extract::{ExtractGMAMut, ExtractOptions}, AddonType}, webview::Addon, GMAFile};
 
 lazy_static! {
 	static ref DISCOVERY_POOL: ThreadPool = thread_pool!(4);
@@ -265,7 +264,11 @@ impl GameAddons {
 
 		self.discovered.store(Discovered::Yes.into(), Ordering::Release);
 
-		browse_installed_addons(1); // Download the first page first
+		let (sort, types) = {
+			let settings = app_data!().settings.read();
+			(settings.installed_addons_sort, settings.installed_addons_types.clone())
+		};
+		browse_installed_addons(1, sort, types); // Download the first page first
 		steam!().fetch_workshop_items(ids); // Download the rest in the background too
 	}
 
@@ -293,38 +296,23 @@ impl GameAddons {
 	}
 }
 
-#[derive(Debug)]
-pub struct InstalledAddonsPage(usize, MappedRwLockReadGuard<'static, [Arc<Addon>]>);
-impl serde::Serialize for InstalledAddonsPage {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: serde::Serializer,
-	{
-		let mut tup = serializer.serialize_tuple(2)?;
-		tup.serialize_element(&self.0)?;
-		tup.serialize_element(self.1.as_ref())?;
-		tup.end()
+/// Keeps the newest-first discovery order, grouping by type when sorting by type.
+fn select_installed_addons(addons: &[Arc<Addon>], sort: InstalledAddonsSort, types: &[AddonType]) -> Vec<Arc<Addon>> {
+	let addon_type = |addon: &Arc<Addon>| AddonType::of(addon.installed().metadata.as_ref());
+	let mut selected: Vec<_> = addons.iter().filter(|addon| types.contains(&addon_type(addon))).cloned().collect();
+	if sort == InstalledAddonsSort::Type {
+		selected.sort_by_key(addon_type);
 	}
+	selected
 }
 
 #[tauri::command]
-pub fn browse_installed_addons(page: u32) -> InstalledAddonsPage {
-	game_addons!().discover_addons();
-
+pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<AddonType>) -> (usize, Vec<Arc<Addon>>) {
+	let selected = select_installed_addons(&game_addons!().get_addons(), sort, &types);
 	let start = ((page.max(1) - 1) as usize) * crate::steam::RESULTS_PER_PAGE;
-	InstalledAddonsPage(
-		game_addons!().paths.read().len(),
-		RwLockReadGuard::map(game_addons!().pages.read(), |read| {
-			steam!().fetch_workshop_items(
-				read.iter()
-					.skip(start)
-					.take(crate::steam::RESULTS_PER_PAGE)
-					.filter_map(|x| x.installed().id)
-					.collect(),
-			);
-			&read[start..(start + crate::steam::RESULTS_PER_PAGE).min(read.len())]
-		}),
-	)
+	let page: Vec<_> = selected.iter().skip(start).take(crate::steam::RESULTS_PER_PAGE).cloned().collect();
+	steam!().fetch_workshop_items(page.iter().filter_map(|addon| addon.installed().id).collect());
+	(selected.len(), page)
 }
 
 #[tauri::command]
@@ -416,5 +404,30 @@ mod tests {
 		for path in [content.join("abc/addon.gma"), content.join("0/addon.gma"), Path::new("content/4001/123/addon.gma").to_owned(), Path::new("downloads/123/addon.gma").to_owned()] {
 			assert_eq!(GameAddons::workshop_content_id(&path), None, "{}", path.display());
 		}
+	}
+
+	#[test]
+	fn installed_addons_filter_by_type_and_group_without_reordering_within_types() {
+		let addon = |name: &str, addon_type: Option<&str>| -> Arc<Addon> {
+			Arc::new(Addon::Installed(GMAFile {
+				path: PathBuf::from(name),
+				size: 0,
+				id: None,
+				metadata: addon_type.map(|addon_type| crate::gma::GMAMetadata::Standard { title: name.into(), addon_type: addon_type.into(), tags: Vec::new(), ignore: Vec::new() }),
+				entries: None,
+				pointers: Default::default(),
+				version: 3,
+				extracted_name: name.into(),
+				modified: None,
+				membuffer: None,
+				spool: None,
+			}))
+		};
+		let addons = [addon("weapon1", Some("weapon")), addon("map1", Some("map")), addon("legacy", None), addon("weapon2", Some("Weapon")), addon("map2", Some("map"))];
+		let names = |selected: Vec<Arc<Addon>>| selected.iter().map(|addon| addon.installed().extracted_name.clone()).collect::<Vec<_>>();
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL)), ["weapon1", "map1", "legacy", "weapon2", "map2"]);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &AddonType::ALL)), ["map1", "map2", "weapon1", "weapon2", "legacy"]);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &[AddonType::Other, AddonType::Weapon])), ["weapon1", "weapon2", "legacy"]);
+		assert!(select_installed_addons(&addons, InstalledAddonsSort::Modified, &[]).is_empty());
 	}
 }

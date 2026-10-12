@@ -15,7 +15,8 @@
 	const sortOptions = ['updated_desc', 'updated_asc', 'subscribers_desc', 'subscribers_asc', 'created_desc', 'created_asc', 'title_asc', 'title_desc'];
 	let visibility = [...AppSettings.my_workshop_visibility];
 	let sort = AppSettings.my_workshop_sort;
-	let saving = false;
+	let saved = { visibility, sort };
+	let saveRequest = 0;
 	let saveError = null;
 	let filtersOpen = false;
 	let filterMenu;
@@ -28,6 +29,7 @@
 	let loadId = 0;
 
 	$: visibleAddons = selectAddons(addons, visibility, sort);
+	$: next = () => Promise.resolve([visibleAddons.length, visibleAddons]);
 
 	function selectAddons(items, selectedVisibility, selectedSort) {
 		const [field, direction] = selectedSort.split('_');
@@ -80,28 +82,24 @@
 		loadAddons();
 	}
 
-	async function savePreferences(nextVisibility, nextSort) {
-		if (saving) return;
-		const previousVisibility = visibility;
-		const previousSort = sort;
+	function savePreferences(nextVisibility, nextSort) {
+		const request = ++saveRequest;
 		visibility = nextVisibility;
 		sort = nextSort;
-		saving = true;
 		saveError = null;
-		try {
-			await saveSettings({
-				my_workshop_visibility: nextVisibility,
-				my_workshop_sort: nextSort,
-			});
+		saveSettings({
+			my_workshop_visibility: nextVisibility,
+			my_workshop_sort: nextSort,
+		}).then(() => {
+			saved = { visibility: nextVisibility, sort: nextSort };
 			AppSettings.my_workshop_visibility = nextVisibility;
 			AppSettings.my_workshop_sort = nextSort;
-		} catch (error) {
-			visibility = previousVisibility;
-			sort = previousSort;
+		}, error => {
 			saveError = String(error);
-		} finally {
-			saving = false;
-		}
+			if (request !== saveRequest) return;
+			visibility = saved.visibility;
+			sort = saved.sort;
+		});
 	}
 
 	function toggleVisibility(value, checked) {
@@ -154,7 +152,7 @@
 				<ChevronDown size="1rem"/>
 			</button>
 			{#if filtersOpen}
-				<fieldset id="workshop-filters" disabled={saving}>
+				<fieldset id="workshop-filters">
 					<legend>{$_('workshop_visibility')}</legend>
 					{#each visibilityOptions as value}
 						<label>
@@ -167,7 +165,7 @@
 		</div>
 		<label class="sort">
 			<span>{$_('workshop_sort')}</span>
-			<select value={sort} disabled={saving} on:change={event => savePreferences(visibility, event.currentTarget.value)}>
+			<select value={sort} on:change={event => savePreferences(visibility, event.currentTarget.value)}>
 				{#each sortOptions as value}
 					<option {value}>{$_('workshop_sort_' + value)}</option>
 				{/each}
@@ -196,9 +194,7 @@
 		</p>
 	{/if}
 	<div class="results">
-		{#key visibleAddons}
-			<AddonScroller next={() => Promise.resolve([visibleAddons.length, visibleAddons])} onClick={editPublishedAddon} onNewAddonClick={togglePreparePublish}/>
-		{/key}
+		<AddonScroller {next} onClick={editPublishedAddon} onNewAddonClick={togglePreparePublish}/>
 	</div>
 </section>
 
@@ -279,9 +275,6 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: .5rem;
-	}
-	select:disabled, fieldset:disabled {
-		opacity: .6;
 	}
 	.status, .error {
 		margin: .5rem 1.5rem 0;

@@ -154,6 +154,7 @@
 			<Setting {afterChange} id="extract_workshop_title" type="bool" value={AppSettings.extract_workshop_title} tooltip={$_('settings.extraction.workshop_title_tooltip')}>{$_('settings.extraction.workshop_title')}</Setting>
 			<Setting afterChange={changeSaveMetadata} id="extract_workshop_metadata" type="bool" value={saveMetadata} tooltip={$_('settings.extraction.workshop_metadata_tooltip')}>{$_('settings.extraction.workshop_metadata')}</Setting>
 			<Setting afterChange={changeMetadataName} id="extract_metadata_filename" type="text" value={AppSettings.extract_metadata_filename} disabled={!saveMetadata}>{$_('settings.extraction.metadata_filename')}</Setting>
+			<Setting {afterChange} id="extract_workshop_icon" type="bool" value={AppSettings.extract_workshop_icon} tooltip={$_('settings.extraction.workshop_icon_tooltip')}>{$_('settings.extraction.workshop_icon')}</Setting>
 		{:else if activeItem === 'editors'}
 			<section>
 				<h3>{$_('settings.editors.shared')}</h3>

@@ -37,7 +37,7 @@ class Steam {
 		this.SteamUsers = {};
 
 		this.MyWorkshop = [];
-		this.InstalledAddons = [];
+		this.InstalledAddons = {};
 
 		listen("WorkshopItem", ({ payload: { workshop: workshopItem } }) => {
 			this.workshopItemReceived(workshopItem);
@@ -63,11 +63,12 @@ class Steam {
 		return this.MyWorkshop[page];
 	}
 
-	getInstalledAddons(page) {
-		if (this.InstalledAddons[page] == null) {
-			this.InstalledAddons[page] = new DeferredPromise(invoke("browse_installed_addons", { page }));
+	getInstalledAddons(page, sort, types) {
+		const key = JSON.stringify([page, sort, types]);
+		if (this.InstalledAddons[key] == null) {
+			this.InstalledAddons[key] = new DeferredPromise(invoke("browse_installed_addons", { page, sort, types }));
 		}
-		return this.InstalledAddons[page];
+		return this.InstalledAddons[key];
 	}
 
 	getSubscribedAddons(page) {
@@ -256,7 +257,7 @@ function getFileTypeInfo(path) {
 const steam = new Steam();
 
 listen('InstalledAddonsRefreshed', () => {
-	steam.InstalledAddons = [];
+	steam.InstalledAddons = {};
 });
 
 invoke('workshop_item_channel').then(transaction_id => {

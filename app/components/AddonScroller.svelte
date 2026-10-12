@@ -9,24 +9,41 @@
 	export let onNewAddonClick = null;
 
 	let loading = true;
+	let loaded = false;
+	let error = null;
 	let total = 0;
 	let addons = [];
-	let firstPage;
-	function fetchNext() {
+	let request = 0;
+
+	const key = addon => addon.installed?.path ?? addon.workshop?.id;
+
+	// A new `next` replaces the list once its first page arrives, so the current
+	// cards stay on screen and cards present in both lists are kept.
+	function fetchNext(reset = false) {
+		const id = reset ? ++request : request;
 		loading = true;
 
-		let promise = next().then(([fetchedTotal, fetchedAddons]) => {
-
-			loading = false;
-
-			addons = addons.concat(fetchedAddons);
+		next().then(([fetchedTotal, fetchedAddons]) => {
+			if (id !== request) return;
+			const base = reset ? [] : addons;
+			const seen = new Set(base.map(key));
+			addons = base.concat(fetchedAddons.filter(addon => !seen.has(key(addon))));
 			total = fetchedTotal;
-
-		}, () => loading = false);
-
-		if (!firstPage) firstPage = promise;
+			if (reset && scroller) scroller.scrollTop = 0;
+			error = null;
+			loaded = true;
+			loading = false;
+		}, reason => {
+			if (id !== request) return;
+			if (reset) {
+				addons = [];
+				error = reason;
+				loaded = true;
+			}
+			loading = false;
+		});
 	}
-	fetchNext();
+	$: next, fetchNext(true);
 
 	let scroller;
 	function infiniScroll() {
@@ -47,34 +64,30 @@
 	{#if onNewAddonClick}
 		<div id="grid">
 			<Addon newAddon={true} onClick={onNewAddonClick}/>
-			{#each addons as addon}
+			{#each addons as addon (key(addon))}
 				<Addon {onClick} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
 			{/each}
-			{#await firstPage}
+			{#if !loaded}
 				<Loading size="2rem"/>
-			{:catch reason}
+			{:else if error}
 				<Dead size="2rem"/>
-				<div id="error">{JSON.stringify(reason)}</div>
-			{/await}
-		</div>
-	{:else}
-		{#await firstPage}
-			<Loading size="2rem"/>
-		{:then}
-			{#if addons.length === 0}
-				<Dead size="2rem"/>
-				<div id="error">{$_('ERR_NO_ADDONS_FOUND')}</div>
-			{:else}
-				<div id="grid">
-					{#each addons as addon}
-						<Addon {onClick} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
-					{/each}
-				</div>
+				<div id="error">{JSON.stringify(error)}</div>
 			{/if}
-		{:catch reason}
-			<Dead size="2rem"/>
-			<div id="error">{JSON.stringify(reason)}</div>
-		{/await}
+		</div>
+	{:else if !loaded}
+		<Loading size="2rem"/>
+	{:else if error}
+		<Dead size="2rem"/>
+		<div id="error">{JSON.stringify(error)}</div>
+	{:else if addons.length === 0}
+		<Dead size="2rem"/>
+		<div id="error">{$_('ERR_NO_ADDONS_FOUND')}</div>
+	{:else}
+		<div id="grid">
+			{#each addons as addon (key(addon))}
+				<Addon {onClick} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
+			{/each}
+		</div>
 	{/if}
 </main>
 
