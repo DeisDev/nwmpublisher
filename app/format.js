@@ -1,4 +1,4 @@
-import filesize from 'filesize';
+import { filesize } from 'filesize';
 import { locale } from 'svelte-i18n';
 import { get } from 'svelte/store';
 
