@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'node:url';
-import en from '../i18n/en.json' with { type: 'json' };
+import en from './i18n/en.json' with { type: 'json' };
 
 export default defineConfig({
 	root: fileURLToPath(new URL('.', import.meta.url)),

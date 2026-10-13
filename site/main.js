@@ -1,6 +1,6 @@
 import { mount } from 'svelte';
 import { addMessages, init } from 'svelte-i18n';
-import { website } from '../i18n/en.json';
+import { website } from './i18n/en.json';
 import Site from './Site.svelte';
 import './styles.css';
 
