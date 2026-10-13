@@ -89,6 +89,7 @@ export function linkText(text) {
 export function bbcodeUrl(source) {
 	let value = source.trim();
 	if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+	// eslint-disable-next-line no-control-regex
 	if (!value || /[\s\\\u0000-\u001f\u007f]/u.test(value)) return null;
 	if (/^[\p{L}\p{N}.-]+\.[\p{L}\p{N}-]+(?::\d+)?(?:[/?#]|$)/u.test(value)) value = 'https://' + value;
 	try {
@@ -144,7 +145,7 @@ function linkify(nodes, insideLink = false) {
 		if (insideLink) return [node];
 		const parts = [];
 		let position = 0;
-		for (const match of node.text.matchAll(/\b(?:https?:\/\/|www\.)[^\s<>\[\]"']+/gi)) {
+		for (const match of node.text.matchAll(/\b(?:https?:\/\/|www\.)[^\s<>[\]"']+/gi)) {
 			let text = match[0].replace(/[.,!?;:]+$/, '');
 			while (text.endsWith(')') && text.split(')').length > text.split('(').length) text = text.slice(0, -1);
 			const href = bbcodeUrl(text);

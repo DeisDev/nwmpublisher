@@ -5,7 +5,6 @@
 	import Folder from '@lucide/svelte/icons/folder';
 	import Download from '@lucide/svelte/icons/download';
 	import FolderAdd from '@lucide/svelte/icons/folder-plus';
-	import { invoke } from '@tauri-apps/api/core';
 	import { saveSettings } from '../settings.js';
 	import Modal from './Modal.svelte';
 	import * as dialog from '@tauri-apps/plugin-dialog';

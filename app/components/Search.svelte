@@ -27,7 +27,6 @@
 	}
 
 	let searchResults = [];
-	let hasMoreResults = false;
 	let isLoading = false;
 	let isSearching = false;
 	let searchInput;
@@ -61,9 +60,8 @@
 		const transaction = new Transaction(transaction_id);
 		transaction.listen(event => {
 			if (event.stream) {
-				const [salt, [results, hasMore]] = event.data;
+				const [salt, [results]] = event.data;
 				if (salt !== prevSalt) return;
-				hasMoreResults = hasMore;
 				searchResults = results;
 				isLoading = false;
 			}
