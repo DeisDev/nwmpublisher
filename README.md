@@ -37,8 +37,9 @@ which is already present on most Windows PCs.
 
 On Linux, if the window stays blank, install the package for your distribution instead of the AppImage.
 If the window looks wrong on Wayland, start nwmpublisher with `GDK_BACKEND=x11`, for example
-`GDK_BACKEND=x11 nwmpublisher`. If parts of the window do not draw, start it with
-`WEBKIT_DISABLE_COMPOSITING_MODE=1` to turn off accelerated rendering.
+`GDK_BACKEND=x11 nwmpublisher`. If the window is blank or parts of it do not draw, which mostly happens with
+the proprietary NVIDIA driver, start it with `WEBKIT_DISABLE_DMABUF_RENDERER=1`. If that does not help, start it
+with `WEBKIT_DISABLE_COMPOSITING_MODE=1` to turn off accelerated rendering.
 
 
 

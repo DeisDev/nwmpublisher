@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix pasting a link after using the Link button adding a second link tag.
 - Fix the Linux AppImage opening a blank window on Arch, Fedora and other newer distributions.
 - Fix progress bar icons sitting off-center.
-- Fix links not opening in the browser from the Linux AppImage.
+- Fix links not opening in the browser on Linux.
 
 ## [3.4.0] - 2026-10-09
 
