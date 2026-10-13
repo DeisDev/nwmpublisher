@@ -840,8 +840,7 @@ mod tests {
 
 	#[test]
 	fn field_patches_preserve_newer_window_state_paths_and_drafts() {
-		let mut settings = super::Settings::default();
-		settings.window_size = (1280., 720.);
+		let mut settings = super::Settings { window_size: (1280., 720.), ..Default::default() };
 		settings.my_workshop_local_paths.insert(steamworks::PublishedFileId(7), std::path::PathBuf::from("source"));
 		settings.changelogs.drafts.insert("workshop:7".into(), "draft".into());
 		let patch = serde_json::json!({ "sounds": false }).as_object().unwrap().clone();
