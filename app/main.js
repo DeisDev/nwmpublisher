@@ -3,6 +3,7 @@ import { applyTheme } from './theme.js';
 import App from './App.svelte';
 import { settings } from './settings.js';
 import { mount } from 'svelte';
+import { invoke } from '@tauri-apps/api/core';
 
 function rgbToHsl(r, g, b) {
 	r /= 255, g /= 255, b /= 255;
@@ -51,6 +52,13 @@ if (import.meta.env.PROD) {
 		if (!e.target.closest('input, textarea') && !e.target.isContentEditable) e.preventDefault();
 	});
 }
+
+document.addEventListener('click', e => {
+	const link = e.target.closest?.('a[target="_blank"][href]');
+	if (e.defaultPrevented || !link || !/^https?:/i.test(link.href)) return;
+	e.preventDefault();
+	invoke('open_url', { url: link.href }).catch(error => console.error('Failed to open link:', link.href, error));
+});
 
 __NWMPUBLISHER__(() => {
 	settings.set(AppSettings);

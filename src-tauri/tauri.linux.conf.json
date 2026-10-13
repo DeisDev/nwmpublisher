@@ -7,8 +7,6 @@
 				"bundleMediaFramework": true,
 				"files": {
 					"/usr/lib/nwmpublisher/libsteam_api.so": "lib/steam_api/redistributable_bin/linux64/libsteam_api.so",
-					"/usr/bin/xdg-open": "/usr/bin/xdg-open",
-					"/usr/bin/xdg-mime": "/usr/bin/xdg-mime",
 					"/usr/bin/dbus-send": "/usr/bin/dbus-send"
 				}
 			},

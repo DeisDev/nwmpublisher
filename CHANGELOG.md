@@ -15,11 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Description and changelog previews now look like Steam, with an option to use the app theme instead.
+- Turn on accelerated rendering by default on Linux for smoother animations.
 
 ### Fixed
 
 - Fix pasting a link after using the Link button adding a second link tag.
 - Fix the Linux AppImage opening a blank window on Arch, Fedora and other newer distributions.
+- Fix progress bar icons sitting off-center.
+- Fix links not opening in the browser from the Linux AppImage.
 
 ## [3.4.0] - 2026-10-09
 

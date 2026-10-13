@@ -226,6 +226,7 @@
 	}
 	.task :global(img), .task :global(.icon) {
 		width: 1rem;
+		height: 1rem;
 	}
 	.task #content {
 		min-width: 0;
@@ -261,6 +262,7 @@
 		display: grid;
 		grid-template-columns: 1fr;
 		grid-template-rows: 1fr;
+		place-items: center;
 		margin-right: .5rem;
 	}
 

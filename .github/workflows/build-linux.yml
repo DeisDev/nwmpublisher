@@ -90,8 +90,6 @@ jobs:
         "${appimages[0]}" --appimage-extract > /dev/null
         appdir="$RUNNER_TEMP/squashfs-root"
         test -f "$appdir/usr/lib/nwmpublisher/libsteam_api.so"
-        test -x "$appdir/usr/bin/xdg-open"
-        test -x "$appdir/usr/bin/xdg-mime"
         test -x "$appdir/usr/bin/dbus-send"
         test -x "$appdir/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
         for helper in WebKitNetworkProcess WebKitWebProcess; do

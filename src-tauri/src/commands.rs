@@ -6,6 +6,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 		check_file,
 		open,
 		open_file_location,
+		open_url,
 		file_size,
 		crate::webview::reloaded,
 		crate::webview::js_error,
@@ -133,6 +134,18 @@ pub fn open(path: PathBuf) {
 #[tauri::command]
 pub fn open_file_location(path: PathBuf) {
 	crate::path::open_file_location(path);
+}
+
+#[tauri::command]
+pub async fn open_url(url: String) -> Result<(), String> {
+	let url = tauri::Url::parse(&url).map_err(|error| format!("{url}: {error}"))?;
+	if !matches!(url.scheme(), "http" | "https") {
+		return Err(format!("Only web links can be opened: {url}"));
+	}
+	tauri::async_runtime::spawn_blocking(move || crate::path::open_with_default_app(std::path::Path::new(url.as_str())))
+		.await
+		.map_err(|error| error.to_string())?
+		.map_err(|error| error.to_string())
 }
 
 #[tauri::command]

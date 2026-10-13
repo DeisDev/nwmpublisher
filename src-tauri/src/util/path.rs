@@ -161,7 +161,18 @@ pub fn open_with_default_app(path: &Path) -> std::io::Result<()> {
 
 #[cfg(target_os = "linux")]
 pub fn open_with_default_app(path: &Path) -> std::io::Result<()> {
-	let status = without_steam_identity(&mut std::process::Command::new("xdg-open"))
+	let mut command = std::process::Command::new("xdg-open");
+	without_steam_identity(&mut command);
+	if let Ok(appdir) = std::env::var("APPDIR") {
+		let environment = std::env::vars_os().filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)));
+		for (key, value) in host_environment(environment, &appdir) {
+			match value {
+				Some(value) => command.env(key, value),
+				None => command.env_remove(key),
+			};
+		}
+	}
+	let status = command
 		.arg(path)
 		.stdin(std::process::Stdio::null())
 		.stdout(std::process::Stdio::null())
@@ -177,6 +188,29 @@ pub fn open_with_default_app(path: &Path) -> std::io::Result<()> {
 #[cfg(target_os = "linux")]
 fn without_steam_identity(command: &mut std::process::Command) -> &mut std::process::Command {
 	command.env_remove("SteamAppId").env_remove("SteamGameId")
+}
+
+// The AppImage launcher points these at its own tools, libraries and theme, which can stop host programs such as browsers from working.
+#[cfg(any(test, target_os = "linux"))]
+fn host_environment(environment: impl IntoIterator<Item = (String, String)>, appdir: &str) -> Vec<(String, Option<String>)> {
+	let appdir = appdir.trim_end_matches('/');
+	if appdir.is_empty() {
+		return Vec::new();
+	}
+	let bundled = |entry: &str| entry.strip_prefix(appdir).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'));
+	environment
+		.into_iter()
+		.filter_map(|(key, value)| {
+			if matches!(key.as_str(), "APPDIR" | "APPIMAGE" | "GTK_THEME") {
+				return Some((key, None));
+			}
+			if !value.split(':').any(bundled) {
+				return None;
+			}
+			let host = value.split(':').filter(|entry| !entry.is_empty() && !bundled(entry)).collect::<Vec<_>>();
+			Some((key, (!host.is_empty()).then(|| host.join(":"))))
+		})
+		.collect()
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -258,12 +292,46 @@ fn show_file_location_dialog(path: &Path) {
 	webview!().window().dialog().message(path.display().to_string()).title("File Location").show(|_| {});
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(test)]
 mod tests {
-	use std::{ffi::OsStr, os::unix::ffi::OsStrExt, path::Path};
+	#[test]
+	fn host_environment_drops_appimage_entries() {
+		let environment = [
+			("PATH", "/tmp/.mount_nwm/usr/bin/:/tmp/.mount_nwm/usr/sbin/:/usr/local/bin:/usr/bin"),
+			("LD_LIBRARY_PATH", "/tmp/.mount_nwm/usr/lib/:/tmp/.mount_nwm/usr/lib64/:"),
+			("XDG_DATA_DIRS", "/tmp/.mount_nwm/usr/share:/usr/share:/tmp/.mount_nwm/usr/share/"),
+			("GTK_DATA_PREFIX", "/tmp/.mount_nwm"),
+			("GTK_THEME", "Adwaita:dark"),
+			("APPIMAGE", "/home/user/nwmpublisher.AppImage"),
+			("GIO_MODULE_DIR", "/tmp/.mount_nwm/usr/lib/gio/modules"),
+			("HOME", "/home/user"),
+			("OTHER", "/tmp/.mount_nwm-other/bin"),
+		]
+		.map(|(key, value)| (key.to_string(), value.to_string()));
+		let changes = super::host_environment(environment, "/tmp/.mount_nwm/");
+		let expected = [
+			("PATH", Some("/usr/local/bin:/usr/bin")),
+			("LD_LIBRARY_PATH", None),
+			("XDG_DATA_DIRS", Some("/usr/share")),
+			("GTK_DATA_PREFIX", None),
+			("GTK_THEME", None),
+			("APPIMAGE", None),
+			("GIO_MODULE_DIR", None),
+		]
+		.map(|(key, value)| (key.to_string(), value.map(str::to_string)));
+		assert_eq!(changes, expected);
+	}
 
 	#[test]
+	fn host_environment_ignores_root_appdir() {
+		assert!(super::host_environment([("PATH".to_string(), "/usr/bin".to_string())], "/").is_empty());
+	}
+
+	#[cfg(target_os = "linux")]
+	#[test]
 	fn file_uri_percent_encodes_reserved_and_non_utf8_bytes() {
+		use std::{ffi::OsStr, os::unix::ffi::OsStrExt, path::Path};
+
 		let path = Path::new(OsStr::from_bytes(b"/tmp/100% #1, \"a\"\\b/caf\xC3\xA9/\xFF~x-y_z.gma"));
 		assert_eq!(super::file_uri(path), "file:///tmp/100%25%20%231%2C%20%22a%22%5Cb/caf%C3%A9/%FF~x-y_z.gma");
 	}

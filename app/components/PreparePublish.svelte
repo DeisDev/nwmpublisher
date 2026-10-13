@@ -17,7 +17,6 @@
 	import * as dialog from '@tauri-apps/plugin-dialog';
 	import { invoke } from '@tauri-apps/api/core';
 	import { saveSettings } from '../settings.js';
-	import { open } from '@tauri-apps/plugin-shell';
 	import { playSound } from '../sounds';
 	import FileBrowser from './FileBrowser.svelte';
 	import FilePreview from './FilePreview.svelte';
@@ -514,7 +513,7 @@
 
 	async function openChangeNotes(event) {
 		try {
-			await open(event.currentTarget.href);
+			await invoke('open_url', { url: event.currentTarget.href });
 		} catch (error) {
 			await dialog.message(String(error), { kind: 'error' });
 		}

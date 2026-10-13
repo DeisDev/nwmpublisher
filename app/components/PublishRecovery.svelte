@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { invoke } from '@tauri-apps/api/core';
-	import { open } from '@tauri-apps/plugin-shell';
 	import { confirm } from '@tauri-apps/plugin-dialog';
 	import { translateError } from '../i18n';
 	let operations = [];
@@ -42,7 +41,7 @@
 				<p>{$_(operation.outcome === 'published' ? 'publish_cleanup_warning' : 'publish_outcome_unknown')}</p>
 				{#if operation.staging}<code>{operation.staging}</code>{/if}
 				{#if operation.workshopId}
-					<button on:click={() => open(`https://steamcommunity.com/sharedfiles/filedetails/?id=${operation.workshopId}`).catch(failure => error = String(failure))}>{$_('workshop_page')} · {operation.workshopId}</button>
+					<button on:click={() => invoke('open_url', { url: `https://steamcommunity.com/sharedfiles/filedetails/?id=${operation.workshopId}` }).catch(failure => error = String(failure))}>{$_('workshop_page')} · {operation.workshopId}</button>
 					<button disabled={busy} on:click={() => recheck(operation)}>{$_('publish_recheck')}</button>
 				{:else}
 					<label>{$_('publish_recovery_id')}<input bind:value={chosenIds[operation.key]} inputmode="numeric"/></label>

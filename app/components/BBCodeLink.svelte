@@ -1,6 +1,6 @@
 <script>
 	import { _ } from 'svelte-i18n';
-	import { open } from '@tauri-apps/plugin-shell';
+	import { invoke } from '@tauri-apps/api/core';
 
 	export let href;
 	let error = null;
@@ -12,7 +12,7 @@
 		const target = href;
 		error = null;
 		try {
-			await open(target);
+			await invoke('open_url', { url: target });
 		} catch (reason) {
 			if (target === href) error = String(reason);
 		}

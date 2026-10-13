@@ -37,8 +37,8 @@ which is already present on most Windows PCs.
 
 On Linux, if the window stays blank, install the package for your distribution instead of the AppImage.
 If the window looks wrong on Wayland, start nwmpublisher with `GDK_BACKEND=x11`, for example
-`GDK_BACKEND=x11 nwmpublisher`. Accelerated rendering is off by default; start it with
-`WEBKIT_DISABLE_COMPOSITING_MODE=0` to turn it on.
+`GDK_BACKEND=x11 nwmpublisher`. If parts of the window do not draw, start it with
+`WEBKIT_DISABLE_COMPOSITING_MODE=1` to turn off accelerated rendering.
 
 
 

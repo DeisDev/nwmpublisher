@@ -75,12 +75,6 @@ fn deadlock_watchdog() {
 }
 
 fn main() -> std::process::ExitCode {
-	// https://github.com/WilliamVenner/gmpublisher/issues/210
-	// Keep a user's own value so WEBKIT_DISABLE_COMPOSITING_MODE=0 can re-enable compositing.
-	if cfg!(target_os = "linux") && std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
-		std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-	}
-
 	std::panic::set_hook(Box::new(logging::panic));
 
 	rayon::ThreadPoolBuilder::new().num_threads(*crate::NUM_THREADS).build_global().unwrap();
@@ -102,7 +96,6 @@ fn main() -> std::process::ExitCode {
 
 	tauri::Builder::default()
 		.plugin(tauri_plugin_dialog::init())
-		.plugin(tauri_plugin_shell::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.setup(|app| {
 			discord::start();

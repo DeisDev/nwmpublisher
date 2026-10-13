@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from "svelte";
-	import { open } from '@tauri-apps/plugin-shell';
+	import { invoke } from '@tauri-apps/api/core';
 	import Modal from './Modal.svelte';
 	import { _ } from 'svelte-i18n';
 	import Logo from "./Logo.svelte";
@@ -15,7 +15,7 @@
 	async function openLink(event) {
 		const url = event.currentTarget.href;
 		try {
-			await open(url);
+			await invoke('open_url', { url });
 		} catch (error) {
 			console.error('Failed to open link:', url, error);
 		}
