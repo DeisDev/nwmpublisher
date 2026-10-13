@@ -53,12 +53,15 @@ if (import.meta.env.PROD) {
 	});
 }
 
-document.addEventListener('click', e => {
+function openExternalLink(e) {
+	if (e.type === 'auxclick' && e.button !== 1) return;
 	const link = e.target.closest?.('a[target="_blank"][href]');
 	if (e.defaultPrevented || !link || !/^https?:/i.test(link.href)) return;
 	e.preventDefault();
 	invoke('open_url', { url: link.href }).catch(error => console.error('Failed to open link:', link.href, error));
-});
+}
+document.addEventListener('click', openExternalLink);
+document.addEventListener('auxclick', openExternalLink);
 
 __NWMPUBLISHER__(() => {
 	settings.set(AppSettings);

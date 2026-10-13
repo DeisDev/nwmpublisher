@@ -126,9 +126,10 @@ pub fn check_dir(path: PathBuf) -> bool {
 	path.is_absolute() && path.is_dir()
 }
 
+// Sync commands run on the main thread, and xdg-open can block until the opened program exits.
 #[tauri::command]
-pub fn open(path: PathBuf) {
-	crate::path::open(path);
+pub async fn open(path: PathBuf) {
+	tauri::async_runtime::spawn_blocking(move || crate::path::open(path)).await.ok();
 }
 
 #[tauri::command]
@@ -142,7 +143,7 @@ pub async fn open_url(url: String) -> Result<(), String> {
 	if !matches!(url.scheme(), "http" | "https") {
 		return Err(format!("Only web links can be opened: {url}"));
 	}
-	tauri::async_runtime::spawn_blocking(move || crate::path::open_with_default_app(std::path::Path::new(url.as_str())))
+	tauri::async_runtime::spawn_blocking(move || crate::path::open_with_default_app(url.as_str()))
 		.await
 		.map_err(|error| error.to_string())?
 		.map_err(|error| error.to_string())

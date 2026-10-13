@@ -154,13 +154,14 @@ pub fn open<P: AsRef<Path>>(path: P) {
 	}
 }
 
+// Takes a path or a URL.
 #[cfg(not(target_os = "linux"))]
-pub fn open_with_default_app(path: &Path) -> std::io::Result<()> {
-	opener::open(path).map_err(std::io::Error::other)
+pub fn open_with_default_app(target: impl AsRef<std::ffi::OsStr>) -> std::io::Result<()> {
+	opener::open(target).map_err(std::io::Error::other)
 }
 
 #[cfg(target_os = "linux")]
-pub fn open_with_default_app(path: &Path) -> std::io::Result<()> {
+pub fn open_with_default_app(target: impl AsRef<std::ffi::OsStr>) -> std::io::Result<()> {
 	let mut command = std::process::Command::new("xdg-open");
 	without_steam_identity(&mut command);
 	if let Ok(appdir) = std::env::var("APPDIR") {
@@ -173,10 +174,11 @@ pub fn open_with_default_app(path: &Path) -> std::io::Result<()> {
 		}
 	}
 	let status = command
-		.arg(path)
+		.arg(target)
 		.stdin(std::process::Stdio::null())
 		.stdout(std::process::Stdio::null())
-		.status()?;
+		.status()
+		.map_err(|error| std::io::Error::new(error.kind(), format!("xdg-open: {error}")))?;
 	if status.success() {
 		Ok(())
 	} else {
@@ -191,6 +193,7 @@ fn without_steam_identity(command: &mut std::process::Command) -> &mut std::proc
 }
 
 // The AppImage launcher points these at its own tools, libraries and theme, which can stop host programs such as browsers from working.
+// It also forces GDK_BACKEND=x11, which would push a browser started on Wayland onto XWayland.
 #[cfg(any(test, target_os = "linux"))]
 fn host_environment(environment: impl IntoIterator<Item = (String, String)>, appdir: &str) -> Vec<(String, Option<String>)> {
 	let appdir = appdir.trim_end_matches('/');
@@ -201,7 +204,7 @@ fn host_environment(environment: impl IntoIterator<Item = (String, String)>, app
 	environment
 		.into_iter()
 		.filter_map(|(key, value)| {
-			if matches!(key.as_str(), "APPDIR" | "APPIMAGE" | "GTK_THEME") {
+			if matches!(key.as_str(), "APPDIR" | "APPIMAGE" | "GTK_THEME" | "GDK_BACKEND") {
 				return Some((key, None));
 			}
 			if !value.split(':').any(bundled) {
@@ -302,6 +305,7 @@ mod tests {
 			("XDG_DATA_DIRS", "/tmp/.mount_nwm/usr/share:/usr/share:/tmp/.mount_nwm/usr/share/"),
 			("GTK_DATA_PREFIX", "/tmp/.mount_nwm"),
 			("GTK_THEME", "Adwaita:dark"),
+			("GDK_BACKEND", "x11"),
 			("APPIMAGE", "/home/user/nwmpublisher.AppImage"),
 			("GIO_MODULE_DIR", "/tmp/.mount_nwm/usr/lib/gio/modules"),
 			("HOME", "/home/user"),
@@ -315,6 +319,7 @@ mod tests {
 			("XDG_DATA_DIRS", Some("/usr/share")),
 			("GTK_DATA_PREFIX", None),
 			("GTK_THEME", None),
+			("GDK_BACKEND", None),
 			("APPIMAGE", None),
 			("GIO_MODULE_DIR", None),
 		]
