@@ -1,0 +1,33 @@
+name: Question
+description: Ask how to do something in nwmpublisher.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [README](https://github.com/DeisDev/nwmpublisher#readme) covers installing, upgrading from gmpublisher, Linux display fixes, and the command line. If something is broken, use **Bug report** instead.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What you're trying to do and what you've tried so far.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Steam Deck (SteamOS)
+        - Doesn't matter
+
+  - type: input
+    id: version
+    attributes:
+      label: nwmpublisher version
+      description: Shown at the bottom of the sidebar.

@@ -1,0 +1,49 @@
+name: Label issues
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add labels from form answers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          answer() {
+            printf '%s\n' "$BODY" | tr -d '\r' | awk -v heading="### $1" '
+              $0 == heading { found = 1; next }
+              found && /^### / { exit }
+              found && NF { print }
+            '
+          }
+
+          labels=()
+
+          case "$(answer 'Operating system')" in
+            Windows*) labels+=(windows) ;;
+            macOS) labels+=(macos) ;;
+            Linux | 'Steam Deck (SteamOS)') labels+=(linux) ;;
+          esac
+
+          problems="$(answer "What's wrong?")"
+          for visual in 'stays blank or white' "don't draw or flicker" 'scaled wrong'; do
+            if [[ "$problems" == *"$visual"* ]]; then
+              labels+=('visual bug')
+              break
+            fi
+          done
+
+          if [ ${#labels[@]} -eq 0 ]; then
+            exit 0
+          fi
+
+          (IFS=,; gh issue edit "$NUMBER" --repo "$REPO" --add-label "${labels[*]}")

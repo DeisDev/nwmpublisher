@@ -1,0 +1,58 @@
+name: Suggestion
+description: Suggest a new feature or a change to how something works.
+labels: [enhancement]
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you start
+      options:
+        - label: I [searched existing issues](https://github.com/DeisDev/nwmpublisher/issues?q=is%3Aissue) and didn't find this suggestion.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of nwmpublisher?
+      multiple: true
+      options:
+        - Publishing or updating an addon
+        - My Workshop
+        - Installed addons
+        - Extracting or browsing GMA files
+        - Downloader
+        - Addon size analyzer
+        - Addon cleaner
+        - Settings
+        - Command line
+        - Website
+        - Something new
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe what you're trying to do and what gets in the way.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Other ideas or workarounds
+      description: Other ways this could work, or what you do today instead.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Mockups, screenshots, or examples from other tools.

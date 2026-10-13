@@ -1,0 +1,173 @@
+name: Crash or display problem
+description: nwmpublisher crashes, won't start, or the window is blank, flickers, or is drawn wrong.
+labels: [bug, compatibility]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        These problems usually depend on your graphics, drivers, and desktop, so this form asks for more system details than a normal bug report.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you start
+      options:
+        - label: I'm using the [latest release](https://github.com/DeisDev/nwmpublisher/releases/latest).
+          required: true
+        - label: I [searched existing issues](https://github.com/DeisDev/nwmpublisher/issues?q=is%3Aissue) and didn't find this one.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: nwmpublisher version
+      description: Shown at the bottom of the sidebar, or run `nwmpublisher --version`.
+      placeholder: "3.4.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: problem
+    attributes:
+      label: What's wrong?
+      multiple: true
+      options:
+        - Crashes or closes on startup
+        - Crashes while using it
+        - Window opens but stays blank or white
+        - Parts of the window don't draw or flicker
+        - Window is the wrong size, blurry, or scaled wrong
+        - Freezes or stops responding
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did right before it, and any error messages exactly as shown.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux
+        - Steam Deck (SteamOS)
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version or distro
+      description: For example `Windows 11 24H2`, `macOS 15.1`, `Ubuntu 24.04`, `Fedora 41`, `Arch`.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: How did you install nwmpublisher?
+      options:
+        - Windows installer (.msi)
+        - Windows portable (.zip)
+        - macOS disk image (.dmg)
+        - Debian / Ubuntu package (.deb)
+        - Fedora package (.rpm)
+        - Arch PKGBUILD
+        - AppImage
+        - Built from source
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card and driver
+      description: |
+        **Windows:** Device Manager → Display adapters. **macOS:** Apple menu → About This Mac. **Linux:** `lspci -k | grep -EA3 'VGA|3D|Display'`.
+        List every graphics card if you have more than one, for example a laptop with Intel and NVIDIA.
+      placeholder: "NVIDIA RTX 3070, driver 565.57; Intel UHD 630"
+    validations:
+      required: true
+
+  - type: input
+    id: displays
+    attributes:
+      label: Displays and scaling
+      description: Number of monitors, their resolution, and the scaling setting.
+      placeholder: "2 monitors: 2560x1440 at 125%, 1920x1080 at 100%"
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Linux and Steam Deck
+        Skip this section on Windows and macOS.
+
+  - type: dropdown
+    id: display-server
+    attributes:
+      label: Display server
+      description: Run `echo $XDG_SESSION_TYPE` if you're not sure.
+      options:
+        - Wayland
+        - X11
+        - Not sure
+
+  - type: input
+    id: desktop
+    attributes:
+      label: Desktop environment or window manager
+      description: Run `echo $XDG_CURRENT_DESKTOP` if you're not sure.
+      placeholder: "KDE Plasma 6.2, GNOME 47, Hyprland, Sway, ..."
+
+  - type: input
+    id: webkit
+    attributes:
+      label: WebKitGTK version
+      description: |
+        Skip this if you use the AppImage, which includes its own copy.
+        **Debian / Ubuntu:** `dpkg -s libwebkit2gtk-4.1-0 | grep Version`. **Fedora:** `rpm -q webkit2gtk4.1`. **Arch:** `pacman -Q webkit2gtk-4.1`.
+
+  - type: checkboxes
+    id: workarounds
+    attributes:
+      label: Things you tried
+      description: Linux only. Check the ones you tried, and say in **What happened?** whether they helped.
+      options:
+        - label: Started with `GDK_BACKEND=x11 nwmpublisher`
+        - label: Started with `WEBKIT_DISABLE_COMPOSITING_MODE=1 nwmpublisher`
+        - label: Switched between the AppImage and my distro's package
+
+  - type: textarea
+    id: terminal
+    attributes:
+      label: Terminal output
+      description: Linux and macOS. Start nwmpublisher from a terminal and paste what it prints. For the AppImage, run `./nwmpublisher_*.AppImage`.
+      render: text
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Drag `stdout.log` and `stderr.log` here. Copy them right after the crash, because they are replaced each time nwmpublisher starts.
+
+        - **Windows:** press Win+R and open `%TEMP%\nwmpublisher\logs`
+        - **macOS:** run `open "$TMPDIR/nwmpublisher/logs"` in Terminal
+        - **Linux:** `/tmp/nwmpublisher/logs` (or `$TMPDIR/nwmpublisher/logs` if `TMPDIR` is set)
+
+        If you changed **Temp Path** in settings, the logs are in a `logs` folder there.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots or recordings of the problem help a lot.

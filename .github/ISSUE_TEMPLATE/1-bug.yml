@@ -1,0 +1,157 @@
+name: Bug report
+description: Something doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. If nwmpublisher crashes, won't start, or the window is blank or drawn wrong, use the **Crash or display problem** form instead.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you start
+      options:
+        - label: I'm using the [latest release](https://github.com/DeisDev/nwmpublisher/releases/latest).
+          required: true
+        - label: I [searched existing issues](https://github.com/DeisDev/nwmpublisher/issues?q=is%3Aissue) and didn't find this one.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: nwmpublisher version
+      description: Shown at the bottom of the sidebar, or run `nwmpublisher --version`.
+      placeholder: "3.4.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - Publishing or updating an addon
+        - My Workshop
+        - Installed addons
+        - Extracting or browsing GMA files
+        - Downloader
+        - Addon size analyzer
+        - Addon cleaner
+        - Settings or gmpublisher import
+        - Command line
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include any error messages exactly as shown.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open My Workshop
+        2. Click ...
+        3. See the error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does it happen?
+      options:
+        - Every time
+        - Sometimes
+        - Only once so far
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux
+        - Steam Deck (SteamOS)
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version or distro
+      description: For example `Windows 11 24H2`, `macOS 15.1`, `Ubuntu 24.04`, `Fedora 41`, `Arch`.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: How did you install nwmpublisher?
+      options:
+        - Windows installer (.msi)
+        - Windows portable (.zip)
+        - macOS disk image (.dmg)
+        - Debian / Ubuntu package (.deb)
+        - Fedora package (.rpm)
+        - Arch PKGBUILD
+        - AppImage
+        - Built from source
+    validations:
+      required: true
+
+  - type: textarea
+    id: linux
+    attributes:
+      label: Linux details
+      description: |
+        Linux and Steam Deck only. Run this in a terminal and paste the output:
+        ```sh
+        echo "Session: $XDG_SESSION_TYPE / $XDG_CURRENT_DESKTOP"; grep -E '^(NAME|VERSION)=' /etc/os-release
+        ```
+      render: text
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: If a task failed, click **Copy diagnostics** on it and paste the result here.
+      render: text
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Drag `stdout.log` and `stderr.log` here. Copy them right after the problem, because they are replaced each time nwmpublisher starts.
+
+        - **Windows:** press Win+R and open `%TEMP%\nwmpublisher\logs`
+        - **macOS:** run `open "$TMPDIR/nwmpublisher/logs"` in Terminal
+        - **Linux:** `/tmp/nwmpublisher/logs` (or `$TMPDIR/nwmpublisher/logs` if `TMPDIR` is set)
+
+        If you changed **Temp Path** in settings, the logs are in a `logs` folder there.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, recordings, the addon or Workshop item involved, or anything else that helps.

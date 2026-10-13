@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Download nwmpublisher
+    url: https://github.com/DeisDev/nwmpublisher/releases/latest
+    about: Get the latest release before reporting a problem.
+  - name: gmpublisher
+    url: https://github.com/WilliamVenner/gmpublisher/issues
+    about: Problems with the original gmpublisher, not this fork, go here.
