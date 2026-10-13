@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fix pasting a link after using the Link button adding a second link tag.
+- Stop retrying the Steam connection twenty times a second while Steam is not running.
+- Log unhandled errors from the interface instead of dropping them.
 - Fix the Linux AppImage opening a blank window on Arch, Fedora and other newer distributions.
 - Fix progress bar icons sitting off-center.
 - Fix links not opening in the browser on Linux.
