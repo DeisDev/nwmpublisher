@@ -2498,6 +2498,7 @@ dependencies = [
  "dirs-next",
  "discord-presence",
  "dunce",
+ "encoding_rs",
  "erased-serde 0.3.31",
  "fuzzy-matcher",
  "image 0.23.14",

@@ -36,6 +36,8 @@ base64 = "0.13.0"
 atomic_refcell = "0.1.7"
 thiserror = "1.0.24"
 chardetng = "0.1.10"
+# chardetng turns off encoding_rs default features; alloc provides Encoding::decode
+encoding_rs = { version = "0.8.34", features = ["alloc"] }
 byteorder = "1.4.3"
 walkdir = "2.3.2"
 crc32fast = "1.2.1"
