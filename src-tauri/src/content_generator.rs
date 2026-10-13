@@ -76,9 +76,7 @@ impl ContentGenerator {
 	}
 }
 
-lazy_static! {
-	pub static ref CONTENT_GENERATOR: Mutex<ContentGenerator> = Mutex::new(ContentGenerator::init());
-}
+pub static CONTENT_GENERATOR: std::sync::LazyLock<Mutex<ContentGenerator>> = std::sync::LazyLock::new(|| Mutex::new(ContentGenerator::init()));
 
 fn manifests_path() -> PathBuf {
 	app_data!().user_data_dir().join("content_generator")

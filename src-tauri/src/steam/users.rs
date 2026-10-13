@@ -1,5 +1,3 @@
-use lazy_static::lazy_static;
-
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::Serialize;
 
@@ -7,9 +5,8 @@ use steamworks::{Friend, SteamId};
 
 use super::Steam;
 
-lazy_static! {
-	static ref PERSONACHANGE_USER_INFO: steamworks::PersonaChange = steamworks::PersonaChange::NAME | steamworks::PersonaChange::AVATAR;
-}
+static PERSONACHANGE_USER_INFO: std::sync::LazyLock<steamworks::PersonaChange> =
+	std::sync::LazyLock::new(|| steamworks::PersonaChange::NAME | steamworks::PersonaChange::AVATAR);
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]

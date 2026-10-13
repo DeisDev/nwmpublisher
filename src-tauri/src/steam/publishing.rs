@@ -3,11 +3,11 @@ use crate::{
 	gma::{manifest::ContentManifest, GMAEntry, GMAError, GMAFile, GMAFilePointers, GMAMetadata},
 	Transaction, GMOD_APP_ID,
 };
-use image::{DynamicImage, GenericImageView, ImageError, ImageFormat};
+use image::{DynamicImage, ImageError, ImageFormat};
 use parking_lot::Mutex;
 use std::{
 	fs::File,
-	io::{BufReader, BufWriter, Write},
+	io::{BufReader, BufWriter, Seek, Write},
 	path::{Path, PathBuf},
 	sync::Arc,
 };
@@ -157,7 +157,7 @@ fn with_publish_staging<T>(parent: &Path, operation: impl FnOnce(&Path, &Path) -
 		.and_then(|()| operation(&root, &content));
 
 	if result.as_ref().is_err_and(|error| error == "ERR_PUBLISH_OUTCOME_UNKNOWN") {
-		let _retained = staging.into_path();
+		let _retained = staging.keep();
 		return Err("ERR_PUBLISH_OUTCOME_UNKNOWN".into());
 	}
 	let ownership = std::fs::read(root.join("operation-id")).ok();
@@ -232,9 +232,9 @@ impl WorkshopIcon {
 	}
 }
 
-fn encode_icon<W: Write>(image: &DynamicImage, writer: &mut W, path: &Path, format: ImageFormat) -> Result<(), PublishError> {
+fn encode_icon<W: Write + Seek>(image: &DynamicImage, writer: &mut W, path: &Path, format: ImageFormat) -> Result<(), PublishError> {
 	image
-		.write_to(writer, format)
+		.write_to(&mut *writer, format)
 		.map_err(|error| PublishError::image("encode icon", path, error))?;
 	writer.flush().map_err(|error| PublishError::io("flush icon", path, error))
 }
@@ -875,7 +875,7 @@ pub fn verify_icon(path: PathBuf) -> Result<(String, bool), Transaction> {
 				),
 				_ => unreachable!(),
 			};
-			let base64 = base64::encode(std::fs::read(&path).map_err(|error| PublishError::io("read icon", &path, error))?);
+			let base64 = crate::base64::encode(std::fs::read(&path).map_err(|error| PublishError::io("read icon", &path, error))?);
 			Ok((prefix + &base64, can_upscale))
 		})
 		.map_err(|error| {
@@ -1140,6 +1140,11 @@ mod tests {
 			}
 			fn flush(&mut self) -> io::Result<()> {
 				Err(io::Error::other("flush failed"))
+			}
+		}
+		impl Seek for FailingWriter {
+			fn seek(&mut self, _: io::SeekFrom) -> io::Result<u64> {
+				Ok(0)
 			}
 		}
 		let image = DynamicImage::new_rgb8(2, 2);

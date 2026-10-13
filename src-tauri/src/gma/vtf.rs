@@ -1,11 +1,5 @@
 use byteorder::{ByteOrder, LittleEndian};
-use image::{
-	codecs::{
-		dxt::{DxtDecoder, DxtVariant},
-		png::PngEncoder,
-	},
-	ColorType, ImageDecoder,
-};
+use image::{codecs::png::PngEncoder, ExtendedColorType, ImageEncoder};
 
 const INVALID: &str = "ERR_FILE_PREVIEW_VTF_INVALID";
 const PIXEL_LIMIT: u64 = 4096 * 4096;
@@ -188,44 +182,41 @@ pub(super) fn preview(bytes: &[u8]) -> Result<Vec<u8>, String> {
 	};
 	let mut png = Vec::new();
 	PngEncoder::new(&mut png)
-		.encode(&rgba, width, height, ColorType::Rgba8)
+		.write_image(&rgba, width, height, ExtendedColorType::Rgba8)
 		.map_err(|error| format!("ERR_FILE_PREVIEW_VTF_INVALID:{error}"))?;
 	Ok(png)
 }
 
+type BlockDecoder = fn(&[u8], &mut [u8], usize);
+
 fn decode_dxt(data: &[u8], width: u32, height: u32, format: Format, one_bit_alpha: bool) -> Result<Vec<u8>, String> {
-	let variant = match format {
-		Format::Dxt3 => DxtVariant::DXT3,
-		Format::Dxt5 => DxtVariant::DXT5,
-		_ => DxtVariant::DXT1,
+	let (block_size, decode_block): (usize, BlockDecoder) = match format {
+		Format::Dxt3 => (16, bcdec_rs::bc2),
+		Format::Dxt5 => (16, bcdec_rs::bc3),
+		_ => (8, bcdec_rs::bc1),
 	};
-	let padded_width = width.max(4);
-	let decoder = DxtDecoder::new(data, padded_width, height.max(4), variant).map_err(|_| INVALID)?;
-	let channels = decoder.color_type().bytes_per_pixel() as usize;
-	let mut decoded = vec![0; decoder.total_bytes() as usize];
-	decoder.read_image(&mut decoded).map_err(|_| INVALID)?;
-	let transparent = matches!(format, Format::Dxt1Alpha) || one_bit_alpha;
+	let blocks_wide = width.div_ceil(4) as usize;
+	let blocks_high = height.div_ceil(4) as usize;
+	if data.len() < blocks_wide * blocks_high * block_size {
+		return Err(INVALID.into());
+	}
+	let pitch = blocks_wide * 4 * 4;
+	let mut decoded = vec![0; pitch * blocks_high * 4];
+	for block_y in 0..blocks_high {
+		for block_x in 0..blocks_wide {
+			let block = &data[(block_y * blocks_wide + block_x) * block_size..][..block_size];
+			decode_block(block, &mut decoded[block_y * 4 * pitch + block_x * 16..], pitch);
+		}
+	}
+	// DXT1 blocks in three-colour mode carry one transparent index. It only means
+	// transparency when the texture says so; otherwise those texels are opaque black.
+	let opaque = block_size == 8 && !matches!(format, Format::Dxt1Alpha) && !one_bit_alpha;
 	let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
 	for y in 0..height as usize {
 		for x in 0..width as usize {
-			let pixel = (y * padded_width as usize + x) * channels;
+			let pixel = y * pitch + x * 4;
 			rgba.extend_from_slice(&decoded[pixel..pixel + 3]);
-			let alpha = if channels == 4 {
-				decoded[pixel + 3]
-			} else if transparent {
-				let block = (y / 4 * (padded_width as usize / 4) + x / 4) * 8;
-				let color0 = LittleEndian::read_u16(&data[block..]);
-				let color1 = LittleEndian::read_u16(&data[block + 2..]);
-				let indices = LittleEndian::read_u32(&data[block + 4..]);
-				if color0 <= color1 && (indices >> (2 * (y % 4 * 4 + x % 4))) & 3 == 3 {
-					0
-				} else {
-					255
-				}
-			} else {
-				255
-			};
-			rgba.push(alpha);
+			rgba.push(if opaque { 255 } else { decoded[pixel + 3] });
 		}
 	}
 	Ok(rgba)

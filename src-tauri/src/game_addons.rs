@@ -9,16 +9,13 @@ use std::{
 	time::SystemTime,
 };
 
-use lazy_static::lazy_static;
 use parking_lot::{RwLock, RwLockReadGuard};
 use rayon::ThreadPool;
 use steamworks::PublishedFileId;
 
 use crate::{appdata::InstalledAddonsSort, gma::{extract::{ExtractGMAMut, ExtractOptions}, AddonType}, webview::Addon, GMAFile};
 
-lazy_static! {
-	static ref DISCOVERY_POOL: ThreadPool = thread_pool!(4);
-}
+static DISCOVERY_POOL: std::sync::LazyLock<ThreadPool> = std::sync::LazyLock::new(|| thread_pool!(4));
 
 #[repr(u8)]
 enum Discovered {

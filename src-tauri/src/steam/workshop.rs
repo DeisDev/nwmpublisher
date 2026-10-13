@@ -172,10 +172,8 @@ impl Ord for WorkshopItem {
 #[derive(derive_more::Deref)]
 struct FetcherBacklog(RefCell<VecDeque<PublishedFileId>>);
 unsafe impl Sync for FetcherBacklog {}
-lazy_static! {
-	static ref FETCHER_BACKLOG: FetcherBacklog = FetcherBacklog(RefCell::new(VecDeque::new()));
-	static ref FETCHER_NEXT: AtomicBool = AtomicBool::new(false);
-}
+static FETCHER_BACKLOG: std::sync::LazyLock<FetcherBacklog> = std::sync::LazyLock::new(|| FetcherBacklog(RefCell::new(VecDeque::new())));
+static FETCHER_NEXT: std::sync::LazyLock<AtomicBool> = std::sync::LazyLock::new(|| AtomicBool::new(false));
 impl Steam {
 	pub fn workshop_fetcher() {
 		loop {

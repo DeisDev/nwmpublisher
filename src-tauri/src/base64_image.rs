@@ -20,9 +20,9 @@ impl Serialize for Base64Image {
 		S: Serializer,
 	{
 		let mut png_buf = Vec::new();
-		let encoder = image::png::PngEncoder::new(std::io::Write::by_ref(&mut png_buf));
-		if encoder.encode(&self.img, self.width, self.height, image::ColorType::Rgba8).is_ok() {
-			serializer.serialize_some(&base64::encode(png_buf))
+		let encoder = image::codecs::png::PngEncoder::new(&mut png_buf);
+		if image::ImageEncoder::write_image(encoder, &self.img, self.width, self.height, image::ExtendedColorType::Rgba8).is_ok() {
+			serializer.serialize_some(&crate::base64::encode(png_buf))
 		} else {
 			serializer.serialize_none()
 		}

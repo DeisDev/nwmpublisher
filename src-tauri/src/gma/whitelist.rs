@@ -167,11 +167,11 @@ fn download_addon_whitelist() -> &'static [&'static str] {
 		return ADDON_WHITELIST_OFFLINE;
 	}
 
-	ureq::get("https://raw.githubusercontent.com/Facepunch/gmad/master/include/AddonWhiteList.h")
-		.timeout(Duration::from_secs(2))
+	crate::http::agent(Duration::from_secs(2))
+		.get("https://raw.githubusercontent.com/Facepunch/gmad/master/include/AddonWhiteList.h")
 		.call()
 		.map_err(std::io::Error::other)
-		.and_then(|response| response.into_string())
+		.and_then(|mut response| response.body_mut().read_to_string().map_err(std::io::Error::other))
 		.and_then(|response| {
 			let mut wildcard = Vec::new();
 

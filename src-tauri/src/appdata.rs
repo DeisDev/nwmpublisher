@@ -15,29 +15,32 @@ use crate::{
 };
 
 use crate::GMOD_APP_ID;
-use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock, RwLockReadGuard};
 use serde::{Deserialize, Serialize};
 use steamworks::PublishedFileId;
 
-lazy_static! {
-	static ref USER_DATA_DIR: PathBuf = dirs_next::data_dir()
+static USER_DATA_DIR: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| {
+	dirs::data_dir()
 		.unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir()))
-		.join("nwmpublisher");
-	static ref APP_SETTINGS_PATH: PathBuf = dirs_next::config_dir()
-		.unwrap_or_else(|| dirs_next::data_dir().unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir())))
-		.join("nwmpublisher/settings.json");
-	static ref LEGACY_APP_SETTINGS_PATH: PathBuf = dirs_next::config_dir()
-		.unwrap_or_else(|| dirs_next::data_dir().unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir())))
-		.join("gmpublisher/settings.json");
-	static ref TEMP_DIR: PathBuf = std::env::temp_dir().join("nwmpublisher");
-	static ref DOWNLOADS_DIR: Option<PathBuf> = dirs::download_dir();
-	/// Whether nwmpublisher already had settings of its own when it started.
-	/// Evaluated before anything can write settings, so it stays true for the whole run.
-	static ref HAD_SETTINGS_FILE: bool = APP_SETTINGS_PATH.is_file();
-	static ref SETTINGS_COMMIT: Mutex<()> = Mutex::new(());
-	static ref SETTINGS_RECOVERY: RwLock<Option<String>> = RwLock::new(None);
-}
+		.join("nwmpublisher")
+});
+static APP_SETTINGS_PATH: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| {
+	dirs::config_dir()
+		.unwrap_or_else(|| dirs::data_dir().unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir())))
+		.join("nwmpublisher/settings.json")
+});
+static LEGACY_APP_SETTINGS_PATH: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| {
+	dirs::config_dir()
+		.unwrap_or_else(|| dirs::data_dir().unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir())))
+		.join("gmpublisher/settings.json")
+});
+static TEMP_DIR: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| std::env::temp_dir().join("nwmpublisher"));
+static DOWNLOADS_DIR: std::sync::LazyLock<Option<PathBuf>> = std::sync::LazyLock::new(dirs::download_dir);
+/// Whether nwmpublisher already had settings of its own when it started.
+/// Evaluated before anything can write settings, so it stays true for the whole run.
+static HAD_SETTINGS_FILE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| APP_SETTINGS_PATH.is_file());
+static SETTINGS_COMMIT: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
+static SETTINGS_RECOVERY: std::sync::LazyLock<RwLock<Option<String>>> = std::sync::LazyLock::new(|| RwLock::new(None));
 
 /// Whether the legacy settings offer has been answered in this run.
 /// Importing reloads the webview rather than restarting the process, so without this the
@@ -352,7 +355,7 @@ impl Settings {
 	pub fn init() -> Settings {
 		println!("Initializing Settings...");
 
-		lazy_static::initialize(&HAD_SETTINGS_FILE);
+		std::sync::LazyLock::force(&HAD_SETTINGS_FILE);
 
 		match Settings::load(&APP_SETTINGS_PATH, false) {
 			Ok(settings) => settings,
@@ -787,7 +790,7 @@ pub fn write_tauri_settings() -> Option<()> {
 	use serde_json::Value as JsonValue;
 	use std::io::{BufReader, BufWriter};
 
-	let mut settings_path = dirs_next::config_dir()?;
+	let mut settings_path = dirs::config_dir()?;
 	settings_path.push("nwmpublisher");
 
 	fs::create_dir_all(&settings_path).ok()?;

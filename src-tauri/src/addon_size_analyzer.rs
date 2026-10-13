@@ -1,7 +1,6 @@
 use std::{collections::BinaryHeap, sync::Arc};
 
 use indexmap::IndexMap;
-use lazy_static::lazy_static;
 use rayon::ThreadPool;
 use steamworks::PublishedFileId;
 
@@ -9,10 +8,7 @@ use serde::Serialize;
 
 use crate::{transactions::Transaction, webview::Addon};
 
-lazy_static! {
-	static ref THREAD_POOL: ThreadPool = thread_pool!(4);
-	static ref ANALYZER_THREAD_POOL: ThreadPool = thread_pool!();
-}
+static THREAD_POOL: std::sync::LazyLock<ThreadPool> = std::sync::LazyLock::new(|| thread_pool!(4));
 
 #[derive(Debug, Serialize, Clone, derive_more::Deref)]
 struct AnalyzedAddon(Arc<Addon>);
@@ -335,9 +331,9 @@ impl AddonSizeAnalyzer {
 				let (_, tag) = square.data.as_ref().unwrap();
 				let tag = tag.as_ref().unwrap().clone();
 
-				let tag_total_size = tag_total_sizes.remove(&tag).unwrap();
-				let tag_sizes = tag_sizes.remove(&tag).unwrap();
-				let tag_data = tag_data.remove(&tag).unwrap();
+				let tag_total_size = tag_total_sizes.swap_remove(&tag).unwrap();
+				let tag_sizes = tag_sizes.swap_remove(&tag).unwrap();
+				let tag_data = tag_data.swap_remove(&tag).unwrap();
 
 				let transaction = transaction.clone();
 				scope.spawn(move |_| {

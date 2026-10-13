@@ -268,7 +268,7 @@ impl Search {
 	pub fn add_bulk<V: Searchable>(&self, items: &[V]) {
 		self.dirty.store(true, std::sync::atomic::Ordering::Release);
 
-		let mut installed_addons = once_cell::unsync::OnceCell::new();
+		let mut installed_addons = std::cell::OnceCell::new();
 
 		let mut store = self.items.write();
 		store.reserve(items.len());

@@ -8,14 +8,11 @@ use crate::transactions::Transaction;
 
 use super::{whitelist, workshop::WorkshopInfo, GMAEntry, GMAError, GMAFile, GMAMetadata, GMAReader};
 
-use lazy_static::lazy_static;
 use rayon::ThreadPool;
 use super::{output::Directory, staging::{ExtractionStage, StagedFile, ICON_LEAF, METADATA_LEAF}};
 use serde::{Deserialize, Serialize};
 
-lazy_static! {
-	pub static ref THREAD_POOL: ThreadPool = thread_pool!(2);
-}
+pub static THREAD_POOL: std::sync::LazyLock<ThreadPool> = std::sync::LazyLock::new(|| thread_pool!(2));
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum ExtractionOverwriteMode {

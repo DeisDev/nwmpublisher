@@ -29,12 +29,11 @@ pub struct JobSnapshot {
 
 struct DataSpool { file: File, read: u64, pending: usize }
 
-lazy_static! {
-	static ref SNAPSHOTS: Mutex<BTreeMap<u32, JobSnapshot>> = Mutex::new(BTreeMap::new());
-	static ref DATA_SPOOLS: Mutex<BTreeMap<u32, DataSpool>> = Mutex::new(BTreeMap::new());
-	// Unacknowledged outcomes outlive the frontend. Only the most recent ones stay in memory.
-	static ref OUTCOMES: Result<tempfile::TempDir, std::io::Error> = tempfile::Builder::new().prefix("nwmpublisher-outcomes-").tempdir();
-}
+static SNAPSHOTS: std::sync::LazyLock<Mutex<BTreeMap<u32, JobSnapshot>>> = std::sync::LazyLock::new(|| Mutex::new(BTreeMap::new()));
+static DATA_SPOOLS: std::sync::LazyLock<Mutex<BTreeMap<u32, DataSpool>>> = std::sync::LazyLock::new(|| Mutex::new(BTreeMap::new()));
+// Unacknowledged outcomes outlive the frontend. Only the most recent ones stay in memory.
+static OUTCOMES: std::sync::LazyLock<Result<tempfile::TempDir, std::io::Error>> =
+	std::sync::LazyLock::new(|| tempfile::Builder::new().prefix("nwmpublisher-outcomes-").tempdir());
 
 pub fn insert(id: u32, state: JobState) {
 	SNAPSHOTS.lock().insert(id, JobSnapshot {

@@ -22,10 +22,8 @@ pub struct PublishResult {
 #[derive(Clone)]
 pub struct PublishJob(Arc<Mutex<PublishResult>>);
 
-lazy_static! {
-	static ref JOBS_LOCK: Mutex<()> = Mutex::new(());
-	static ref CURRENT_JOBS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
-}
+static JOBS_LOCK: std::sync::LazyLock<Mutex<()>> = std::sync::LazyLock::new(|| Mutex::new(()));
+static CURRENT_JOBS: std::sync::LazyLock<Mutex<HashSet<String>>> = std::sync::LazyLock::new(|| Mutex::new(HashSet::new()));
 
 fn directory() -> PathBuf { app_data!().user_data_dir().join("publishing-jobs") }
 
