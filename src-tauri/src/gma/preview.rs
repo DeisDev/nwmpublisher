@@ -4,9 +4,7 @@ use serde::Serialize;
 use super::{extract::ExtractGMAImmut, manifest::ContentManifest, output::Directory, ExtractDestination, ExtractOptions, GMAEntry, GMAError, GMAFile, GMAReader};
 use parking_lot::Mutex;
 
-lazy_static! {
-	static ref PREVIEW_GMA: Mutex<Option<Arc<GMAFile>>> = Mutex::new(None);
-}
+static PREVIEW_GMA: std::sync::LazyLock<Mutex<Option<Arc<GMAFile>>>> = std::sync::LazyLock::new(|| Mutex::new(None));
 
 #[tauri::command]
 pub fn preview_gma(path: Option<PathBuf>) -> Result<Option<Vec<GMAEntry>>, GMAError> {
@@ -159,7 +157,7 @@ fn decode_preview(kind: &'static str, mime: &'static str, bytes: Vec<u8>) -> Res
 		if source.contains('\0') { return Err("ERR_FILE_PREVIEW_ENCODING".into()); }
 		source.strip_prefix('\u{feff}').unwrap_or(&source).to_owned()
 	} else {
-		base64::encode(bytes)
+		crate::base64::encode(bytes)
 	};
 	Ok(EntryPreview { kind, mime, data })
 }
@@ -238,7 +236,7 @@ mod tests {
 		let folder_preview = folder_entry_preview(directory.path(), "materials/test.vtf", &[]).unwrap();
 		for preview in [archive_preview, folder_preview] {
 			assert_eq!((preview.kind, preview.mime), ("image", "image/png"));
-			let png = base64::decode(preview.data).unwrap();
+			let png = crate::base64::decode(preview.data).unwrap();
 			assert_eq!(image::load_from_memory(&png).unwrap().to_rgba8().get_pixel(0, 0).0, [10, 20, 30, 40]);
 		}
 		assert!(read_preview(&archive(path, &bytes, 1), path).unwrap_err().starts_with("ERR_GMA_CHECKSUM:"));
@@ -260,7 +258,7 @@ mod tests {
 		assert_eq!((preview.kind, preview.data.as_str()), ("lua", source));
 		let preview = folder_entry_preview(root, "sound/test.wav", &[]).unwrap();
 		assert_eq!((preview.kind, preview.mime), ("audio", "audio/wav"));
-		assert_eq!(base64::decode(preview.data).unwrap(), b"\x00\xff\x10");
+		assert_eq!(crate::base64::decode(preview.data).unwrap(), b"\x00\xff\x10");
 		assert_eq!(folder_entry_preview(root, "lua/nested/test.lua", &["lua/*".into()]).unwrap_err(), "ERR_GMA_ENTRY_NOT_FOUND");
 		for path in ["../outside.lua", "lua/../../outside.lua", "/outside.lua", "C:/outside.lua", "lua/missing.lua"] {
 			assert_eq!(folder_entry_preview(root, path, &[]).unwrap_err(), "ERR_GMA_ENTRY_NOT_FOUND");
@@ -295,7 +293,7 @@ mod tests {
 			let bytes = b"\x00\xff\x10";
 			let preview = read_preview(&archive(path, bytes, 0), path).unwrap();
 			assert_eq!((preview.kind, preview.mime), (kind, mime));
-			assert_eq!(base64::decode(preview.data).unwrap(), bytes);
+			assert_eq!(crate::base64::decode(preview.data).unwrap(), bytes);
 		}
 	}
 

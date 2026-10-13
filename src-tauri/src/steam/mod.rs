@@ -129,7 +129,7 @@ impl Steam {
 		std::thread::spawn(Steam::watchdog);
 		std::thread::spawn(Steam::workshop_fetcher);
 
-		lazy_static::initialize(&DOWNLOADS);
+		std::sync::LazyLock::force(&DOWNLOADS);
 		std::thread::spawn(Downloads::watchdog);
 
 		// Shows up on the friends list as "In the Workshop", under Garry's Mod's status token

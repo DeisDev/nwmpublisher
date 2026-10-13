@@ -12,9 +12,7 @@ use crate::{
 	GMAError, GMAFile,
 };
 
-lazy_static! {
-	pub static ref CLI_MODE: bool = std::env::args_os().len() > 1;
-}
+pub static CLI_MODE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| std::env::args_os().len() > 1);
 
 #[cfg(target_os = "windows")]
 fn attach_console() {

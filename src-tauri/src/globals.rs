@@ -1,13 +1,12 @@
 pub const GMOD_APP_ID: steamworks::AppId = steamworks::AppId(4000);
 
-lazy_static! {
-	pub static ref STEAMWORKS: crate::steam::Steam = crate::steam::Steam::init();
-	pub static ref GAME_ADDONS: crate::game_addons::GameAddons = crate::game_addons::GameAddons::init();
-	pub static ref ADDON_SIZE_ANALYZER: crate::addon_size_analyzer::AddonSizeAnalyzer = crate::addon_size_analyzer::AddonSizeAnalyzer::init();
-	pub static ref APP_DATA: crate::appdata::AppData = crate::appdata::AppData::init();
-	pub static ref WEBVIEW: crate::webview::WrappedWebview = crate::webview::WrappedWebview::pending();
-	pub static ref SEARCH: crate::search::Search = crate::search::Search::init();
-}
+pub static STEAMWORKS: std::sync::LazyLock<crate::steam::Steam> = std::sync::LazyLock::new(crate::steam::Steam::init);
+pub static GAME_ADDONS: std::sync::LazyLock<crate::game_addons::GameAddons> = std::sync::LazyLock::new(crate::game_addons::GameAddons::init);
+pub static ADDON_SIZE_ANALYZER: std::sync::LazyLock<crate::addon_size_analyzer::AddonSizeAnalyzer> =
+	std::sync::LazyLock::new(crate::addon_size_analyzer::AddonSizeAnalyzer::init);
+pub static APP_DATA: std::sync::LazyLock<crate::appdata::AppData> = std::sync::LazyLock::new(crate::appdata::AppData::init);
+pub static WEBVIEW: std::sync::LazyLock<crate::webview::WrappedWebview> = std::sync::LazyLock::new(crate::webview::WrappedWebview::pending);
+pub static SEARCH: std::sync::LazyLock<crate::search::Search> = std::sync::LazyLock::new(crate::search::Search::init);
 
 #[macro_export]
 macro_rules! steam {
@@ -62,17 +61,17 @@ macro_rules! webview_emit {
 
 pub(super) fn init_globals() {
 	println!("Initializing Steamworks...");
-	lazy_static::initialize(&STEAMWORKS);
+	std::sync::LazyLock::force(&STEAMWORKS);
 
 	println!("Initializing AppData...");
-	lazy_static::initialize(&APP_DATA);
+	std::sync::LazyLock::force(&APP_DATA);
 
 	println!("Initializing Transactions...");
 	crate::transactions::init();
 
 	rayon::spawn(|| {
 		println!("Initializing Game Addons...");
-		lazy_static::initialize(&GAME_ADDONS);
+		std::sync::LazyLock::force(&GAME_ADDONS);
 		GAME_ADDONS.discover_addons();
 	});
 

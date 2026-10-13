@@ -1,7 +1,6 @@
 pub(crate) mod snapshots;
 pub use snapshots::{transaction_snapshot, transaction_snapshots, transaction_data, acknowledge_transaction};
 
-use lazy_static::lazy_static;
 use parking_lot::{Mutex, RwLock};
 use rayon::ThreadPool;
 use serde::Serialize;
@@ -12,10 +11,8 @@ use std::sync::{
 
 use self::snapshots::TransactionMessage;
 
-lazy_static! {
-	static ref TRANSACTIONS: Transactions = Transactions::init();
-	static ref TRANSACTIONS_SLAVE: ThreadPool = thread_pool!(1);
-}
+static TRANSACTIONS: std::sync::LazyLock<Transactions> = std::sync::LazyLock::new(Transactions::init);
+static TRANSACTIONS_SLAVE: std::sync::LazyLock<ThreadPool> = std::sync::LazyLock::new(|| thread_pool!(1));
 
 pub struct Transactions {
 	inner: RwLock<Vec<TransactionRef>>,
@@ -275,7 +272,7 @@ impl serde::Serialize for TransactionInner {
 }
 
 pub fn init() {
-	lazy_static::initialize(&TRANSACTIONS);
+	std::sync::LazyLock::force(&TRANSACTIONS);
 	snapshots::init();
 }
 

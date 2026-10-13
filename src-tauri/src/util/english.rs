@@ -1,8 +1,7 @@
 use serde_json::Value;
 
-lazy_static! {
-	static ref MESSAGES: Value = serde_json::from_str(include_str!("../../../i18n/en.json")).expect("i18n/en.json is valid JSON");
-}
+static MESSAGES: std::sync::LazyLock<Value> =
+	std::sync::LazyLock::new(|| serde_json::from_str(include_str!("../../../i18n/en.json")).expect("i18n/en.json is valid JSON"));
 
 // Like svelte-i18n, a missing key falls back to the key itself.
 pub fn text(key: &str) -> &str {

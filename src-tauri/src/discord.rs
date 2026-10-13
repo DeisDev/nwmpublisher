@@ -55,12 +55,12 @@ struct Presence {
 	labels: HashMap<Activity, String>,
 }
 
-lazy_static! {
-	static ref PRESENCE: Mutex<Presence> = Mutex::new(Presence {
+static PRESENCE: std::sync::LazyLock<Mutex<Presence>> = std::sync::LazyLock::new(|| {
+	Mutex::new(Presence {
 		screen: Activity::MyWorkshop,
-		labels: HashMap::new()
-	});
-}
+		labels: HashMap::new(),
+	})
+});
 
 #[tauri::command]
 pub fn discord_configured() -> bool {

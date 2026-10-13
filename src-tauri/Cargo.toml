@@ -24,45 +24,42 @@ serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 turbonone = "0.2.1"
 rayon = "1.5.0"
-parking_lot = { version = "0.11.1", features = ["serde", "deadlock_detection"] }
+parking_lot = { version = "0.12.5", features = ["serde", "deadlock_detection"] }
 xz2 = "0.1.7"
-indexmap = "1.6.2"
+indexmap = "2.14.2"
 dunce = "1.0.1"
-lazy_static = "1.4.0"
-dirs = "3.0.1"
+dirs = "7.0.0"
 anyhow = "1.0.40"
-image = "0.23.14"
-base64 = "0.13.0"
+image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "rayon"] }
+base64 = "0.23.1"
 atomic_refcell = "0.1.7"
-thiserror = "1.0.24"
-chardetng = "0.1.10"
+thiserror = "2.0.21"
+chardetng = "1.0.0"
 # chardetng turns off encoding_rs default features; alloc provides Encoding::decode
 encoding_rs = { version = "0.8.34", features = ["alloc"] }
 byteorder = "1.4.3"
 walkdir = "2.3.2"
+bcdec_rs = "0.2.0"
 crc32fast = "1.2.1"
-path-slash = "0.1.4"
-erased-serde = "0.3.13"
-derive_more = "0.99.13"
+path-slash = "0.2.1"
+erased-serde = "0.4.10"
+derive_more = { version = "2.1.1", features = ["deref", "deref_mut"] }
 crossbeam = "0.8.0"
 backtrace = "0.3.56"
 steamlocate = "2.1.1"
 chrono = { version = "0.4.19", features = ["serde"] }
 bincode = "1.3.3"
-dirs-next = "2.0.0"
 fuzzy-matcher = "0.3.7"
-num_cpus = "1"
-once_cell = "1.7.2"
 clap = "4.5.4"
-trash = "2.0.1"
-ureq = { version = "2.9.4", features = ["native-tls"] }
+trash = "5.2.9"
+ureq = { version = "3.4.2", default-features = false, features = ["gzip", "native-tls"] }
 regex = "1"
 steamworks = { version = "0.11.0", features = ["serde", "raw-bindings"] }
 tempfile = "3.10.1"
 discord-presence = "3.2.0"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
-opener = "0.4.1"
+opener = "0.9.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.189"

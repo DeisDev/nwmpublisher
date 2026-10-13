@@ -3,8 +3,6 @@
 use tauri::Manager;
 
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate turbonone;
 
 #[macro_use]
@@ -23,7 +21,9 @@ pub use util::*;
 pub mod transactions;
 pub use transactions::Transaction;
 
+pub mod base64;
 pub mod base64_image;
+pub mod http;
 pub use base64_image::Base64Image;
 
 pub mod appdata;

@@ -16,10 +16,8 @@ use crate::{
 	GMAFile, GMOD_APP_ID,
 };
 
-lazy_static! {
-	pub static ref DOWNLOADS: Downloads = Downloads::init();
-	static ref THREAD_POOL: ThreadPool = thread_pool!(2);
-}
+pub static DOWNLOADS: std::sync::LazyLock<Downloads> = std::sync::LazyLock::new(Downloads::init);
+static THREAD_POOL: std::sync::LazyLock<ThreadPool> = std::sync::LazyLock::new(|| thread_pool!(2));
 
 #[derive(Debug)]
 pub struct DownloadInner {

@@ -59,9 +59,9 @@ pub trait NTStringReader: BufRead + Seek {
 			Err(_) => {
 				// Some file paths aren't UTF-8 encoded, usually due to Windows NTFS
 				// This will simply guess the text encoding and decode it with that instead
-				let mut decoder = chardetng::EncodingDetector::new();
+				let mut decoder = chardetng::EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
 				decoder.feed(nt_string, true);
-				let encoding = decoder.guess(None, false);
+				let encoding = decoder.guess(None, chardetng::Utf8Detection::Deny);
 				let (str, _, _) = encoding.decode(nt_string);
 				str.to_string()
 			}

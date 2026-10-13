@@ -77,11 +77,11 @@ fn fallback_avatar() -> Result<RgbaImage, PublishError> {
 #[tauri::command]
 pub fn default_workshop_icon() -> Result<String, PublishError> {
 	let image = image::DynamicImage::ImageRgba8(compose()?);
-	let mut bytes = Vec::new();
+	let mut bytes = std::io::Cursor::new(Vec::new());
 	image
 		.write_to(&mut bytes, image::ImageFormat::Png)
 		.map_err(|error| PublishError::image("encode preview", Path::new("default_workshop_icon.png"), error))?;
-	Ok(base64::encode(bytes))
+	Ok(crate::base64::encode(bytes.into_inner()))
 }
 
 #[cfg(test)]

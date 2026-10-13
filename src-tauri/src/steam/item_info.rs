@@ -166,9 +166,17 @@ fn icon_from_bytes(bytes: Vec<u8>) -> Result<WorkshopIcon, String> {
 }
 
 fn download_icon(url: &str) -> Result<WorkshopIcon, String> {
-	let response = ureq::get(url).timeout(LOOKUP_TIMEOUT).call().map_err(|error| format!("ERR_WORKSHOP_ICON_DOWNLOAD:{error}"))?;
+	let response = crate::http::agent(LOOKUP_TIMEOUT)
+		.get(url)
+		.call()
+		.map_err(|error| format!("ERR_WORKSHOP_ICON_DOWNLOAD:{error}"))?;
 	let mut bytes = Vec::new();
-	response.into_reader().take(ICON_MAX_BYTES + 1).read_to_end(&mut bytes).map_err(|error| format!("ERR_WORKSHOP_ICON_DOWNLOAD:{error}"))?;
+	response
+		.into_body()
+		.into_reader()
+		.take(ICON_MAX_BYTES + 1)
+		.read_to_end(&mut bytes)
+		.map_err(|error| format!("ERR_WORKSHOP_ICON_DOWNLOAD:{error}"))?;
 	if bytes.len() as u64 > ICON_MAX_BYTES {
 		return Err("ERR_WORKSHOP_ICON_TOO_LARGE".into());
 	}

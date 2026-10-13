@@ -83,14 +83,16 @@ macro_rules! try_block {
 	};
 }
 
-lazy_static! {
-	pub static ref NUM_THREADS: usize = usize::max(num_cpus::get() - 2, 2);
-}
+pub static NUM_THREADS: std::sync::LazyLock<usize> =
+	std::sync::LazyLock::new(|| usize::max(std::thread::available_parallelism().map_or(1, |n| n.get()) - 2, 2));
 #[macro_export]
 macro_rules! thread_pool {
 	( $n:expr ) => {
 		rayon::ThreadPoolBuilder::new()
-			.num_threads(isize::max(isize::min($n - 2, num_cpus::get() as isize), 2) as usize)
+			.num_threads(isize::max(
+				isize::min($n - 2, std::thread::available_parallelism().map_or(1, |n| n.get()) as isize),
+				2,
+			) as usize)
 			.build()
 			.unwrap()
 	};
