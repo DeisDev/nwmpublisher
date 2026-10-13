@@ -49,11 +49,22 @@ console.log('Listening for errors');
 		};
 	}
 
+	function describe(value) {
+		if (value instanceof Error) return { message: value.message, stack: value.stack ?? '' };
+		return { message: typeof value === 'string' ? value : String(stringify(value)), stack: '' };
+	}
+
 	window.addEventListener('error', e => {
+		const { message, stack } = describe(e.error ?? e.message);
 		report('js_error', {
-			message: e.error.message,
-			stack: e.error.stack
+			message,
+			stack: stack || `${e.filename ?? ''}:${e.lineno ?? 0}:${e.colno ?? 0}`
 		});
+	});
+
+	window.addEventListener('unhandledrejection', e => {
+		const { message, stack } = describe(e.reason);
+		report('js_error', { message: 'Unhandled promise rejection: ' + message, stack });
 	});
 
 	window.console.report = (msgType, ...data) => {

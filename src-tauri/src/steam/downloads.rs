@@ -294,8 +294,8 @@ impl Downloads {
 				let state = ugc.item_state(job.item);
 				if state.contains(ItemState::INSTALLED) && !state.intersects(ItemState::NEEDS_UPDATE | ItemState::DOWNLOADING | ItemState::DOWNLOAD_PENDING) {
 					if DOWNLOADS.queue.lock().active.remove(&job.item).is_some() { Self::complete(job, None); }
-				} else if job.progress.lock().1.elapsed() >= Duration::from_secs(120) {
-					if DOWNLOADS.queue.lock().active.remove(&job.item).is_some() { job.transaction.error("ERR_DOWNLOAD_STALLED", job.item); }
+				} else if job.progress.lock().1.elapsed() >= Duration::from_secs(120) && DOWNLOADS.queue.lock().active.remove(&job.item).is_some() {
+					job.transaction.error("ERR_DOWNLOAD_STALLED", job.item);
 				}
 			}
 			steam!().run_callbacks();

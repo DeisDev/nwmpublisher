@@ -5,7 +5,6 @@
 	import { writable } from 'svelte/store';
 	import PreparePublish, { remountAddonScroller } from '../components/PreparePublish.svelte';
 	import { afterUpdate, onDestroy } from 'svelte';
-	import { invoke } from '@tauri-apps/api/core';
 	import { saveSettings } from '../settings.js';
 	import Filter from '@lucide/svelte/icons/list-filter';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';

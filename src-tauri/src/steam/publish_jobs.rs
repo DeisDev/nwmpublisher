@@ -64,8 +64,8 @@ impl PublishJob {
 			if (same_source || same_item) && matches!(previous.outcome.as_str(), "pending" | "unknown") && !previous.reviewed {
 				return Err(format!("ERR_PUBLISH_UNRESOLVED:{}", previous.workshop_id.map_or(previous.key, |id| id.0.to_string())));
 			}
-			if id.is_none() && same_source && previous.workshop_id.is_some() {
-				return Err(format!("ERR_PUBLISH_EXISTING_ITEM:{}", previous.workshop_id.unwrap().0));
+			if let (None, true, Some(existing)) = (id, same_source, previous.workshop_id) {
+				return Err(format!("ERR_PUBLISH_EXISTING_ITEM:{}", existing.0));
 			}
 		}
 		let now = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|error| error.to_string())?;

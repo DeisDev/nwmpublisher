@@ -85,8 +85,10 @@ pub fn record(message: TransactionMessage) {
 			} else {
 				let result = (|| -> std::io::Result<()> {
 					let mut spools = DATA_SPOOLS.lock();
-					if !spools.contains_key(&id) { spools.insert(id, DataSpool { file: tempfile::tempfile()?, read: 0, pending: 0 }); }
-					let spool = spools.get_mut(&id).unwrap();
+					let spool = match spools.entry(id) {
+						std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+						std::collections::btree_map::Entry::Vacant(entry) => entry.insert(DataSpool { file: tempfile::tempfile()?, read: 0, pending: 0 }),
+					};
 					spool.file.seek(SeekFrom::End(0))?;
 					serde_json::to_writer(&mut spool.file, &(snapshot.revision, data))?;
 					spool.file.write_all(b"\n")?;

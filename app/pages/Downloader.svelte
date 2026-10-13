@@ -37,11 +37,11 @@
 		var incrWorkers = true;
 
 		switch(jobType) {
-			case JOB_TYPE_DOWNLOAD:
+			case JOB_TYPE_DOWNLOAD: {
 				downloadingWorkers++;
 
-				var [transaction] = args;
-				var job = {
+				const [transaction] = args;
+				const job = {
 					transaction,
 					timestamp,
 					type: JOB_TYPE_DOWNLOAD,
@@ -76,13 +76,14 @@
 					downloadingJobs = downloadingJobs;
 				});
 				break;
+			}
 
-			case JOB_TYPE_EXTRACT:
+			case JOB_TYPE_EXTRACT: {
 				extractingWorkers++;
 
-				var [transaction, srcPath, fileName, ws_id] = args;
+				const [transaction, srcPath, fileName, ws_id] = args;
 
-				var job = {
+				const job = {
 					transaction,
 					timestamp,
 					ws_id,
@@ -136,6 +137,7 @@
 					extractingJobs = extractingJobs;
 				});
 				break;
+			}
 		}
 	}
 
@@ -152,15 +154,15 @@
 			return;
 		}
 
-		var ids = {};
-		var result;
+		const seen = {};
+		let result;
 		while ((result = RE_WORKSHOP_ID.exec(input)) !== null) {
 			const id = result[1] ?? result[2] ?? result[3];
-			if (!id || id in ids || !parseInt(id)) continue;
-			ids[id] = true;
+			if (!id || id in seen || !parseInt(id)) continue;
+			seen[id] = true;
 		}
 
-		var ids = Object.keys(ids);
+		const ids = Object.keys(seen);
 		if (e.clipboardData) {
 			e.preventDefault();
 			e.stopPropagation();

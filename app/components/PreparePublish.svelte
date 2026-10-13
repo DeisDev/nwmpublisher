@@ -309,7 +309,7 @@
 	// Keeps the suggested .gma name in the same shape the backend accepts
 	function gmaNameFromTitle(title) {
 		return title
-			.replace(/[\/\\:*?"<>|]/g, '')
+			.replace(/[/\\:*?"<>|]/g, '')
 			.replace(/\s+/g, ' ')
 			.trim()
 			.replace(/\.+$/, '')

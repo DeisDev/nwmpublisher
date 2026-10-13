@@ -142,6 +142,8 @@ impl Steam {
 	}
 
 	pub fn connect() {
+		let mut retry_delay_ms = 1000;
+		let mut last_failure = None;
 		loop {
 			let connection = Client::init_app(crate::GMOD_APP_ID);
 
@@ -153,24 +155,34 @@ impl Steam {
 				std::env::remove_var("SteamGameId");
 			}
 
-			if let Ok(connection) = connection {
-				println!("[Steam] Client initialized");
+			match connection {
+				Ok(connection) => {
+					println!("[Steam] Client initialized");
 
-				loop {
-					if let Ok(mut interface) = steam!().interface.try_borrow_mut() {
-						*interface = Some(connection.into());
-						break;
+					loop {
+						if let Ok(mut interface) = steam!().interface.try_borrow_mut() {
+							*interface = Some(connection.into());
+							break;
+						}
+						sleep_ms!(10);
 					}
+
+					steam!().set_connected(true);
+
+					Steam::on_initialized();
+
+					break;
 				}
-
-				steam!().set_connected(true);
-
-				Steam::on_initialized();
-
-				break;
+				Err(error) => {
+					let failure = error.to_string();
+					if last_failure.as_ref() != Some(&failure) {
+						println!("[Steam] Waiting for Steam: {}", failure);
+						last_failure = Some(failure);
+					}
+					sleep_ms!(retry_delay_ms);
+					retry_delay_ms = (retry_delay_ms * 2).min(5000);
+				}
 			}
-
-			sleep_ms!(50);
 		}
 	}
 

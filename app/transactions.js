@@ -83,14 +83,14 @@ class Transaction {
 				this.pendingSnapshot = null;
 				if (snapshot.revision <= this.revision) continue;
 				this.context = snapshot.context;
-				do {
+				for (;;) {
 					for (const [sequence, data] of snapshot.data) {
 						if (sequence > this.dataRevision) { this.dataRevision = sequence; this.setData(data); }
 					}
 					if (!snapshot.dataMore) break;
 					snapshot = await invoke('transaction_data', { id: this.id, after: this.dataRevision });
 					if (!snapshot) throw new Error('ERR_JOB_DATA_DELIVERY');
-				} while (true);
+				}
 				this.transportError = null;
 				this.revision = snapshot.revision;
 				this.warnings = snapshot.warnings;
