@@ -675,6 +675,7 @@
 	"unsubscribe_all": "Unsubscribe All",
 	"unsubscribe_all_warning": "WARNING: This will unsubscribe you from ALL Workshop addons you are subscribed to.",
 	"update_available": "New Update Available!\n{version}",
+	"update_check_failed": "Couldn't check for updates. Click to try again.",
 	"workshop_page": "Workshop Page",
 	"steam_workshop": "Steam Workshop",
 	"migrate_settings_title": "Import your gmpublisher settings?",
