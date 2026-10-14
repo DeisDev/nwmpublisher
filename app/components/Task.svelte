@@ -230,7 +230,10 @@
 	}
 	.task #content {
 		min-width: 0;
-		padding: 1rem;
+		min-height: 3rem;
+		padding: 0 1rem;
+		/* #tasks sets line-height: 0, which collapses the clipped labels to nothing. */
+		line-height: normal;
 		flex: 1;
 		display: flex;
 		justify-content: center;
