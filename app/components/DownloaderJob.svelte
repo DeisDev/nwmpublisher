@@ -22,6 +22,13 @@
 		return 0;
 	}
 
+	function jobSpeed(job) {
+		if (job.transaction.status === 'decompressing') {
+			return calculateSpeed(job.decompression?.timestamp, job.transaction.progress, job.decompression?.compressedSize);
+		}
+		return calculateSpeed(job.timestamp, job.transaction.progress, job.size);
+	}
+
 	export let job;
 
 	function cancelJob() {
@@ -82,9 +89,8 @@
 		{/if}
 	</td>
 	<td class="speed">
-		{#if !job.transaction.finished && !job.transaction.error && job.transaction.progress > 0 && job.transaction.progress < 100 && !!job.size && job.transaction.status !== 'decompressing'}
-			<!-- TODO accurate speed when decompressing -->
-			{formatRate(calculateSpeed(job.timestamp, job.transaction.progress, job.size), $locale)}
+		{#if !job.transaction.finished && !job.transaction.error && job.transaction.progress > 0 && job.transaction.progress < 100 && !!job.size}
+			{formatRate(jobSpeed(job), $locale)}
 		{/if}
 	</td>
 	<td class="total">

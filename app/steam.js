@@ -189,7 +189,6 @@ function getFileIcon(extension) {
 		default:
 			return 'page_white.png';
 	}
-	// TODO remove unused
 }
 
 function getFileType(extension) {

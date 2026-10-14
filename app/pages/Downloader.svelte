@@ -118,6 +118,8 @@
 						}
 
 						job.size = size;
+						// Decompression reports the compressed size first, then the growing decompressed size.
+						job.decompression ??= { timestamp: new Date().getTime(), compressedSize: size };
 
 					} else if (event.error) {
 						if (incrWorkers) {

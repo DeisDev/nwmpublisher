@@ -45,6 +45,22 @@ fn read_contents(reader: &mut impl Read, writer: &mut impl Write, source: &Path,
 }
 
 impl GMAFile {
+	pub fn new(path: PathBuf, metadata: GMAMetadata) -> GMAFile {
+		GMAFile {
+			path,
+			size: 0,
+			id: None,
+			metadata: Some(metadata),
+			entries: None,
+			pointers: Default::default(),
+			version: 3,
+			extracted_name: String::new(),
+			modified: None,
+			membuffer: None,
+			spool: None,
+		}
+	}
+
 	pub fn write(&self) -> Result<BufWriter<File>, GMAError> {
 		Ok(BufWriter::new(
 			File::create(&self.path).map_err(|error| GMAError::io("create archive", &self.path, error))?,
@@ -205,19 +221,7 @@ fn package_archive(request: PackageRequest, ignore: Vec<String>, transaction: &T
 	let result = (|| {
 		if !transaction.begin_packing() { return Err(GMAError::Cancelled); }
 		transaction.status("PUBLISH_PACKING");
-		let gma = GMAFile {
-			path: stage_path.join("addon.gma"),
-			size: 0,
-			id: None,
-			metadata: Some(GMAMetadata::Standard { title, addon_type, tags, ignore }),
-			entries: None,
-			pointers: Default::default(),
-			version: 3,
-			extracted_name: String::new(),
-			modified: None,
-			membuffer: None,
-			spool: None,
-		};
+		let gma = GMAFile::new(stage_path.join("addon.gma"), GMAMetadata::Standard { title, addon_type, tags, ignore });
 		gma.create(manifest, transaction.clone())?;
 		std::fs::OpenOptions::new().write(true).open(&gma.path).and_then(|file| file.sync_all())
 			.map_err(|error| GMAError::io("sync package", &gma.path, error))?;

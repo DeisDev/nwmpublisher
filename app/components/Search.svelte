@@ -185,11 +185,6 @@
 					{/if}
 				</div>
 			{/each}
-			<!-- TODO
-			{#if hasMoreResults}
-				<div class="show-more">{$_('show_more')}</div>
-			{/if}
-			-->
 		{/if}
 	</div>
 </main>
@@ -275,15 +270,10 @@
 		display: flex;
 		padding: 1rem;
 		cursor: pointer;
-	}
-	main > #search-results .result, #search-results .show-more {
 		transition: background-color .1s;
 	}
-	main > #search-results .result:hover, #search-results .show-more:hover {
+	main > #search-results .result:hover {
 		background-color: rgb(0,0,0,.2);
-	}
-	main > #search-results.show-more .result:last-child {
-		padding-bottom: 0;
 	}
 	main > #search-results .result > .label {
 		flex: 1;
@@ -294,14 +284,6 @@
 	main > #search-results .result > .source {
 		margin-left: .5rem;
 		opacity: .5;
-	}
-
-	#search-results .show-more {
-		padding: 1.25rem;
-		text-align: center;
-		font-weight: bold;
-		font-size: 1em;
-		cursor: pointer;
 	}
 
 	#search-results.loading {

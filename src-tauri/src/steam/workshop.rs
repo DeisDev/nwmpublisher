@@ -76,7 +76,7 @@ impl From<QueryResult> for WorkshopItem {
 			time_created: result.time_created,
 			time_updated: result.time_updated,
 			visibility: Some(result.visibility.into()),
-			description: Some(result.description), // TODO parse or strip bbcode?
+			description: Some(result.description),
 			score: result.score,
 			tags: result.tags,
 			preview_url: None,

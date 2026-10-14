@@ -1,6 +1,6 @@
 use crate::gma::filename::resolve_gma_file_name;
 use crate::{
-	gma::{manifest::ContentManifest, GMAEntry, GMAError, GMAFile, GMAFilePointers, GMAMetadata},
+	gma::{manifest::ContentManifest, GMAEntry, GMAError, GMAFile, GMAMetadata},
 	Transaction, GMOD_APP_ID,
 };
 use image::{DynamicImage, ImageError, ImageFormat};
@@ -750,25 +750,15 @@ pub fn publish(request: PublishRequest) -> u32 {
 			}
 			transaction.status("PUBLISH_PACKING");
 
-			let gma = GMAFile {
-				// TODO convert to GMAFile::new()
-				path: content.join(resolve_gma_file_name(gma_name.as_deref())),
-				size: 0,
-				id: None,
-				metadata: Some(GMAMetadata::Standard {
+			let gma = GMAFile::new(
+				content.join(resolve_gma_file_name(gma_name.as_deref())),
+				GMAMetadata::Standard {
 					title: title.clone(),
 					addon_type: addon_type.clone(),
 					tags: tags.clone(),
 					ignore,
-				}),
-				entries: None,
-				pointers: GMAFilePointers::default(),
-				version: 3,
-				extracted_name: String::new(),
-				modified: None,
-				membuffer: None,
-				spool: None,
-			};
+				},
+			);
 
 			if let Err(error) = gma.create(manifest, transaction.clone()) {
 				if matches!(error, crate::gma::GMAError::Cancelled) {

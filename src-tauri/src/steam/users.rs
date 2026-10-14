@@ -15,8 +15,6 @@ pub struct SteamUser {
 	pub steamid: SteamId,
 	pub name: String,
 	pub avatar: Option<crate::Base64Image>,
-
-	pub dead: bool,
 }
 impl<Manager: steamworks::Manager> From<Friend<Manager>> for SteamUser {
 	fn from(friend: Friend<Manager>) -> Self {
@@ -24,7 +22,6 @@ impl<Manager: steamworks::Manager> From<Friend<Manager>> for SteamUser {
 			steamid: friend.id(),
 			name: friend.name(),
 			avatar: friend.medium_avatar().map(|buf| crate::base64_image::Base64Image::new(buf, 64, 64)),
-			dead: false, // TODO
 		}
 	}
 }
@@ -55,14 +52,11 @@ impl Steam {
 	}
 
 	pub fn fetch_users(&'static self, steamids: Vec<SteamId>) -> Vec<SteamUser> {
-		// TODO
-		//self.users.begin();
 		let mut users = Vec::with_capacity(steamids.len());
 		steamids
 			.into_par_iter()
 			.map(|steamid| self.fetch_user(steamid))
 			.collect_into_vec(&mut users);
-		//self.users.commit();
 		users
 	}
 

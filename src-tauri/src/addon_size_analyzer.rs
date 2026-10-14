@@ -320,8 +320,7 @@ impl AddonSizeAnalyzer {
 		master_treemap.process(tag_total_sizes.values().cloned().collect(), total_size as f64);
 
 		rayon::scope(|scope| {
-			let total_squares_i = master_treemap.squares.len(); // TODO is this = to something?
-			let total_squares_f = total_squares_i as f64; // TODO is this = to something?
+			let total_squares = master_treemap.squares.len() as f64;
 
 			for (i, square) in master_treemap.squares.iter_mut().enumerate() {
 				if transaction.aborted() {
@@ -349,7 +348,7 @@ impl AddonSizeAnalyzer {
 
 					square.data = Some((Some(Box::new(treemap.squares)), Some(tag.clone())));
 
-					transaction.progress(0.66 + (((i as f64) / total_squares_f) / 3.));
+					transaction.progress(0.66 + (((i as f64) / total_squares) / 3.));
 				});
 			}
 		});

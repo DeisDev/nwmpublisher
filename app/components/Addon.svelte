@@ -8,8 +8,6 @@
 	import { registerContext } from './ContextMenu.svelte';
 	import { onMount } from 'svelte';
 
-	// TODO merge workshop and gma promises?
-
 	export let newAddon = false;
 	export let workshopData = null;
 	export let installedData = null;

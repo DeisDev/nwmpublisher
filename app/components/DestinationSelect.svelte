@@ -8,7 +8,6 @@
 	import { saveSettings } from '../settings.js';
 	import Modal from './Modal.svelte';
 	import * as dialog from '@tauri-apps/plugin-dialog';
-	import GmodLogo from './GmodLogo.svelte';
 
 	export let active;
 	export let text;
@@ -152,7 +151,7 @@
 		</div>
 
 		<div class="destination" class:disabled={!!!AppData.gmod_dir} class:active={extractPath[0] === 'addons'} on:mouseover={extractDestHover} on:mouseleave={extractDestHoverLeave} on:click={updateExtractDest} data-dest="addons">
-			<GmodLogo/>
+			<img src="/img/gmod.svg" alt=""/>
 			<div>{$_('addons_folder')}</div>
 		</div>
 
@@ -217,7 +216,7 @@
 	#destinations .destination.active {
 		background-color: var(--bg-sunken-3);
 	}
-	#destinations .destination img, #destinations .destination :global(.icon), #destinations .destination :global(svg) {
+	#destinations .destination img, #destinations .destination :global(.icon) {
 		height: 2.5rem;
 		width: 2.5rem;
 		margin-bottom: .6rem;
