@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Complete the German, Spanish, French, Korean, Dutch, Polish, Portuguese, Russian, Turkish, Ukrainian, and Chinese translations.
+
 ### Fixed
 
 - Stop retrying the Steam connection twenty times a second while Steam is not running.
