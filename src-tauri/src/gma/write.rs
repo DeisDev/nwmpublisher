@@ -166,14 +166,17 @@ impl GMAFile {
 	}
 }
 
+pub const ADDON_TYPES: [&str; 10] = ["ServerContent", "gamemode", "map", "weapon", "vehicle", "npc", "tool", "effects", "model", "entity"];
+pub const ADDON_TAGS: [&str; 9] = ["fun", "roleplay", "scenic", "movie", "realism", "cartoon", "water", "comic", "build"];
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackageRequest {
-	content_path: PathBuf,
-	destination: PathBuf,
-	title: String,
-	addon_type: String,
-	tags: Vec<String>,
+	pub(crate) content_path: PathBuf,
+	pub(crate) destination: PathBuf,
+	pub(crate) title: String,
+	pub(crate) addon_type: String,
+	pub(crate) tags: Vec<String>,
 }
 
 #[tauri::command]
@@ -192,12 +195,12 @@ pub fn package_addon(request: PackageRequest) -> u32 {
 	id
 }
 
-fn package_archive(request: PackageRequest, ignore: Vec<String>, transaction: &Transaction) -> Result<PathBuf, GMAError> {
+pub(crate) fn package_archive(request: PackageRequest, ignore: Vec<String>, transaction: &Transaction) -> Result<PathBuf, GMAError> {
 	check_cancelled(transaction)?;
 	let PackageRequest { content_path, destination, title, addon_type, tags } = request;
 	if title.trim().is_empty() || title.contains('\0')
-		|| !["ServerContent", "gamemode", "map", "weapon", "vehicle", "npc", "tool", "effects", "model", "entity"].contains(&addon_type.as_str())
-		|| tags.len() > 3 || tags.iter().any(|tag| !["fun", "roleplay", "scenic", "movie", "realism", "cartoon", "water", "comic", "build"].contains(&tag.as_str()))
+		|| !ADDON_TYPES.contains(&addon_type.as_str())
+		|| tags.len() > 3 || tags.iter().any(|tag| !ADDON_TAGS.contains(&tag.as_str()))
 	{
 		return Err(GMAError::InvalidPackageMetadata);
 	}

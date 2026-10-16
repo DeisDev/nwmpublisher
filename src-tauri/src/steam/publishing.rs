@@ -89,7 +89,7 @@ impl PublishError {
 	}
 }
 
-use super::{Steam, publish_jobs::PublishJob};
+use super::{Steam, publish_jobs::{PublishJob, PublishResult}};
 pub struct ContentPath(PathBuf);
 impl std::ops::Deref for ContentPath {
 	type Target = PathBuf;
@@ -672,20 +672,55 @@ pub fn publish_description(addon_id: PublishedFileId, description: String) -> Re
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishRequest {
-	content_path_src: PathBuf,
-	icon_path: Option<PathBuf>,
-	title: String,
-	description: Option<String>,
-	tags: Vec<String>,
-	addon_type: String,
-	upscale: bool,
-	update_id: Option<PublishedFileId>,
-	changes: Option<String>,
-	gma_name: Option<String>,
+	pub(crate) content_path_src: PathBuf,
+	pub(crate) icon_path: Option<PathBuf>,
+	pub(crate) title: String,
+	pub(crate) description: Option<String>,
+	pub(crate) tags: Vec<String>,
+	pub(crate) addon_type: String,
+	pub(crate) upscale: bool,
+	pub(crate) update_id: Option<PublishedFileId>,
+	pub(crate) changes: Option<String>,
+	pub(crate) gma_name: Option<String>,
+	#[serde(skip)]
+	pub(crate) ignore: Vec<String>,
+}
+
+pub(crate) enum PublishOutcome {
+	Published { id: PublishedFileId, legal_agreement: bool, job: PublishJob, warnings: Vec<String>, settings_error: Option<String> },
+	Cancelled,
+	Unknown,
+	Failed(String, Option<PublishResult>),
 }
 
 #[tauri::command]
 pub fn publish(request: PublishRequest) -> u32 {
+	let transaction = crate::transactions::new_publish();
+	let id = transaction.id;
+
+	std::thread::spawn(move || match run_publish(request, &transaction) {
+		PublishOutcome::Published { id, legal_agreement, job, warnings, settings_error } => {
+			if !transaction.aborted() {
+				if legal_agreement {
+					crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
+				}
+				if app_data!().settings.read().open_workshop_after_publish {
+					crate::path::open(format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id.0));
+				}
+				let mut result = serde_json::to_value(job.finish(&transaction, "published", warnings)).unwrap();
+				result["settingsError"] = json!(settings_error);
+				transaction.finished(result);
+			}
+		}
+		PublishOutcome::Cancelled => transaction.cancelled(),
+		PublishOutcome::Unknown => {}
+		PublishOutcome::Failed(error, result) => transaction.error(error, result),
+	});
+
+	id
+}
+
+pub(crate) fn run_publish(request: PublishRequest, transaction: &Transaction) -> PublishOutcome {
 	let PublishRequest {
 		content_path_src,
 		icon_path,
@@ -697,153 +732,135 @@ pub fn publish(request: PublishRequest) -> u32 {
 		update_id,
 		changes,
 		gma_name,
+		ignore: extra_ignore,
 	} = request;
-	let transaction = crate::transactions::new_publish();
-	let id = transaction.id;
-
 	let is_updating = update_id.is_some();
 
-	std::thread::spawn(move || {
-		let job = match PublishJob::new(&transaction, update_id, Some(content_path_src.clone())) { Ok(job) => job, Err(error) => return transaction.error(error, turbonone!()) };
-		let source_key = if is_updating {
-			None
-		} else {
-			match crate::appdata::changelog_key(None, Some(content_path_src.clone())) {
-				Ok(key) => Some(key),
-				Err(error) => {
-					transaction.error(error, job.finish(&transaction, "failed", Vec::new()));
-					return;
-				}
-			}
+	let job = match PublishJob::new(transaction, update_id, Some(content_path_src.clone())) { Ok(job) => job, Err(error) => return PublishOutcome::Failed(error, None) };
+	let source_key = if is_updating {
+		None
+	} else {
+		match crate::appdata::changelog_key(None, Some(content_path_src.clone())) {
+			Ok(key) => Some(key),
+			Err(error) => return PublishOutcome::Failed(error, Some(job.finish(transaction, "failed", Vec::new()))),
+		}
+	};
+	let temp_dir = app_data!().temp_dir().to_owned();
+	let result = with_publish_staging(&temp_dir, |root, content| {
+		job.staging(root)?;
+		validate_description(description.as_deref()).map_err(|error| error.to_string())?;
+		validate_changelog(changes.as_deref()).map_err(|error| error.to_string())?;
+		if transaction.aborted() {
+			return Ok(None);
+		}
+		let mut ignore = app_data!().settings.read().ignore_globs.clone();
+		ignore.extend(extra_ignore);
+		// The preview may be stale by the time this worker starts.
+		let manifest = match ContentManifest::build(&content_path_src, &ignore, || transaction.aborted()) {
+			Ok(manifest) => manifest,
+			Err(GMAError::Cancelled) => return Ok(None),
+			Err(error) => return Err(error.to_string()),
 		};
-		let temp_dir = app_data!().temp_dir().to_owned();
-		let result = with_publish_staging(&temp_dir, |root, content| {
-			job.staging(root)?;
-			validate_description(description.as_deref()).map_err(|error| error.to_string())?;
-			validate_changelog(changes.as_deref()).map_err(|error| error.to_string())?;
-			if transaction.aborted() {
+
+		let preview = match icon_path {
+			Some(icon_path) => {
+				transaction.status("PUBLISH_PROCESSING_ICON");
+				Some(WorkshopIcon::new(icon_path, upscale).map_err(|error| error.to_string())?)
+			}
+			None if !is_updating => Some(WorkshopIcon::Default),
+			None => None,
+		};
+		if transaction.aborted() {
+			return Ok(None);
+		}
+		let preview = preview.map(|icon| icon.into_path(root)).transpose().map_err(|error| error.to_string())?;
+
+		if !transaction.begin_packing() {
+			return Ok(None);
+		}
+		transaction.status("PUBLISH_PACKING");
+
+		let gma = GMAFile::new(
+			content.join(resolve_gma_file_name(gma_name.as_deref())),
+			GMAMetadata::Standard {
+				title: title.clone(),
+				addon_type: addon_type.clone(),
+				tags: tags.clone(),
+				ignore,
+			},
+		);
+
+		if let Err(error) = gma.create(manifest, transaction.clone()) {
+			if matches!(error, crate::gma::GMAError::Cancelled) {
 				return Ok(None);
 			}
-			let ignore = app_data!().settings.read().ignore_globs.clone();
-			// The preview may be stale by the time this worker starts.
-			let manifest = match ContentManifest::build(&content_path_src, &ignore, || transaction.aborted()) {
-				Ok(manifest) => manifest,
-				Err(GMAError::Cancelled) => return Ok(None),
-				Err(error) => return Err(error.to_string()),
-			};
+			return Err(error.to_string());
+		}
+		if transaction.aborted() {
+			return Ok(None);
+		}
+		let content_path = ContentPath::new(content.to_owned()).map_err(|error| error.to_string())?;
 
-			let preview = match icon_path {
-				Some(icon_path) => {
-					transaction.status("PUBLISH_PROCESSING_ICON");
-					Some(WorkshopIcon::new(icon_path, upscale).map_err(|error| error.to_string())?)
-				}
-				None if !is_updating => Some(WorkshopIcon::Default),
-				None => None,
-			};
-			if transaction.aborted() {
-				return Ok(None);
-			}
-			let preview = preview.map(|icon| icon.into_path(root)).transpose().map_err(|error| error.to_string())?;
+		transaction.status("PUBLISH_STARTING");
 
-			if !transaction.begin_packing() {
-				return Ok(None);
-			}
-			transaction.status("PUBLISH_PACKING");
-
-			let gma = GMAFile::new(
-				content.join(resolve_gma_file_name(gma_name.as_deref())),
-				GMAMetadata::Standard {
-					title: title.clone(),
-					addon_type: addon_type.clone(),
-					tags: tags.clone(),
-					ignore,
-				},
-			);
-
-			if let Err(error) = gma.create(manifest, transaction.clone()) {
-				if matches!(error, crate::gma::GMAError::Cancelled) {
-					return Ok(None);
-				}
-				return Err(error.to_string());
-			}
-			if transaction.aborted() {
-				return Ok(None);
-			}
-			let content_path = ContentPath::new(content.to_owned()).map_err(|error| error.to_string())?;
-
-			transaction.status("PUBLISH_STARTING");
-
-			let (id, result) = if let Some(id) = update_id {
-				(
-					update_id,
-					steam!().update(
-						id,
-						WorkshopUpdateType::Update {
-							description,
-							path: content_path,
-							tags,
-							addon_type,
-							preview,
-							changes,
-						},
-						&transaction,
-						&job,
-					),
-				)
-			} else {
-				steam!().publish(
-					WorkshopUpdateType::Creation {
-						title,
+		let (id, result) = if let Some(id) = update_id {
+			(
+				update_id,
+				steam!().update(
+					id,
+					WorkshopUpdateType::Update {
 						description,
 						path: content_path,
 						tags,
 						addon_type,
-						preview: preview.unwrap(),
+						preview,
 						changes,
 					},
-					&transaction,
+					transaction,
 					&job,
-				)
-			};
-			match result {
-				Ok(legal_agreement) => Ok(Some((id.unwrap(), legal_agreement))),
-				Err(error) => {
-					if matches!(error, PublishError::Cancelled) {
-						Ok(None)
-					} else {
-						Err(error.to_string())
-					}
-				}
-			}
-		});
-
-		match result {
-			Ok(StagingResult { value: Some((id, legal_agreement)), warnings }) => {
-				let settings_error = crate::appdata::change_settings(|settings| {
-					settings.my_workshop_local_paths.insert(id, content_path_src);
-					if let Some(key) = source_key { settings.changelogs.published(&key, id); }
-					Ok(())
-				}).err();
-				app_data!().send();
-				if !transaction.aborted() {
-					if legal_agreement {
-						crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
-					}
-					if app_data!().settings.read().open_workshop_after_publish {
-						crate::path::open(format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id.0));
-					}
-					let mut result = serde_json::to_value(job.finish(&transaction, "published", warnings)).unwrap();
-					result["settingsError"] = json!(settings_error);
-					transaction.finished(result);
-				}
-			}
-			Ok(StagingResult { value: None, .. }) => { job.finish(&transaction, "cancelled", Vec::new()); transaction.cancelled(); },
-			Err(error) if error == "ERR_PUBLISH_OUTCOME_UNKNOWN" => job.uncertain(&transaction),
-			Err(error) => transaction.error(error, job.finish(&transaction, "failed", Vec::new())),
+				),
+			)
+		} else {
+			steam!().publish(
+				WorkshopUpdateType::Creation {
+					title,
+					description,
+					path: content_path,
+					tags,
+					addon_type,
+					preview: preview.unwrap(),
+					changes,
+				},
+				transaction,
+				&job,
+			)
 		};
+		match result {
+			Ok(legal_agreement) => Ok(Some((id.unwrap(), legal_agreement))),
+			Err(error) => {
+				if matches!(error, PublishError::Cancelled) {
+					Ok(None)
+				} else {
+					Err(error.to_string())
+				}
+			}
+		}
 	});
 
-	id
+	match result {
+		Ok(StagingResult { value: Some((id, legal_agreement)), warnings }) => {
+			let settings_error = crate::appdata::change_settings(|settings| {
+				settings.my_workshop_local_paths.insert(id, content_path_src);
+				if let Some(key) = source_key { settings.changelogs.published(&key, id); }
+				Ok(())
+			}).err();
+			app_data!().send();
+			PublishOutcome::Published { id, legal_agreement, job, warnings, settings_error }
+		}
+		Ok(StagingResult { value: None, .. }) => { job.finish(transaction, "cancelled", Vec::new()); PublishOutcome::Cancelled },
+		Err(error) if error == "ERR_PUBLISH_OUTCOME_UNKNOWN" => { job.uncertain(transaction); PublishOutcome::Unknown },
+		Err(error) => PublishOutcome::Failed(error, Some(job.finish(transaction, "failed", Vec::new()))),
+	}
 }
 
 #[tauri::command]

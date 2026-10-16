@@ -131,8 +131,12 @@ impl Steam {
 	}
 
 	fn on_initialized() {
-		publish_jobs::janitor();
 		std::thread::spawn(Steam::watchdog);
+		// The CLI connects only to publish. Its janitor would treat a running desktop app's jobs as abandoned.
+		if *crate::cli::CLI_MODE {
+			return;
+		}
+		publish_jobs::janitor();
 		std::thread::spawn(Steam::workshop_fetcher);
 
 		std::sync::LazyLock::force(&DOWNLOADS);

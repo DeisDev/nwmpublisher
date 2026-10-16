@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Show the speed while a download is being decompressed.
+- Pack, list, inspect, and publish addons from the command line.
 
 ### Changed
 
+- Translate the remaining interface and command line text.
 - Complete the German, Spanish, French, Korean, Dutch, Polish, Portuguese, Russian, Turkish, Ukrainian, and Chinese translations.
 
 ### Fixed

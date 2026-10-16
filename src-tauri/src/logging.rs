@@ -53,7 +53,10 @@ pub static LOG_CHANNEL: std::sync::LazyLock<Sender<LogMessage>> = std::sync::Laz
 macro_rules! println {
 	($($arg:tt)*) => {{
 		let log = format!($($arg)*);
-		std::println!("{}", &log);
+		// CLI standard output is reserved for command results.
+		if !*$crate::cli::CLI_MODE {
+			std::println!("{}", &log);
+		}
 		$crate::ignore! { $crate::logging::LOG_CHANNEL.send($crate::logging::LogMessage::Stdout(log)) };
 	}};
 }

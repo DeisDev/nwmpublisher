@@ -20,6 +20,10 @@ impl WrappedWebview {
 	}
 
 	pub fn emit<D: Serialize + Send + 'static>(&self, event: &'static str, payload: Option<D>) {
+		// The CLI never creates a window, so waiting for one would block forever.
+		if *crate::cli::CLI_MODE {
+			return;
+		}
 		ignore! { self.window().emit(event, &payload) };
 	}
 

@@ -82,14 +82,14 @@ To move them yourself instead, copy `settings.json` from the old `gmpublisher` f
 * Browse and extract local GMA files offline
 * Choose whether to open Workshop pages after publishing and folders after extraction
 * Copy diagnostics from failed jobs
-* CLI extraction with custom output paths and an option to keep the folder closed
+* Command line for packing, extracting, listing, and publishing addons
 * (Windows) .GMA file type association for quick extraction
 * Import settings from gmpublisher on first launch
 
 ## Command line
 
-Run `nwmpublisher` without arguments to launch the GUI. The CLI supports extraction,
-help, and version information:
+Run `nwmpublisher` without arguments to launch the GUI. The CLI can extract, pack, list,
+inspect, and publish addons:
 
 ```sh
 nwmpublisher --help
@@ -97,7 +97,14 @@ nwmpublisher --version
 nwmpublisher --extract "addon.gma"
 nwmpublisher --extract "addon.gma" --out "extracted-addon" --no-open
 nwmpublisher --extract "addon.gma" --out-parent "addons" --workshop-title --workshop-metadata
+nwmpublisher --pack "my_addon" --out "my_addon.gma"
+nwmpublisher --list "addon.gma"
+nwmpublisher --info "addon.gma"
+nwmpublisher --publish "my_addon" --icon "icon.jpg" --description-file "description.txt"
+nwmpublisher --publish "my_addon" --update 123456789 --changes "Fixed a bug"
 ```
+
+### Extracting
 
 `-e` and `-o` are aliases for `--extract` and `--out`. Output goes directly into
 `--out`, creating the directory if needed and overwriting matching files. Without
@@ -120,10 +127,29 @@ If Workshop details are unavailable, extraction still succeeds and warnings go t
 Successful extraction prints the output path. The folder opens according to the
 application's **Open folder after extraction** preference; `--no-open` always suppresses
 opening it for that invocation. Use `--no-open` for scripts or environments without a desktop.
+A folder-opening failure leaves the extracted files available.
 
-Exit codes are `0` for success (including help and version), `1` for archive,
-extraction, or folder-opening failures, and `2` for invalid arguments. Failures print
-details to standard error. A folder-opening failure leaves the extracted files available.
+### Packing and publishing
+
+`--pack` and `--publish` read the title, type, tags, and ignore patterns from the folder's
+`addon.json`, like gmad. `--title`, `--type`, and `--tags fun,build` override it. Files matching
+your **Ignored File Patterns** setting are also skipped. `--pack` saves `FOLDER.gma` next to the
+folder unless you pass `--out`.
+
+`--publish` needs Steam running and signed in. Without `--update ID` it creates a new Workshop
+item, which needs at least one tag and gets the default icon unless you pass `--icon`. With
+`--update ID`, the Workshop title stays the same, and the description and icon change only if you
+pass new ones. It prints the item's link when done. If Steam doesn't confirm the result, open
+the app to review it before trying again.
+
+`--list` prints each file's size in bytes and path. `--info` prints the title, type, tags, file
+count, and size.
+
+### Scripts
+
+Exit codes are `0` for success (including help and version), `1` when the operation fails, and
+`2` for invalid arguments. Results go to standard output; progress, warnings, and failures go to
+standard error.
 
 In Windows PowerShell scripts, wait for the GUI-subsystem executable and read its exit code:
 
@@ -131,8 +157,6 @@ In Windows PowerShell scripts, wait for the GUI-subsystem executable and read it
 $cliProcess = Start-Process -FilePath .\nwmpublisher.exe -ArgumentList '--extract "addon.gma" --out "extracted-addon" --no-open' -NoNewWindow -Wait -PassThru
 $cliProcess.ExitCode
 ```
-
-Publishing and updating Workshop items are currently available only in the GUI.
 
 ## Languages
 
