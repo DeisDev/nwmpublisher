@@ -228,11 +228,10 @@ impl Steam {
 											_ => unreachable!(),
 										}) {
 											let search_item = &search_installed_addons[pos];
-											if search_item.label() != item.title {
-												let terms = unsafe { &mut *search_item.terms.get() };
-												let label = unsafe { &mut *search_item.label.get() };
-												terms.push(std::mem::take(label));
-												*label = item.title.to_owned();
+											let mut label = search_item.label.write();
+											if *label != item.title {
+												let old_label = std::mem::replace(&mut *label, item.title.to_owned());
+												search_item.terms.write().push(old_label);
 											}
 										}
 

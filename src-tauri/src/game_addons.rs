@@ -26,13 +26,18 @@ enum Discovered {
 impl From<u8> for Discovered {
 	#[inline(always)]
 	fn from(n: u8) -> Self {
-		unsafe { std::mem::transmute(n) }
+		match n {
+			0 => Discovered::No,
+			1 => Discovered::Discovering,
+			2 => Discovered::Yes,
+			_ => unreachable!("invalid addon discovery state {n}"),
+		}
 	}
 }
 impl From<Discovered> for u8 {
 	#[inline(always)]
 	fn from(val: Discovered) -> Self {
-		unsafe { std::mem::transmute(val) }
+		val as u8
 	}
 }
 

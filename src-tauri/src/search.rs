@@ -1,9 +1,8 @@
 use std::{
-	cell::UnsafeCell,
 	path::PathBuf,
 	sync::{
 		atomic::{AtomicBool, AtomicU32, AtomicU8},
-		Arc,
+		Arc, OnceLock,
 	},
 };
 
@@ -29,23 +28,12 @@ pub enum SearchItemSource {
 
 #[derive(Debug)]
 pub struct SearchItem {
-	pub label: UnsafeCell<String>,
-	pub terms: UnsafeCell<Vec<String>>,
+	pub label: RwLock<String>,
+	pub terms: RwLock<Vec<String>>,
 	pub timestamp: u64,
 	pub len: usize,
 	pub source: SearchItemSource,
 }
-impl SearchItem {
-	pub fn label(&self) -> &str {
-		unsafe { &*self.label.get() }
-	}
-
-	pub fn terms(&self) -> &[String] {
-		unsafe { &*self.terms.get() }
-	}
-}
-unsafe impl Send for SearchItem {}
-unsafe impl Sync for SearchItem {}
 impl PartialOrd for SearchItem {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
 		Some(self.cmp(other))
@@ -60,16 +48,11 @@ impl Ord for SearchItem {
 }
 impl PartialEq for SearchItem {
 	fn eq(&self, other: &Self) -> bool {
-		match &self.source {
-			SearchItemSource::InstalledAddons(a, _) => match &other.source {
-				SearchItemSource::InstalledAddons(b, _) => a == b,
-				_ => false,
-			},
-			SearchItemSource::MyWorkshop(a) => match &other.source {
-				SearchItemSource::MyWorkshop(b) => a == b,
-				_ => false,
-			},
-			_ => unreachable!(),
+		match (&self.source, &other.source) {
+			(SearchItemSource::InstalledAddons(a, _), SearchItemSource::InstalledAddons(b, _)) => a == b,
+			(SearchItemSource::MyWorkshop(a), SearchItemSource::MyWorkshop(b)) => a == b,
+			(SearchItemSource::WorkshopItem(a), SearchItemSource::WorkshopItem(b)) => a == b,
+			_ => false,
 		}
 	}
 }
@@ -81,8 +64,8 @@ impl SearchItem {
 
 		SearchItem {
 			len: terms.iter().map(|x| x.len()).reduce(|a, b| a.max(b)).unwrap_or(0).max(label.len()),
-			label: UnsafeCell::new(label),
-			terms: UnsafeCell::new(terms),
+			label: RwLock::new(label),
+			terms: RwLock::new(terms),
 			timestamp: timestamp.into(),
 			source,
 		}
@@ -94,7 +77,7 @@ impl Serialize for SearchItem {
 		S: serde::Serializer,
 	{
 		let mut tup = serializer.serialize_tuple(2)?;
-		tup.serialize_element(self.label())?;
+		tup.serialize_element(&*self.label.read())?;
 		tup.serialize_element(&self.source)?;
 		tup.end()
 	}
@@ -164,11 +147,6 @@ impl Searchable for std::sync::Arc<crate::webview::Addon> {
 		}
 	}
 }
-
-#[derive(Clone, Copy)]
-struct ResultsPtr(*mut Vec<Option<(i64, Arc<SearchItem>)>>);
-unsafe impl Send for ResultsPtr {}
-unsafe impl Sync for ResultsPtr {}
 
 pub struct Search {
 	channel: Transaction,
@@ -293,12 +271,12 @@ impl Search {
 
 		let i = AtomicU8::new(0);
 		let has_more = AtomicBool::new(false);
-		let mut results: Vec<Option<(i64, Arc<SearchItem>)>> = vec![None; MAX_QUICK_RESULTS as usize];
+		let results: Vec<OnceLock<(i64, Arc<SearchItem>)>> = (0..MAX_QUICK_RESULTS).map(|_| OnceLock::new()).collect();
 
 		self.items
 			.read()
 			.par_iter()
-			.try_for_each_with(ResultsPtr(&mut results as *mut _), |results, search_item| {
+			.try_for_each(|search_item| {
 				if i.load(std::sync::atomic::Ordering::Acquire) >= MAX_QUICK_RESULTS {
 					has_more.store(true, std::sync::atomic::Ordering::Release);
 					return Err(());
@@ -310,13 +288,15 @@ impl Search {
 
 				let mut winner = None;
 
-				if search_item.label().len() >= query.len() {
-					if let Some(score) = self.matcher.fuzzy_match(search_item.label(), &query) {
+				let label = search_item.label.read();
+				if label.len() >= query.len() {
+					if let Some(score) = self.matcher.fuzzy_match(&label, &query) {
 						winner = Some(score);
 					}
 				}
+				drop(label);
 
-				for term in search_item.terms().iter() {
+				for term in search_item.terms.read().iter() {
 					if term.len() < query.len() {
 						continue;
 					}
@@ -333,7 +313,7 @@ impl Search {
 						has_more.store(true, std::sync::atomic::Ordering::Release);
 						return Err(());
 					} else {
-						(unsafe { &mut *results.0 })[i as usize] = Some((score, search_item.clone()));
+						results[i as usize].get_or_init(|| (score, search_item.clone()));
 					}
 				}
 
@@ -341,30 +321,10 @@ impl Search {
 			})
 			.ok();
 
-		let i = i.into_inner();
+		let mut results: Vec<_> = results.into_iter().filter_map(OnceLock::into_inner).collect();
+		results.sort_by(|a, b| a.0.cmp(&b.0).reverse());
 
-		if i == 0 {
-			(vec![], false)
-		} else if i == 1 {
-			(vec![results[0].take().unwrap().1], false)
-		} else {
-			let has_more = has_more.load(std::sync::atomic::Ordering::Acquire);
-
-			results.sort_by(|a, b| {
-				if let Some(a) = a {
-					if let Some(b) = b {
-						return a.0.cmp(&b.0).reverse();
-					} else {
-						return std::cmp::Ordering::Less;
-					}
-				} else if b.is_some() {
-					return std::cmp::Ordering::Greater;
-				}
-				std::cmp::Ordering::Equal
-			});
-
-			(results.into_iter().filter_map(|x| x.map(|x| x.1)).collect(), has_more)
-		}
+		(results.into_iter().map(|(_, search_item)| search_item).collect(), has_more.into_inner())
 	}
 
 	pub fn full(&'static self, query: String) -> u32 {
@@ -395,13 +355,15 @@ impl Search {
 
 					let mut winner = None;
 
-					if search_item.label().len() >= query.len() {
-						if let Some(score) = self.matcher.fuzzy_match(search_item.label(), &query) {
+					let label = search_item.label.read();
+					if label.len() >= query.len() {
+						if let Some(score) = self.matcher.fuzzy_match(&label, &query) {
 							winner = Some(score);
 						}
 					}
+					drop(label);
 
-					for term in search_item.terms().iter() {
+					for term in search_item.terms.read().iter() {
 						if term.len() < query.len() {
 							continue;
 						}

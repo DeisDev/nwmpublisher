@@ -1,41 +1,22 @@
-use std::{cell::RefCell, mem::MaybeUninit, sync::atomic::AtomicBool};
+use std::sync::{atomic::AtomicBool, OnceLock};
 
-use crossbeam::channel::Sender;
 use serde::Serialize;
 use tauri::{Emitter, WebviewWindow, Wry};
 
 use crate::{GMAFile, WorkshopItem};
 
 pub struct WrappedWebview {
-	pub window: RefCell<MaybeUninit<WebviewWindow<Wry>>>,
-	pending: AtomicBool,
-	tx: Sender<WebviewWindow<Wry>>,
+	window: OnceLock<WebviewWindow<Wry>>,
 }
-unsafe impl Send for WrappedWebview {}
-unsafe impl Sync for WrappedWebview {}
 impl WrappedWebview {
-	pub fn pending() -> Self {
-		Self {
-			window: RefCell::new(MaybeUninit::uninit()),
-			tx: WrappedWebview::channel(),
-			pending: AtomicBool::new(true),
-		}
-	}
-
-	fn channel() -> Sender<WebviewWindow<Wry>> {
-		let (tx, rx) = crossbeam::channel::bounded(1);
-
-		std::thread::spawn(move || {
-			let window = rx.recv().unwrap();
-			unsafe { webview!().window.borrow_mut().as_mut_ptr().write(window) };
-			webview!().pending.store(false, std::sync::atomic::Ordering::Release);
-		});
-
-		tx
+	pub const fn pending() -> Self {
+		Self { window: OnceLock::new() }
 	}
 
 	pub fn init(&self, window: WebviewWindow<Wry>) {
-		self.tx.send(window).unwrap();
+		if self.window.set(window).is_err() {
+			panic!("webview window initialized twice");
+		}
 	}
 
 	pub fn emit<D: Serialize + Send + 'static>(&self, event: &'static str, payload: Option<D>) {
@@ -43,14 +24,11 @@ impl WrappedWebview {
 	}
 
 	pub fn window(&self) -> &WebviewWindow<Wry> {
-		while self.pending.load(std::sync::atomic::Ordering::Relaxed) {
-			sleep_ms!(50);
-		}
-		unsafe { &*self.window.borrow().as_ptr() }
+		self.window.wait()
 	}
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub enum Addon {
 	Installed(GMAFile),
@@ -98,41 +76,6 @@ impl From<WorkshopItem> for Addon {
 		Addon::Workshop(item)
 	}
 }
-impl PartialOrd for Addon {
-	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		Some(self.cmp(other))
-	}
-}
-impl Ord for Addon {
-	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-		match self {
-			Addon::Installed(addon) => match other {
-				Addon::Installed(other) => addon.cmp(other),
-				_ => unreachable!(),
-			},
-			Addon::Workshop(addon) => match other {
-				Addon::Workshop(other) => addon.cmp(other),
-				_ => unreachable!(),
-			},
-		}
-	}
-}
-impl PartialEq for Addon {
-	fn eq(&self, other: &Self) -> bool {
-		match self {
-			Addon::Installed(addon) => match other {
-				Addon::Installed(other) => addon.eq(other),
-				_ => unreachable!(),
-			},
-			Addon::Workshop(addon) => match other {
-				Addon::Workshop(other) => addon.eq(other),
-				_ => unreachable!(),
-			},
-		}
-	}
-}
-impl Eq for Addon {}
-
 pub struct ErrorReporter;
 impl<R: tauri::Runtime> tauri::plugin::Plugin<R> for ErrorReporter {
 	fn initialization_script(&self) -> Option<String> {

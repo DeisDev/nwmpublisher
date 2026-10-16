@@ -5,7 +5,7 @@ pub static GAME_ADDONS: std::sync::LazyLock<crate::game_addons::GameAddons> = st
 pub static ADDON_SIZE_ANALYZER: std::sync::LazyLock<crate::addon_size_analyzer::AddonSizeAnalyzer> =
 	std::sync::LazyLock::new(crate::addon_size_analyzer::AddonSizeAnalyzer::init);
 pub static APP_DATA: std::sync::LazyLock<crate::appdata::AppData> = std::sync::LazyLock::new(crate::appdata::AppData::init);
-pub static WEBVIEW: std::sync::LazyLock<crate::webview::WrappedWebview> = std::sync::LazyLock::new(crate::webview::WrappedWebview::pending);
+pub static WEBVIEW: crate::webview::WrappedWebview = crate::webview::WrappedWebview::pending();
 pub static SEARCH: std::sync::LazyLock<crate::search::Search> = std::sync::LazyLock::new(crate::search::Search::init);
 
 #[macro_export]
