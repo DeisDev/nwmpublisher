@@ -265,9 +265,9 @@
 
 <main class="hide-scroll">
 	<div id="top-controls">
-		<div id="download" class="icon-button" on:click={browseGMA} use:tippyFollow={$_('bulk_extract_gmas')}>
+		<button type="button" id="download" class="icon-button" aria-label={$_('bulk_extract_gmas')} on:click={browseGMA} use:tippyFollow={$_('bulk_extract_gmas')}>
 			<Folder class="icon" size="1.2rem"/>
-		</div>
+		</button>
 		<div id="download-input-container">
 			<input type="text" id="download-input" placeholder={$_('download-input')} on:paste={parseInput} on:change={parseInput} on:input={checkEmptyInput} on:focus={showFocusTip} on:blur={hideFocusTip}/>
 			<LinkChain class="icon" size="1rem"/>
@@ -327,7 +327,7 @@
 				</table>
 			</div>
 			<div class="buttons">
-				<div class="btn" on:click={() => removeAll(downloadingJobs)}>{$_('remove_all')}</div>
+				<button type="button" class="btn" on:click={() => removeAll(downloadingJobs)}>{$_('remove_all')}</button>
 			</div>
 		</div>
 
@@ -358,7 +358,7 @@
 										<div><img src="/img/dog_sleep.gif"/></div>
 										<div>{$_('waiting')}</div>
 										<!--<div class="tip">{$_('extraction_tip')}</div>-->
-										<div class="btn" on:click={openDestination}>{$_('set_destination')}</div>
+										<button type="button" class="btn" on:click={openDestination}>{$_('set_destination')}</button>
 									</div>
 								</td>
 							</tr>
@@ -383,8 +383,8 @@
 				</table>
 			</div>
 			<div class="buttons">
-				<div class="btn" on:click={() => removeAll(extractingJobs)}>{$_('remove_all')}</div>
-				<div class="btn" on:click={openAll}>{$_('open_all')}</div>
+				<button type="button" class="btn" on:click={() => removeAll(extractingJobs)}>{$_('remove_all')}</button>
+				<button type="button" class="btn" on:click={openAll}>{$_('open_all')}</button>
 			</div>
 		</div>
 	</div>
@@ -609,6 +609,11 @@
 		border: 1px solid var(--bg-app);
 		cursor: pointer;
 		text-align: center;
+		font: inherit;
+		color: inherit;
+	}
+	#layout .btn:focus-visible {
+		outline: 2px solid #127cff;
 	}
 	#layout .btn:active {
 		background-color: var(--bg-app-alt);

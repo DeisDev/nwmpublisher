@@ -119,8 +119,14 @@ impl Steam {
 			println!("[Steam] SteamServersDisconnected {:#?}", c);
 		}));
 
+		// Callbacks can be missed or arrive out of order, so Steam's own logged-on state is the source of truth
+		let mut last_check = std::time::Instant::now();
 		loop {
 			steam!().run_callbacks();
+			if last_check.elapsed() >= std::time::Duration::from_secs(1) {
+				steam!().set_connected(steam!().client().user().logged_on());
+				last_check = std::time::Instant::now();
+			}
 		}
 	}
 
@@ -167,7 +173,7 @@ impl Steam {
 						sleep_ms!(10);
 					}
 
-					steam!().set_connected(true);
+					steam!().set_connected(steam!().client().user().logged_on());
 
 					Steam::on_initialized();
 
@@ -191,8 +197,9 @@ impl Steam {
 	}
 
 	fn set_connected(&self, connected: bool) {
-		self.connected.store(connected, std::sync::atomic::Ordering::Release);
-		webview_emit!(if connected { "SteamConnected" } else { "SteamDisconnected" });
+		if self.connected.swap(connected, std::sync::atomic::Ordering::AcqRel) != connected {
+			webview_emit!(if connected { "SteamConnected" } else { "SteamDisconnected" });
+		}
 	}
 
 	pub fn client(&self) -> AtomicRefSome<'_, Interface> {

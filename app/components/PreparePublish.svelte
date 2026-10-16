@@ -688,33 +688,33 @@
 		{/if}
 
 		{#if gmaIconBase64}
-			<div id="icon-container" on:click={browseIcon}>
-				<div id="addon-icon-background" style="background-image: url('{gmaIconBase64}')"></div>
+			<button type="button" id="icon-container" aria-label={$_('choose_icon')} on:click={browseIcon}>
+				<span id="addon-icon-background" style="background-image: url('{gmaIconBase64}')"></span>
 				{#if canUpscale && upscale.checked}
-					<div id="addon-icon" class="upscale">
+					<span id="addon-icon" class="upscale">
 						<img src={gmaIconBase64} bind:this={gmaIcon}/>
 						<img src={defaultIconUrl}/>
-					</div>
+					</span>
 				{:else}
-					<div id="addon-icon">
+					<span id="addon-icon">
 						<img src={gmaIconBase64} bind:this={gmaIcon}/>
-					</div>
+					</span>
 				{/if}
-			</div>
+			</button>
 		{:else}
-			<div id="icon-container" on:click={browseIcon} use:tippy={$_('default_icon_tip')}>
-				<div id="addon-icon-background" style="background-image: url('{defaultIconUrl}')"></div>
-				<div id="addon-icon"><img src={defaultIconUrl} bind:this={gmaIcon}/></div>
-			</div>
+			<button type="button" id="icon-container" aria-label={$_('choose_icon')} on:click={browseIcon} use:tippy={$_('default_icon_tip')}>
+				<span id="addon-icon-background" style="background-image: url('{defaultIconUrl}')"></span>
+				<span id="addon-icon"><img src={defaultIconUrl} bind:this={gmaIcon}/></span>
+			</button>
 		{/if}
 		<div id="icon-browse-container">
 			{#if gmaIconBase64 && !$updatingAddon}
-				<div id="icon-browse" on:click={removeIcon}><Cross class="icon" size="1rem"/>{$_('remove_icon')}</div>
+				<button type="button" id="icon-browse" on:click={removeIcon}><Cross class="icon" size="1rem"/>{$_('remove_icon')}</button>
 			{:else}
-				<div id="icon-browse" on:click={browseIcon}><Folder class="icon" size="1rem"/>{$_('browse')}</div>
+				<button type="button" id="icon-browse" on:click={browseIcon}><Folder class="icon" size="1rem"/>{$_('browse')}</button>
 			{/if}
 			{#if $updatingAddon && !$isPublishing}
-				<div id="icon-publish" on:click={publishIcon} use:tippy={$_('publish_icon')} class:disabled={gmaIconPath == null}><CloudUpload class="icon" size="1rem"/></div>
+				<button type="button" id="icon-publish" aria-label={$_('publish_icon')} aria-disabled={gmaIconPath == null} on:click={publishIcon} use:tippy={$_('publish_icon')} class:disabled={gmaIconPath == null}><CloudUpload class="icon" size="1rem"/></button>
 			{/if}
 		</div>
 		<details class="icon-options">
@@ -833,7 +833,7 @@
 		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
 			<div class="path-container" bind:this={pathInputContainer}>
 				<input type="text" class:error={pathFailMessage?.length > 0} bind:this={pathInput} id="path" placeholder={$_('addon_path')} required on:change={() => onPathChanged(pathInput.value, true)} value={pathValue}/>
-				<div class="browse icon-button" on:click={browseAddon}><Folder class="icon" size="1rem"/></div>
+				<button type="button" class="browse icon-button" aria-label={$_('browse')} on:click={browseAddon}><Folder class="icon" size="1rem"/></button>
 			</div>
 			<div class="file-layout" class:has-preview={selectedEntry !== null}>
 				<div class="file-list"><FileBrowser fileSelect={path => onPathChanged(path)} dropActive={$preparePublish && activeTab === 'files' && !$isPublishing} background={true} browsePath={pathValue.length > 0 ? pathValue : null} entriesList={gmaEntries} previewEntry={path => selectedEntry = path} selectedPath={selectedEntry} entryAction="open" {openEntry} open={openAddon}/></div>
@@ -1062,6 +1062,13 @@
 		box-shadow: inset 0 0 6px 2px rgb(0 0 0 / 20%);
 		border: 1px solid var(--border-sunken);
 		border-radius: .4rem;
+		display: block;
+		width: 100%;
+		padding: 0;
+	}
+	#icon-container:focus-visible, #icon-browse:focus-visible, #icon-publish:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: 2px;
 	}
 	#icon-browse-container {
 		display: flex;
@@ -1078,6 +1085,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		border: 0;
+		font: inherit;
+		color: inherit;
 	}
 	#icon-publish {
 		margin-left: .5rem;
@@ -1096,6 +1106,7 @@
 		margin-right: .5rem;
 	}
 	#addon-icon {
+		display: block;
 		width: 100%;
 		height: 100%;
 		position: relative;

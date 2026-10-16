@@ -106,20 +106,18 @@
 	}
 
 	function doCallback() {
-		if (!this.classList.contains('disabled')) {
-			switch (extractPath[0]) {
-				case 'browse':
-					return callback({'Directory': extractPath[1]});
+		switch (extractPath[0]) {
+			case 'browse':
+				return callback({'Directory': extractPath[1]});
 
-				case 'tmp':
-					return callback('Temp');
+			case 'tmp':
+				return callback('Temp');
 
-				case 'addons':
-					return callback('Addons');
+			case 'addons':
+				return callback('Addons');
 
-				case 'downloads':
-					return callback('Downloads');
-			}
+			case 'downloads':
+				return callback('Downloads');
 		}
 	}
 </script>
@@ -140,36 +138,36 @@
 	{/if}
 
 	<div id="destinations">
-		<div class="destination" class:active={extractPath[0] === 'browse'} on:hover={extractDestHover} on:click={extractDestBrowse} data-dest="browse">
+		<button type="button" class="destination" class:active={extractPath[0] === 'browse'} aria-pressed={extractPath[0] === 'browse'} on:hover={extractDestHover} on:click={extractDestBrowse} data-dest="browse">
 			<Folder class="icon"/>
-			<div>{$_('browse')}</div>
-		</div>
+			<span>{$_('browse')}</span>
+		</button>
 
-		<div class="destination" class:disabled={!!!AppData.temp_dir} class:active={extractPath[0] === 'tmp'} use:tippy={$_('extract_open_tip')} on:mouseover={extractDestHover} on:click={updateExtractDest} on:mouseleave={extractDestHoverLeave} data-dest="tmp">
+		<button type="button" class="destination" disabled={!AppData.temp_dir} class:active={extractPath[0] === 'tmp'} aria-pressed={extractPath[0] === 'tmp'} use:tippy={$_('extract_open_tip')} on:mouseover={extractDestHover} on:focus={extractDestHover} on:click={updateExtractDest} on:mouseleave={extractDestHoverLeave} on:blur={extractDestHoverLeave} data-dest="tmp">
 			<FolderAdd class="icon"/>
-			<div>{$_('open')}</div>
-		</div>
+			<span>{$_('open')}</span>
+		</button>
 
-		<div class="destination" class:disabled={!!!AppData.gmod_dir} class:active={extractPath[0] === 'addons'} on:mouseover={extractDestHover} on:mouseleave={extractDestHoverLeave} on:click={updateExtractDest} data-dest="addons">
+		<button type="button" class="destination" disabled={!AppData.gmod_dir} class:active={extractPath[0] === 'addons'} aria-pressed={extractPath[0] === 'addons'} on:mouseover={extractDestHover} on:focus={extractDestHover} on:mouseleave={extractDestHoverLeave} on:blur={extractDestHoverLeave} on:click={updateExtractDest} data-dest="addons">
 			<img src="/img/gmod.svg" alt=""/>
-			<div>{$_('addons_folder')}</div>
-		</div>
+			<span>{$_('addons_folder')}</span>
+		</button>
 
-		<div class="destination" class:disabled={!!!AppData.downloads_dir} class:active={extractPath[0] === 'downloads'} on:mouseover={extractDestHover} on:mouseleave={extractDestHoverLeave} on:click={updateExtractDest} data-dest="downloads">
+		<button type="button" class="destination" disabled={!AppData.downloads_dir} class:active={extractPath[0] === 'downloads'} aria-pressed={extractPath[0] === 'downloads'} on:mouseover={extractDestHover} on:focus={extractDestHover} on:mouseleave={extractDestHoverLeave} on:blur={extractDestHoverLeave} on:click={updateExtractDest} data-dest="downloads">
 			<Download class="icon"/>
-			<div>{$_('downloads_folder')}</div>
-		</div>
+			<span>{$_('downloads_folder')}</span>
+		</button>
 	</div>
 
 	{#if AppSettings.destinations.length > 0}
 		<div id="history" class="hide-scroll">
 			{#each AppSettings.destinations as path}
-				<div on:click={extractableHistoryPath} class:active={extractPath[0] === 'browse' && extractPath[1] === path}>{path}</div>
+				<button type="button" on:click={extractableHistoryPath} class:active={extractPath[0] === 'browse' && extractPath[1] === path} aria-pressed={extractPath[0] === 'browse' && extractPath[1] === path}>{path}</button>
 			{/each}
 		</div>
 	{/if}
 
-	<div class="extract-btn" on:click={doCallback} class:disabled={!extractPath[0]}>{text}</div>
+	<button type="button" class="extract-btn" on:click={doCallback} disabled={!extractPath[0]}>{text}</button>
 </Modal>
 
 <style>
@@ -205,8 +203,10 @@
 		flex-direction: column;
 		justify-content: center;
 		align-items: center;
+		font: inherit;
+		color: inherit;
 	}
-	#destinations .destination.disabled {
+	#destinations .destination:disabled {
 		cursor: default !important;
 		pointer-events: none !important;
 		-webkit-pointer-events: none !important;
@@ -221,8 +221,12 @@
 		width: 2.5rem;
 		margin-bottom: .6rem;
 	}
-	#destinations .destination > div {
+	#destinations .destination > span {
 		white-space: nowrap;
+	}
+	#destinations .destination:focus-visible, #history > button:focus-visible, .extract-btn:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: 2px;
 	}
 	input[type='text'] {
 		appearance: none;
@@ -253,7 +257,13 @@
 		border: 1px solid var(--border-sunken);
 		border-radius: .4rem;
 	}
-	#history > div {
+	#history > button {
+		display: block;
+		width: 100%;
+		border: 0;
+		background: none;
+		font: inherit;
+		color: inherit;
 		padding: .6rem;
 		font-size: .9em;
 		text-align: left;
@@ -261,10 +271,10 @@
 		transition: background-color .1s;
 		word-break: break-all;
 	}
-	#history > div:nth-child(2n-1) {
+	#history > button:nth-child(2n-1) {
 		background-color: rgb(0, 0, 0, .12);
 	}
-	#history > div.active {
+	#history > button.active {
 		background-color: var(--bg-sunken-3);
 	}
 	#checkbox {
@@ -284,6 +294,10 @@
 	}
 
 	.extract-btn {
+		display: block;
+		width: 100%;
+		border: 0;
+		font: inherit;
 		padding: .7rem;
 		text-align: center;
 		background-color: var(--neutral);
@@ -295,7 +309,8 @@
 		line-height: 1;
 		transition: background-color .5s;
 	}
-	.extract-btn.disabled {
+	.extract-btn:disabled {
 		background-color: var(--control-hover-alt);
+		cursor: default;
 	}
 </style>

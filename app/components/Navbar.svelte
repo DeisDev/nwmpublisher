@@ -30,26 +30,33 @@
 	let steamConnected = false;
 	let connectionLost = false;
 	{
-		invoke('is_steam_connected').then(connected => {
-			if (connected) connectionLost = false;
-			steamConnected = connected;
-		});
+		let statusEventReceived = false;
 
-		listen('SteamConnected', () => {
-			if (!steamConnected && connectionLost) {
-				playSound('success');
-				connectionLost = false;
-			}
-			steamConnected = true;
-		});
+		// Listen before asking for the current state so a change in between is not lost,
+		// and let any status event win over the possibly older answer
+		Promise.all([
+			listen('SteamConnected', () => {
+				statusEventReceived = true;
+				if (!steamConnected && connectionLost) {
+					playSound('success');
+					connectionLost = false;
+				}
+				steamConnected = true;
+			}),
 
-		listen('SteamDisconnected', () => {
-			if (steamConnected) {
-				playSound('error');
-				connectionLost = true;
-			}
-			steamConnected = false;
-		});
+			listen('SteamDisconnected', () => {
+				statusEventReceived = true;
+				if (steamConnected) {
+					playSound('error');
+					connectionLost = true;
+				}
+				steamConnected = false;
+			}),
+		])
+			.then(() => invoke('is_steam_connected'))
+			.then(connected => {
+				if (!statusEventReceived) steamConnected = connected;
+			});
 	}
 
 	let steamUser = invoke('get_current_user');

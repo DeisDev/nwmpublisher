@@ -36,8 +36,8 @@
 		<p role="alert">{errorMessage}</p>
 	{/if}
 	<div class="buttons">
-		<div class="btn primary" on:click={importSettings}>{$_('migrate_settings_import')}</div>
-		<div class="btn" on:click={startFresh}>{$_('migrate_settings_fresh')}</div>
+		<button type="button" class="btn primary" on:click={importSettings}>{$_('migrate_settings_import')}</button>
+		<button type="button" class="btn" on:click={startFresh}>{$_('migrate_settings_fresh')}</button>
 	</div>
 </Modal>
 
@@ -72,6 +72,13 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
+		border: 0;
+		font: inherit;
+		color: inherit;
+	}
+	.btn:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: 2px;
 	}
 	.btn:active {
 		background: var(--bg-raised);

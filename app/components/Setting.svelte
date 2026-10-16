@@ -96,7 +96,7 @@
 		{#if type === 'directory'}
 			<div class="path-container">
 				<input type="text" {id} name={id} placeholder={initial} {value} on:change={beforeChange || afterChange ? change : null} required={initial == null ? true : null}/>
-				<div class="browse icon-button" on:click={browse}><Folder class="icon" size="1rem"/></div>
+				<button type="button" class="browse icon-button" aria-label={$_('browse')} on:click={browse}><Folder class="icon" size="1rem"/></button>
 			</div>
 		{:else if type === 'text'}
 			<input type="text" {id} name={id} {value} {disabled} spellcheck="false" on:change={beforeChange || afterChange ? change : null}/>

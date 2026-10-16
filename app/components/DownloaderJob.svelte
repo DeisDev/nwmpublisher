@@ -50,7 +50,7 @@
 
 <tr>
 	<td class="controls">
-		<span on:click={cancelJob}><Cross class="icon" size="1rem"/></span>
+		<button type="button" class="cancel" aria-label={$_(job.transaction.finished || job.transaction.error ? 'remove' : 'cancel')} on:click={cancelJob}><Cross class="icon" size="1rem"/></button>
 		<a target="_blank" href="https://steamcommunity.com/sharedfiles/filedetails/?id={job.ws_id}"><LinkChain class="icon" size="1rem"/></a>
 		{#if job.transaction.error || warnings}
 			<JobDiagnostics transaction={job.transaction} context={{ workshopId: job.ws_id, fileName: job.fileName, sourcePath: job.srcPath, path: job.path, type: job.type }}/>
@@ -194,6 +194,17 @@
 	}
 	.controls :global(.icon) {
 		cursor: pointer;
+	}
+	.cancel {
+		font: inherit;
+		color: inherit;
+		background: none;
+		border: 0;
+		padding: 0;
+		vertical-align: middle;
+	}
+	.cancel:focus-visible {
+		outline: 2px solid #127cff;
 	}
 	.controls .warning :global(.icon) {
 		cursor: default;

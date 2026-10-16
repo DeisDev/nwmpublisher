@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Log unhandled errors from the interface instead of dropping them.
 - Retry a failed update check once, then show an icon you can click to try again.
 - Fix task bars hiding Done and error messages, which pushed the checkmark off-center.
+- Fix the Steam status icon sometimes saying you are offline while Steam is connected.
+- Make every button and switch reachable and usable with the keyboard.
 
 ## [3.5.0] - 2026-10-13
 

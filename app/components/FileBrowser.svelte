@@ -200,7 +200,7 @@
 <main id="file-browser" use:folderDrop={dropActive && !!fileSelect}>
 	<div id="nav">
 		{#if browsePath}
-			<div id="up" class="control" on:click={goUp}><ChevronUp class="icon" size="1rem"/></div>
+			<button type="button" id="up" class="control" aria-label={$_('go_up')} on:click={goUp}><ChevronUp class="icon" size="1rem"/></button>
 			<div id="path" class="select hide-scroll" bind:this={pathContainer}>
 				{#if browsing}
 					{browsePath.replace(/\\/g, '/')}{browsing.path.length > 0 ? '/' : ''}{browsing.path}
@@ -208,8 +208,8 @@
 					{browsePath.replace(/\\/g, '/')}
 				{/if}
 			</div>
-			<div id="copy" class="control" on:click={copy} use:tippyFollow={$_('copy_path')}><Copy class="icon" size="1rem"/></div>
-			<div id="open" class="control" on:click={open} use:tippyFollow={$_('open_addon_location')}><Folder class="icon" size="1rem"/></div>
+			<button type="button" id="copy" class="control" aria-label={$_('copy_path')} on:click={copy} use:tippyFollow={$_('copy_path')}><Copy class="icon" size="1rem"/></button>
+			<button type="button" id="open" class="control" aria-label={$_('open_addon_location')} on:click={open} use:tippyFollow={$_('open_addon_location')}><Folder class="icon" size="1rem"/></button>
 		{:else}
 			<div id="path" class="select hide-scroll" bind:this={pathContainer}>
 				<div style="text-align:center">{$_('file_browser')}</div>
@@ -219,12 +219,12 @@
 
 	<div id="entries" class="hide-scroll" class:background={background}>
 		{#if !browsePath && fileSelect}
-			<div id="file-select" on:click={selectFile}>
-				<div>
+			<button type="button" id="file-select" on:click={selectFile}>
+				<span>
 					<FolderAdd class="icon" size="4rem" stroke-width="1"/>
-					<div>{$_('file_browser_select')}</div>
-				</div>
-			</div>
+					<span>{$_('file_browser_select')}</span>
+				</span>
+			</button>
 		{:else if browsing.total_files === 0}
 			<div id="no-files">
 				<div>
@@ -240,11 +240,13 @@
 							<tr on:click={browseDirectory} data-path={dir}>
 								<td><img use:tippyFollow={$_('file_types.folder')} src="/img/silkicons/folder.png" alt=""/></td>
 								<td>
-									{#if entries.shortcut}
-										<span class="shortcut">{entries.shortcut}/</span><span>{entries.shortcut_dest}</span>
-									{:else}
-										<span>{dir}</span>
-									{/if}
+									<button type="button" class="file-name" data-path={dir} on:click|stopPropagation={browseDirectory}>
+										{#if entries.shortcut}
+											<span class="shortcut">{entries.shortcut}/</span><span>{entries.shortcut_dest}</span>
+										{:else}
+											<span>{dir}</span>
+										{/if}
+									</button>
 								</td>
 								<td><span>{entries.total_files === 1 ? $_('items_one') : $_('items_num', { values: { n: entries.total_files } })}</span></td>
 								<td><span>{formatSize(entries.size, $locale)}</span></td>
@@ -351,6 +353,10 @@
 		position: relative;
 		box-sizing: content-box;
 		width: 1rem;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
 	}
 	#nav .control:not(:last-child) {
 		padding-right: 0;
@@ -399,17 +405,24 @@
 	#file-select {
 		cursor: pointer;
 		transition: opacity .25s;
+		border: 0;
+		background: none;
+		color: inherit;
+		font: inherit;
 	}
-	#file-select:hover {
+	#file-select:hover, #file-select:focus-visible {
 		opacity: 1;
 	}
-	#file-select > div, #no-files > div {
+	#file-select > span, #no-files > div {
 		text-align: center;
 	}
-	#file-select > div > div, #no-files > div > div {
+	#file-select > span > span {
+		display: block;
+	}
+	#file-select > span > span, #no-files > div > div {
 		font-size: 1.3em;
 	}
-	#file-select > div > :global(.icon), #no-files > div > :global(.dead) {
+	#file-select > span > :global(.icon), #no-files > div > :global(.dead) {
 		margin-bottom: 1rem;
 	}
 </style>

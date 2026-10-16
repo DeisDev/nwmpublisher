@@ -114,7 +114,7 @@
 	<div id="input-container">
 		<input type="text" id="search" placeholder={$_('search')} on:input={updateSearch} on:paste={updateSearch} on:change={updateSearch} on:keydown={updateSearch} bind:this={searchInput}/>
 		{#if isSearching}
-			<span id="cancel-search" on:click={clearSearch}><Cross class="icon" size="1rem"/></span>
+			<button type="button" id="cancel-search" aria-label={$_('clear_search')} on:click={clearSearch}><Cross class="icon" size="1rem"/></button>
 		{:else}
 			<Search class="icon" id="search-icon" size="1rem"/>
 		{/if}
@@ -124,7 +124,7 @@
 			<Loading size="1.5rem"/>
 		{:else if searchResults.length > 0}
 			{#each searchResults as result}
-				<div class="result" on:click={() => openResult(result[1])}>
+				<div class="result">
 					{#if result[1].source === 'my_workshop'}
 						{#await Steam.getWorkshopAddon(result[1].association)}
 							<span class="image"><Loading/></span>
@@ -158,21 +158,23 @@
 					{/if}
 					<div class="label">
 						<div>
-							{#if result[1] && result[1].source === 'installed_addons' && result[1].association[1]}
-								{#await Steam.getWorkshopAddon(result[1].association[1])}
-									{result[0]}
-								{:then workshop}
-									{#if workshop.dead}
+							<button type="button" class="open" on:click={() => openResult(result[1])}>
+								{#if result[1] && result[1].source === 'installed_addons' && result[1].association[1]}
+									{#await Steam.getWorkshopAddon(result[1].association[1])}
 										{result[0]}
-									{:else}
-										{workshop.title}
-									{/if}
-								{:catch}
+									{:then workshop}
+										{#if workshop.dead}
+											{result[0]}
+										{:else}
+											{workshop.title}
+										{/if}
+									{:catch}
+										{result[0]}
+									{/await}
+								{:else}
 									{result[0]}
-								{/await}
-							{:else}
-								{result[0]}
-							{/if}
+								{/if}
+							</button>
 							{#if result[1] && result[1].source === 'my_workshop'}
 								<a class="association" target="_blank" href="https://steamcommunity.com/sharedfiles/filedetails/?id={result[1].association}">https://steamcommunity.com/sharedfiles/filedetails/?id={result[1].association}</a>
 							{:else}
@@ -237,8 +239,22 @@
 		pointer-events: none;
 		-webkit-pointer-events: none;
 	}
-	#cancel-search > :global(.icon) {
+	#cancel-search {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: 0;
+		width: 2.5rem;
+		padding: 0;
+		border: 0;
+		border-radius: 4px;
+		background: none;
+		color: inherit;
 		cursor: pointer;
+	}
+	#cancel-search:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: -2px;
 	}
 	#input-container {
 		z-index: 2;
@@ -267,10 +283,39 @@
 		-webkit-pointer-events: none;
 	}
 	main > #search-results .result {
+		position: relative;
 		display: flex;
 		padding: 1rem;
 		cursor: pointer;
 		transition: background-color .1s;
+	}
+	#search-results .open {
+		display: block;
+		width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		color: inherit;
+		text-align: start;
+		cursor: pointer;
+	}
+	#search-results .open::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+	}
+	#search-results .open:focus-visible {
+		outline: none;
+	}
+	#search-results .open:focus-visible::after {
+		box-shadow: inset 0 0 0 2px #127cff;
+	}
+	#search-results a.association {
+		position: relative;
+		z-index: 1;
 	}
 	main > #search-results .result:hover {
 		background-color: rgb(0,0,0,.2);

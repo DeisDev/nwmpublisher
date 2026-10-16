@@ -701,6 +701,10 @@
 	"publish_icon": "Publish New Icon (Will NOT update the addon)",
 
 	"copy_path": "Copy Path",
+	"go_up": "Up One Folder",
+	"clear_search": "Clear Search",
+	"remove": "Remove",
+	"choose_icon": "Choose Icon",
 
 	"workshop_export": {
 		"title": "Title: {value}",

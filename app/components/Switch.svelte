@@ -32,11 +32,11 @@
 </script>
 
 <span class="switch-container">
-	<label for={id}><slot></slot></label>
-	<div class="switch" on:click={toggle} class:checked={checked}>
-		<input type="checkbox" id={id} name={id} checked={value ? true : null} bind:this={checkbox}/>
-		<div class="circle"></div>
-	</div>
+	<label id={id + '-label'} for={id + '-switch'}><slot></slot></label>
+	<button type="button" id={id + '-switch'} class="switch" role="switch" aria-checked={checked} aria-labelledby={id + '-label'} on:click={toggle} class:checked={checked}>
+		<span class="circle"></span>
+	</button>
+	<input type="checkbox" id={id} name={id} checked={value ? true : null} bind:this={checkbox}/>
 </span>
 
 <style>
@@ -49,7 +49,7 @@
 		cursor: pointer;
 	}
 
-	.switch > input {
+	.switch-container > input {
 		visibility: hidden;
 		position: absolute;
 		width: 0;
@@ -65,6 +65,13 @@
 		transition: background-color .25s;
 		display: inline-flex;
 		box-shadow: inset 0 0 3px 0px rgb(0 0 0 / 50%);
+		border: 0;
+		padding: 0;
+		cursor: pointer;
+	}
+	.switch:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: 2px;
 	}
 	.switch > .circle {
 		position: absolute;

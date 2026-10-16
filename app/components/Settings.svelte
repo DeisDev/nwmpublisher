@@ -191,9 +191,12 @@
 	</form>
 </Modal>
 
-<span class="nav-icon" use:tippy={$_('settings.settings')} on:click={toggle}><Gear class="icon" size="1.5rem" stroke-width="1.5" id="settings"/></span>
+<button type="button" class="nav-icon" aria-label={$_('settings.settings')} use:tippy={$_('settings.settings')} on:click={toggle}><Gear class="icon" size="1.5rem" stroke-width="1.5" id="settings"/></button>
 
 <style>
+	.nav-icon { padding: 0; border: 0; background: none; color: inherit; font: inherit; line-height: 0; }
+	.nav-icon:focus-visible { outline: 2px solid #127cff; outline-offset: 2px; }
+	.nav-icon:focus-visible > :global(.icon) { opacity: 1; }
 	h2 { margin: 0 0 1rem; font-size: 1.1rem; }
 	h3 { margin: 0 0 1.25rem; font-size: .95rem; }
 	.discord-unavailable { color: var(--text-muted); font-size: .8rem; margin: -.5rem 0 1rem; }
