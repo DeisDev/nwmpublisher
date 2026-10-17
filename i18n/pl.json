@@ -695,6 +695,7 @@
 
 	"locating": "Lokalizowanie",
 	"decompressing": "Dekompresowanie {progress}",
+	"verifying": "Weryfikowanie {progress}",
 	"reading_metadata": "Czytanie Metadaty",
 	"fetching_workshop_info": "Pobieranie szczegółów Warsztatu",
 

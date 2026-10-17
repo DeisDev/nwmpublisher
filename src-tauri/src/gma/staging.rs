@@ -115,18 +115,22 @@ impl ExtractionStage {
 	}
 
 	fn merge(&mut self, target: &Directory, files: &[String], generated: &[&StagedFile]) -> Result<Vec<String>, GMAError> {
-		let mut journal: Vec<(Directory, PathBuf, PathBuf, bool, bool)> = Vec::new();
-		let mut directories: Vec<(Directory, PathBuf)> = Vec::new();
+		// Journal relative paths, not directory handles: one open handle per file exceeds
+		// the open file limit on large addons.
+		let mut journal: Vec<(&Path, bool, bool)> = Vec::new();
+		let mut directories: Vec<PathBuf> = Vec::new();
 		let mut generated_files: Vec<PathBuf> = Vec::new();
 		let result = (|| -> Result<Vec<String>, GMAError> {
 			for (index, path) in files.iter().enumerate() {
 				let mut parent = target.clone();
+				let mut relative = PathBuf::new();
 				let path = Path::new(path);
 				for part in path.parent().unwrap().components() {
 					let part = PathBuf::from(part.as_os_str());
+					relative.push(&part);
 					if parent.kind(&part).map_err(|error| GMAError::io("inspect extraction directory", &parent.path.join(&part), error))?.is_none() {
 						parent.mkdir(&part).map_err(|error| GMAError::io("create directory", &parent.path.join(&part), error))?;
-						directories.push((parent.clone(), part.clone()));
+						directories.push(relative.clone());
 					}
 					parent = parent.child(&part, false).map_err(|error| GMAError::io("create directory", &parent.path.join(&part), error))?;
 				}
@@ -137,11 +141,10 @@ impl ExtractionStage {
 				if kind.is_some() {
 					parent.rename(&leaf, &self.directory, &backup).map_err(|error| GMAError::io("back up extracted file", &parent.path.join(&leaf), error))?;
 				}
-				journal.push((parent, leaf, backup, kind.is_some(), false));
-				let (parent, leaf, _, _, installed) = journal.last_mut().unwrap();
-				self.directory.rename(Path::new(&format!("new-{index}")), parent, leaf)
-					.map_err(|error| GMAError::io("commit extracted file", &parent.path.join(&*leaf), error))?;
-				*installed = true;
+				journal.push((path, kind.is_some(), false));
+				self.directory.rename(Path::new(&format!("new-{index}")), &parent, &leaf)
+					.map_err(|error| GMAError::io("commit extracted file", &parent.path.join(&leaf), error))?;
+				journal.last_mut().unwrap().2 = true;
 			}
 			let mut names = Vec::new();
 			'generated: for generated in generated {
@@ -177,12 +180,15 @@ impl ExtractionStage {
 		if let Err(error) = result {
 			let rollback = (|| -> io::Result<()> {
 				for leaf in generated_files.drain(..).rev() { target.remove(&leaf, false)?; }
-				for (index, (parent, leaf, backup, existed, installed)) in journal.iter().enumerate().rev() {
+				for (index, (path, existed, installed)) in journal.iter().enumerate().rev() {
+					let parent = target.descendant(path.parent().unwrap())?;
+					let leaf = Path::new(path.file_name().unwrap());
 					if *installed { parent.rename(leaf, &self.directory, Path::new(&format!("new-{index}")))?; }
-					if *existed { self.directory.rename(backup, parent, leaf)?; }
+					if *existed { self.directory.rename(Path::new(&format!("old-{index}")), &parent, leaf)?; }
 				}
-				drop(journal);
-				while let Some((parent, name)) = directories.pop() { parent.remove(&name, true)?; }
+				while let Some(directory) = directories.pop() {
+					target.descendant(directory.parent().unwrap())?.remove(Path::new(directory.file_name().unwrap()), true)?;
+				}
 				Ok(())
 			})();
 			if let Err(rollback) = rollback {
@@ -224,6 +230,24 @@ mod tests {
 		stage.directory.create_file(Path::new("new-1")).unwrap().write_all(b"blocked").unwrap();
 		assert!(stage.commit(Path::new("output"), ExtractionOverwriteMode::Overwrite, &["a".into(), "blocked".into()], &[]).is_err());
 		assert_eq!(std::fs::read(root.path().join("output/a")).unwrap(), b"original");
+		assert!(root.path().join("output/blocked").is_dir());
+		stage.cleanup().unwrap();
+	}
+	#[test]
+	fn merge_failure_restores_nested_files_and_removes_created_directories() {
+		let root = tempfile::tempdir().unwrap();
+		std::fs::create_dir_all(root.path().join("output/lua/autorun")).unwrap();
+		std::fs::write(root.path().join("output/lua/autorun/a.lua"), b"original").unwrap();
+		std::fs::create_dir(root.path().join("output/blocked")).unwrap();
+		let parent = Directory::open(&root.path().canonicalize().unwrap(), false).unwrap();
+		let mut stage = ExtractionStage::new(parent).unwrap();
+		stage.directory.create_file(Path::new("new-0")).unwrap().write_all(b"replacement").unwrap();
+		stage.directory.create_file(Path::new("new-1")).unwrap().write_all(b"added").unwrap();
+		stage.directory.create_file(Path::new("new-2")).unwrap().write_all(b"blocked").unwrap();
+		let files = ["lua/autorun/a.lua".into(), "materials/models/b.vmt".into(), "blocked".into()];
+		assert!(stage.commit(Path::new("output"), ExtractionOverwriteMode::Overwrite, &files, &[]).is_err());
+		assert_eq!(std::fs::read(root.path().join("output/lua/autorun/a.lua")).unwrap(), b"original");
+		assert!(!root.path().join("output/materials").exists());
 		assert!(root.path().join("output/blocked").is_dir());
 		stage.cleanup().unwrap();
 	}

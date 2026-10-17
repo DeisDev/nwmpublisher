@@ -8,7 +8,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::{ArcBytes, NTStringReader};
 
-use super::{GMAEntry, GMAError, GMAFile, GMAMetadata};
+use super::{ByteProgress, GMAEntry, GMAError, GMAFile, GMAMetadata};
 
 pub(super) fn is_unsafe_entry_path(path: &str) -> bool {
 	if path.is_empty() || path.len() > 4096 {
@@ -220,41 +220,48 @@ impl GMAFile {
 			Ok(Some(handle))
 		}
 	}
-	pub(super) fn validate_payloads(&self, transaction: &crate::Transaction) -> Result<(), GMAError> {
+	pub(super) fn validate_payloads(&self, progress: &mut ByteProgress) -> Result<(), GMAError> {
 		let entries = self.entries.as_ref().ok_or(GMAError::FormatError)?;
 		let mut reader = self.read()?;
 		let mut buffer = [0; 64 * 1024];
 		let mut end = self.pointers.entries;
 		for entry in entries.values() {
-			let offset = self.pointers.entries.checked_add(entry.index).ok_or(GMAError::FormatError)?;
-			end = end.max(offset.checked_add(entry.size).ok_or(GMAError::FormatError)?);
-			reader.seek(SeekFrom::Start(offset)).map_err(|error| GMAError::io("seek archive entry", &self.path, error))?;
+			end = end.max(self.pointers.entries.checked_add(entry.index).and_then(|offset| offset.checked_add(entry.size)).ok_or(GMAError::FormatError)?);
+		}
+		// The footer decides whether a second full pass is needed, and progress must count it from the start.
+		let actual_size = crate::stream_len(&mut *reader).map_err(|error| GMAError::io("measure archive", &self.path, error))?;
+		let footer = if actual_size.checked_sub(end) == Some(4) {
+			reader.seek(SeekFrom::Start(end)).map_err(|error| GMAError::io("seek archive footer", &self.path, error))?;
+			reader.read_u32::<LittleEndian>().map_err(|error| GMAError::io("read archive footer", &self.path, error))?
+		} else { 0 };
+		progress.total += entries.values().map(|entry| entry.size).sum::<u64>() + if footer == 0 { 0 } else { end };
+		for entry in entries.values() {
+			reader.seek(SeekFrom::Start(self.pointers.entries + entry.index)).map_err(|error| GMAError::io("seek archive entry", &self.path, error))?;
 			let mut remaining = entry.size;
 			let mut hash = crc32fast::Hasher::new();
 			while remaining > 0 {
-				if transaction.aborted() { return Err(GMAError::Cancelled); }
+				if progress.transaction.aborted() { return Err(GMAError::Cancelled); }
 				let count = remaining.min(buffer.len() as u64) as usize;
 				reader.read_exact(&mut buffer[..count]).map_err(|error| GMAError::io("read archive entry", &self.path, error))?;
 				hash.update(&buffer[..count]);
 				remaining -= count as u64;
+				progress.advance(count);
 			}
 			if entry.crc != 0 && entry.crc != hash.finalize() { return Err(GMAError::Checksum(entry.path.clone())); }
 		}
-		let actual_size = crate::stream_len(&mut *reader).map_err(|error| GMAError::io("measure archive", &self.path, error))?;
 		if actual_size == end { return Ok(()); } // Legacy archives may omit the footer.
 		if actual_size.checked_sub(end) != Some(4) { return Err(GMAError::FormatError); }
-		reader.seek(SeekFrom::Start(end)).map_err(|error| GMAError::io("seek archive footer", &self.path, error))?;
-		let footer = reader.read_u32::<LittleEndian>().map_err(|error| GMAError::io("read archive footer", &self.path, error))?;
 		if footer == 0 { return Ok(()); } // Facepunch gmad -nocrc explicitly writes zero CRCs.
 		let checksummed = end;
 		reader.seek(SeekFrom::Start(0)).map_err(|error| GMAError::io("seek archive", &self.path, error))?;
 		let mut hash = crc32fast::Hasher::new();
 		while end > 0 {
-			if transaction.aborted() { return Err(GMAError::Cancelled); }
+			if progress.transaction.aborted() { return Err(GMAError::Cancelled); }
 			let count = end.min(buffer.len() as u64) as usize;
 			reader.read_exact(&mut buffer[..count]).map_err(|error| GMAError::io("read archive checksum", &self.path, error))?;
 			hash.update(&buffer[..count]);
 			end -= count as u64;
+			progress.advance(count);
 		}
 		if hash.finalize() == footer { return Ok(()); }
 		// Older gmpublisher writers checksummed only their unflushed 8 KiB write buffer, so the footer covers a tail of the archive.
@@ -308,14 +315,16 @@ mod tests {
 			let mut gma = archive(&[("lua/a.lua", 4, 0)], b"test", footer);
 			gma.entries().unwrap();
 			let transaction = crate::transactions::new_extraction();
-			gma.validate_payloads(&transaction).unwrap();
+			let mut progress = ByteProgress::new(&transaction, 0);
+			gma.validate_payloads(&mut progress).unwrap();
+			assert_eq!(progress.done, progress.total);
 			transaction.finished(());
 		}
 		for (crc, footer) in [(1, None), (0, Some(1))] {
 			let mut gma = archive(&[("lua/a.lua", 4, crc)], b"test", footer);
 			gma.entries().unwrap();
 			let transaction = crate::transactions::new_extraction();
-			assert!(matches!(gma.validate_payloads(&transaction), Err(GMAError::Checksum(_))));
+			assert!(matches!(gma.validate_payloads(&mut ByteProgress::new(&transaction, 0)), Err(GMAError::Checksum(_))));
 			transaction.finished(());
 		}
 	}

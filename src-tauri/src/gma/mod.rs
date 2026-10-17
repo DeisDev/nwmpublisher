@@ -187,6 +187,22 @@ pub struct GMAEntry {
 	pub index: u64,
 }
 
+pub(super) struct ByteProgress<'a> {
+	pub transaction: &'a crate::Transaction,
+	pub total: u64,
+	done: u64,
+}
+impl<'a> ByteProgress<'a> {
+	pub fn new(transaction: &'a crate::Transaction, total: u64) -> Self {
+		Self { transaction, total, done: 0 }
+	}
+
+	pub fn advance(&mut self, bytes: usize) {
+		self.done += bytes as u64;
+		self.transaction.progress(self.done as f64 / self.total.max(1) as f64);
+	}
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GMAFile {

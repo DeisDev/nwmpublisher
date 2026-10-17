@@ -695,6 +695,7 @@
 
 	"locating": "Locating",
 	"decompressing": "Decompressing {progress}",
+	"verifying": "Verifying {progress}",
 	"reading_metadata": "Reading Metadata",
 	"fetching_workshop_info": "Getting Workshop details",
 

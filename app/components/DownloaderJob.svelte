@@ -112,8 +112,8 @@
 		<td class="progress">
 			<div class="progress" style="width: calc({job.transaction.progress}% - .6rem)"></div>
 			<div class="pct">
-				{#if job.transaction.status === 'decompressing'}
-					{$_('decompressing', { values: { progress: job.transaction.progress + '%' } })}
+				{#if job.transaction.status === 'decompressing' || job.transaction.status === 'verifying'}
+					{$_(job.transaction.status, { values: { progress: job.transaction.progress + '%' } })}
 				{:else}
 					{job.transaction.progress === 0 ? $_(job.transaction.status ?? 'queued') : (job.transaction.progress + '%')}
 				{/if}

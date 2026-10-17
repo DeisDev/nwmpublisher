@@ -6,7 +6,7 @@ use std::{
 
 use crate::transactions::Transaction;
 
-use super::{whitelist, workshop::WorkshopInfo, GMAEntry, GMAError, GMAFile, GMAMetadata, GMAReader};
+use super::{whitelist, workshop::WorkshopInfo, ByteProgress, GMAEntry, GMAError, GMAFile, GMAMetadata, GMAReader};
 
 use rayon::ThreadPool;
 use super::{output::Directory, staging::{ExtractionStage, StagedFile, ICON_LEAF, METADATA_LEAF}};
@@ -151,7 +151,7 @@ impl GMAFile {
 		handle: &mut GMAReader,
 		entry_path: &Path,
 		entry: &GMAEntry,
-		transaction: &Transaction,
+		progress: &mut ByteProgress,
 		file: File,
 	) -> Result<(), GMAError> {
 		let offset = self.pointers.entries.checked_add(entry.index).ok_or(GMAError::FormatError)?;
@@ -163,12 +163,13 @@ impl GMAFile {
 		let mut buffer = [0; 64 * 1024];
 		let mut hash = crc32fast::Hasher::new();
 		while remaining > 0 {
-			if transaction.aborted() { return Err(GMAError::Cancelled); }
+			if progress.transaction.aborted() { return Err(GMAError::Cancelled); }
 			let count = remaining.min(buffer.len() as u64) as usize;
 			handle.read_exact(&mut buffer[..count]).map_err(|error| GMAError::io("read archive entry", &self.path, error))?;
 			writer.write_all(&buffer[..count]).map_err(|error| GMAError::io("write extracted file", entry_path, error))?;
 			hash.update(&buffer[..count]);
 			remaining -= count as u64;
+			progress.advance(count);
 		}
 		if entry.crc != 0 && hash.finalize() != entry.crc { return Err(GMAError::Checksum(entry.path.clone())); }
 		writer.flush().map_err(|error| GMAError::io("flush extracted file", entry_path, error))?;
@@ -181,7 +182,6 @@ impl GMAFile {
 	fn extract_staged(&self, destination: ExtractDestination, transaction: &Transaction, open: bool, ignore_whitelist: bool, single: Option<String>, options: &ExtractOptions) -> Result<Extracted, GMAError> {
 		let result = (|| {
 			if transaction.aborted() { return Err(GMAError::Cancelled); }
-			self.validate_payloads(transaction)?;
 			let entries = self.entries.as_ref().ok_or(GMAError::FormatError)?;
 			let mut files: Vec<_> = if let Some(path) = &single {
 				vec![entries.get(path).ok_or(GMAError::EntryNotFound)?]
@@ -198,6 +198,10 @@ impl GMAFile {
 			// Generated metadata owns addon.json, just as in the original extraction contract.
 			if json.is_some() && files.iter().any(|entry| entry.path.to_lowercase().starts_with("addon.json/")) { return Err(GMAError::DuplicateEntry("addon.json".into())); }
 			if json.is_some() { files.retain(|entry| !entry.path.eq_ignore_ascii_case("addon.json")); }
+			transaction.status("verifying");
+			let mut progress = ByteProgress::new(transaction, files.iter().map(|entry| entry.size).sum());
+			self.validate_payloads(&mut progress)?;
+			transaction.status("extracting");
 			let mut paths: Vec<String> = files.iter().map(|entry| entry.path.clone()).collect();
 			if json.is_some() { paths.push("addon.json".into()); }
 			let mut workshop = options.workshop.clone().unwrap_or_default();
@@ -225,8 +229,7 @@ impl GMAFile {
 				for (index, entry) in files.iter().enumerate() {
 					let leaf = PathBuf::from(format!("new-{index}"));
 					let file = staging.directory.create_file(&leaf).map_err(|error| GMAError::io("create extracted file", &staging.directory.path.join(&leaf), error))?;
-					self.stream_entry_bytes(&mut reader, &staging.directory.path.join(&leaf), entry, transaction, file)?;
-					transaction.progress((index + 1) as f64 / paths.len().max(1) as f64);
+					self.stream_entry_bytes(&mut reader, &staging.directory.path.join(&leaf), entry, &mut progress, file)?;
 				}
 				if let Some(json) = json {
 					let leaf = PathBuf::from(format!("new-{}", files.len()));

@@ -49,6 +49,7 @@
 		const size = gmaSize;
 		invoke('extract_preview_entry', { gmaPath, entryPath })
 			.then(transactionId => new Transaction(transactionId, transaction => {
+				if (transaction.status === 'verifying') return $_('verifying', { values: { progress: transaction.progress + '%' } });
 				return $_('extracting_progress', { values: {
 					pct: transaction.progress,
 					data: formatSize((transaction.progress / 100) * size),
@@ -64,6 +65,7 @@
 		const size = gmaSize;
 		invoke('extract_preview_gma', { gmaPath, dest })
 			.then(transactionId => new Transaction(transactionId, transaction => {
+				if (transaction.status === 'verifying') return $_('verifying', { values: { progress: transaction.progress + '%' } });
 				return $_('extracting_progress', { values: {
 					pct: transaction.progress,
 					data: formatSize((transaction.progress / 100) * size),

@@ -695,6 +695,7 @@
 
 	"locating": "Bulunuyor",
 	"decompressing": "Ayıklanıyor {progress}",
+	"verifying": "Doğrulanıyor {progress}",
 	"reading_metadata": "Metadata Okunuyor",
 	"fetching_workshop_info": "Atölye ayrıntıları alınıyor",
 

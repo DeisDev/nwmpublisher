@@ -695,6 +695,7 @@
 
 	"locating": "正在定位",
 	"decompressing": "正在解压 {progress}",
+	"verifying": "正在校验 {progress}",
 	"reading_metadata": "读取元数据...",
 	"fetching_workshop_info": "正在获取创意工坊详情",
 

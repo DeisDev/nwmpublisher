@@ -200,6 +200,7 @@ import { playSound } from '../sounds';
 
 		invoke('extract_gma', { gmaPath: (await gma).path, dest })
 			.then(transactionId => new Transaction(transactionId, transaction => {
+				if (transaction.status === 'verifying') return $_('verifying', { values: { progress: transaction.progress + '%' } });
 				return $_('extracting_progress', { values: {
 					pct: transaction.progress,
 					data: formatSize((transaction.progress / 100) * gmaSize),

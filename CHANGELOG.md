@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix extracting addons with thousands of files failing with "Too many open files".
+- Fix extraction progress staying at 0% and then jumping ahead. It now shows "Verifying" while the addon is checked.
+
 ## [3.6.0] - 2026-10-16
 
 ### Added

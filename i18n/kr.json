@@ -695,6 +695,7 @@
 
 	"locating": "찾는중..",
 	"decompressing": "압축해제 {progress}",
+	"verifying": "검증 중 {progress}",
 	"reading_metadata": "메타데이터 읽는중..",
 	"fetching_workshop_info": "창작마당 정보를 가져오는 중",
 

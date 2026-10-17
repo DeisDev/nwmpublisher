@@ -129,6 +129,10 @@ impl Directory {
 		})
 	}
 
+	pub fn descendant(&self, path: &Path) -> io::Result<Self> {
+		path.components().try_fold(self.clone(), |directory, part| directory.child(Path::new(part.as_os_str()), false))
+	}
+
 	pub fn mkdir(&self, child: &Path) -> io::Result<()> {
 		name(child)?;
 		#[cfg(unix)] {

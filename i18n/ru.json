@@ -695,6 +695,7 @@
 
 	"locating": "Нахождение",
 	"decompressing": "Распаковка {progress}",
+	"verifying": "Проверка {progress}",
 	"reading_metadata": "Считывание метаданных",
 	"fetching_workshop_info": "Получение сведений о мастерской",
 
