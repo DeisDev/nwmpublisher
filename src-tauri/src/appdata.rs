@@ -100,6 +100,8 @@ pub enum PreviewLayout {
 	Horizontal,
 }
 
+const PREVIEW_SPLIT_RANGE: std::ops::RangeInclusive<f64> = 0.1..=0.9;
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {
@@ -276,6 +278,8 @@ pub struct Settings {
 	pub extract_overwrite_mode: ExtractionOverwriteMode,
 	pub addon_cleaner_permanent_delete: bool,
 	pub bbcode_preview_layout: PreviewLayout,
+	pub bbcode_preview_first: bool,
+	pub bbcode_preview_split: f64,
 	pub bbcode_sync_scroll: bool,
 	pub bbcode_steam_colors: bool,
 	pub bbcode_syntax_highlighting: bool,
@@ -335,6 +339,8 @@ impl Default for Settings {
 			extract_overwrite_mode: ExtractionOverwriteMode::default(),
 			addon_cleaner_permanent_delete: false,
 			bbcode_preview_layout: PreviewLayout::Horizontal,
+			bbcode_preview_first: false,
+			bbcode_preview_split: 0.5,
 			bbcode_sync_scroll: true,
 			bbcode_steam_colors: true,
 			bbcode_syntax_highlighting: true,
@@ -429,6 +435,9 @@ impl Settings {
 		self.destinations.truncate(20);
 		if !crate::gma::filename::valid_metadata_file_name(&self.extract_metadata_filename) {
 			self.extract_metadata_filename = DEFAULT_METADATA_FILE_NAME.to_owned();
+		}
+		if !PREVIEW_SPLIT_RANGE.contains(&self.bbcode_preview_split) {
+			self.bbcode_preview_split = Settings::default().bbcode_preview_split;
 		}
 	}
 }
@@ -615,6 +624,7 @@ fn patched_settings(settings: &Settings, patch: serde_json::Map<String, serde_js
 	let mut value = serde_json::to_value(settings).map_err(|error| error.to_string())?;
 	let fields = value.as_object_mut().unwrap();
 	let metadata_name = patch.contains_key("extract_metadata_filename");
+	let preview_split = patch.contains_key("bbcode_preview_split");
 	for (key, value) in patch {
 		if !fields.contains_key(&key) || matches!(key.as_str(), "window_size" | "window_maximized" | "changelogs" | "my_workshop_local_paths") {
 			return Err(format!("ERR_SETTINGS_FIELD:{}", key));
@@ -624,6 +634,9 @@ fn patched_settings(settings: &Settings, patch: serde_json::Map<String, serde_js
 	let settings: Settings = serde_json::from_value(value).map_err(|error| error.to_string())?;
 	if metadata_name && !crate::gma::filename::valid_metadata_file_name(&settings.extract_metadata_filename) {
 		return Err("ERR_METADATA_FILE_NAME".into());
+	}
+	if preview_split && !PREVIEW_SPLIT_RANGE.contains(&settings.bbcode_preview_split) {
+		return Err("ERR_SETTINGS_PREVIEW_SPLIT".into());
 	}
 	Ok(settings)
 }
@@ -999,6 +1012,30 @@ mod tests {
 			assert_eq!(loaded.bbcode_steam_colors, enabled);
 			assert!(!loaded.sounds);
 		}
+	}
+
+	#[test]
+	fn preview_split_and_side_validate_and_round_trip() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
+		assert!(!defaults.bbcode_preview_first);
+		assert_eq!(defaults.bbcode_preview_split, 0.5);
+		let patch = serde_json::json!({"bbcode_preview_first": true, "bbcode_preview_split": 0.25});
+		let settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert!(loaded.bbcode_preview_first);
+		assert_eq!(loaded.bbcode_preview_split, 0.25);
+		assert!(!loaded.sounds);
+		for split in [0.05, 0.95, -1.0, 2.0] {
+			let patch = serde_json::json!({"bbcode_preview_split": split});
+			assert_eq!(super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap_err(), "ERR_SETTINGS_PREVIEW_SPLIT", "{split}");
+		}
+		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"bbcode_preview_split": "wide"})).unwrap()).is_err());
+		let mut damaged: Settings = serde_json::from_str(r#"{"bbcode_preview_split":4,"bbcode_preview_first":true}"#).unwrap();
+		damaged.sanitize();
+		assert_eq!(damaged.bbcode_preview_split, 0.5);
+		assert!(damaged.bbcode_preview_first);
+		let unrelated = super::patched_settings(&damaged, serde_json::from_value(serde_json::json!({"sounds": true})).unwrap());
+		assert!(unrelated.is_ok());
 	}
 
 	#[test]

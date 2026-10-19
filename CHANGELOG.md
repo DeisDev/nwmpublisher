@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Drag to resize the description and changelog previews, and swap them to the other side.
+
 ### Fixed
 
 - Fix extracting addons with thousands of files failing with "Too many open files".

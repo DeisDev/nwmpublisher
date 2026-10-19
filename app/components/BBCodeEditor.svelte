@@ -2,12 +2,15 @@
 	import { writable } from 'svelte/store';
 	const savingLayout = writable(false);
 	const savingScrollSync = writable(false);
+	const savingSide = writable(false);
 </script>
 
 <script>
 	import { _ } from 'svelte-i18n';
 	import { saveSettings, settings } from '../settings.js';
 	import { message } from '@tauri-apps/plugin-dialog';
+	import ArrowLeftRight from '@lucide/svelte/icons/arrow-left-right';
+	import ArrowUpDown from '@lucide/svelte/icons/arrow-up-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import FileInput from '@lucide/svelte/icons/file-input';
 	import { createEventDispatcher, onDestroy, tick, afterUpdate } from 'svelte';
@@ -55,6 +58,98 @@
 			await message($_('settings_save_failed') + ': ' + String(error), { kind: 'error' });
 		} finally {
 			$savingScrollSync = false;
+		}
+	}
+
+	async function swapSides() {
+		const first = !$settings.bbcode_preview_first;
+		$savingSide = true;
+		try {
+			await saveSettings({ bbcode_preview_first: first });
+			AppSettings.bbcode_preview_first = first;
+		} catch (error) {
+			await message($_('settings_save_failed') + ': ' + String(error), { kind: 'error' });
+		} finally {
+			$savingSide = false;
+		}
+	}
+
+	const paneMinRem = 9;
+	let panes;
+	let splitter;
+	let split;
+	let resizing = null;
+	let splitTimer = null;
+	$: split = $settings.bbcode_preview_split;
+	$: horizontal = $settings.bbcode_preview_layout === 'horizontal';
+
+	function firstSplit() {
+		return $settings.bbcode_preview_first ? 1 - split : split;
+	}
+
+	function splitSpace() {
+		const bounds = panes.getBoundingClientRect();
+		const handle = splitter.getBoundingClientRect();
+		return horizontal ? bounds.width - handle.width : bounds.height - handle.height;
+	}
+
+	function splitDirection() {
+		return horizontal && getComputedStyle(panes).direction === 'rtl' ? -1 : 1;
+	}
+
+	function moveSplitter(first, space = splitSpace()) {
+		const limit = Math.min(.5, Math.max(.1, paneMinRem * parseFloat(getComputedStyle(document.documentElement).fontSize) / space));
+		first = Math.min(1 - limit, Math.max(limit, first));
+		// Rounding keeps 1 - first from drifting outside the saved range.
+		split = Math.round(($settings.bbcode_preview_first ? 1 - first : first) * 10000) / 10000;
+	}
+
+	function startResize(event) {
+		if (event.button !== 0) return;
+		event.preventDefault();
+		splitter.setPointerCapture(event.pointerId);
+		const direction = splitDirection();
+		resizing = { origin: (horizontal ? event.clientX : event.clientY) * direction, direction, first: firstSplit(), space: splitSpace() };
+	}
+
+	function resize(event) {
+		if (!resizing) return;
+		const offset = (horizontal ? event.clientX : event.clientY) * resizing.direction - resizing.origin;
+		moveSplitter(resizing.first + offset / resizing.space, resizing.space);
+	}
+
+	function endResize() {
+		if (!resizing) return;
+		resizing = null;
+		saveSplit();
+	}
+
+	function resizeKey(event) {
+		const step = (horizontal ? { ArrowLeft: -1, ArrowRight: 1 } : { ArrowUp: -1, ArrowDown: 1 })[event.key];
+		if (!step || event.altKey || event.ctrlKey || event.metaKey) return;
+		event.preventDefault();
+		moveSplitter(firstSplit() + step * splitDirection() * .05);
+		clearTimeout(splitTimer);
+		splitTimer = setTimeout(saveSplit, 500);
+	}
+
+	function resetSplit(event) {
+		if (event.detail !== 2) return;
+		split = .5;
+		saveSplit();
+	}
+
+	async function saveSplit() {
+		clearTimeout(splitTimer);
+		splitTimer = null;
+		const value = split;
+		if (value === $settings.bbcode_preview_split) return;
+		try {
+			await saveSettings({ bbcode_preview_split: value });
+			AppSettings.bbcode_preview_split = value;
+		} catch (error) {
+			split = $settings.bbcode_preview_split;
+			await message($_('settings_save_failed') + ': ' + String(error), { kind: 'error' });
 		}
 	}
 
@@ -165,6 +260,7 @@
 
 	onDestroy(() => {
 		if (fullscreenDialog?.open) fullscreenDialog.close();
+		if (splitTimer) saveSplit();
 	});
 
 	function toggleFullscreen() {
@@ -509,6 +605,9 @@
 					<span class="chevron" class:expanded={formattingOpen}><ChevronRight class="icon" size=".85rem"/></span>{$_('bbcode.formatting')}
 				</button>
 				<button type="button" class="sync-toggle" aria-pressed={$settings.bbcode_sync_scroll} disabled={$savingScrollSync} on:click={toggleScrollSync}>{$_('bbcode.sync_scroll')}</button>
+				<button type="button" class="swap-button" title={$_('bbcode.swap')} aria-label={$_('bbcode.swap')} disabled={$savingSide} on:click={swapSides}>
+					{#if horizontal}<ArrowLeftRight class="icon" size="1rem"/>{:else}<ArrowUpDown class="icon" size="1rem"/>{/if}
+				</button>
 				<select class="layout-select" aria-label={$_('bbcode.layout')} title={$_('bbcode.layout')} value={$settings.bbcode_preview_layout} disabled={$savingLayout} on:change={changeLayout}>
 					<option value="vertical">{$_('bbcode.vertical')}</option>
 					<option value="horizontal">{$_('bbcode.horizontal')}</option>
@@ -525,8 +624,9 @@
 				<button type="button" data-format={format.tag} title={`${$_('bbcode.' + format.tag)} (Ctrl/Cmd+${shortcut(format)})`} aria-label={$_('bbcode.' + format.tag)} aria-keyshortcuts={`Control+${shortcut(format)} Meta+${shortcut(format)}`} {disabled} on:click={() => formatText(format.tag)}>{format.label ?? $_('bbcode.' + format.tag)}</button>
 			{/each}
 		</div>
-		<div class="editor-panes" class:horizontal={$settings.bbcode_preview_layout === 'horizontal'} use:syncBBCodeScroll={{ enabled: active && $settings.bbcode_sync_scroll, value }}>
-			<div class="input-pane">
+		<div class="editor-panes" class:horizontal class:preview-first={$settings.bbcode_preview_first} style:--editor-size={`${split * 100}fr`} style:--preview-size={`${(1 - split) * 100}fr`}
+			bind:this={panes} use:syncBBCodeScroll={{ enabled: active && $settings.bbcode_sync_scroll, value }}>
+			<div class="input-pane" id={`${id}-input-pane`}>
 				<div class="source-input">
 					<pre class="highlight" class:plain={!$settings.bbcode_syntax_highlighting} bind:this={highlight} aria-hidden="true"><SyntaxText tokens={highlighted}/>{'\n'}</pre>
 					<textarea {id} bind:this={input} use:observeInput value={value} {disabled} spellcheck={!$settings.bbcode_syntax_highlighting}
@@ -549,6 +649,9 @@
 					</div>
 				{/if}
 			</div>
+			<div class="splitter" class:resizing={!!resizing} bind:this={splitter} role="separator" tabindex="0" aria-label={$_('bbcode.resize')} title={$_('bbcode.resize_help')}
+				aria-controls={`${id}-input-pane`} aria-orientation={horizontal ? 'vertical' : 'horizontal'} aria-valuenow={Math.round(split * 100)} aria-valuemin="10" aria-valuemax="90"
+				on:pointerdown={startResize} on:pointermove={resize} on:lostpointercapture={endResize} on:click={resetSplit} on:keydown={resizeKey}></div>
 			<div class="preview-pane">
 				<div class="preview-heading"><span id={`${id}-preview-label`}>{$_('bbcode.preview')}</span><span class="live">{$_('bbcode.live')}</span></div>
 				<div class="preview select" class:steam-colors={$settings.bbcode_steam_colors} role="region" aria-labelledby={`${id}-preview-label`} tabindex="0">
@@ -598,16 +701,48 @@
 	}
 	.editor-panes {
 		display: grid;
-		grid-template-rows: minmax(8rem, 1fr) minmax(8rem, 1fr);
-		gap: .75rem;
+		grid-template-areas: 'input' 'splitter' 'preview';
+		grid-template-rows: minmax(8rem, var(--editor-size)) .75rem minmax(8rem, var(--preview-size));
 		flex: 1;
 		min-height: 18rem;
 		min-width: 0;
 	}
+	.editor-panes.preview-first {
+		grid-template-areas: 'preview' 'splitter' 'input';
+		grid-template-rows: minmax(8rem, var(--preview-size)) .75rem minmax(8rem, var(--editor-size));
+	}
 	.editor-panes.horizontal {
-		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		grid-template-areas: 'input splitter preview';
+		grid-template-columns: minmax(0, var(--editor-size)) .75rem minmax(0, var(--preview-size));
 		grid-template-rows: minmax(14rem, 1fr);
 		min-height: 14rem;
+	}
+	.editor-panes.horizontal.preview-first {
+		grid-template-areas: 'preview splitter input';
+		grid-template-columns: minmax(0, var(--preview-size)) .75rem minmax(0, var(--editor-size));
+	}
+	.input-pane { grid-area: input; }
+	.preview-pane { grid-area: preview; }
+	.splitter {
+		grid-area: splitter;
+		position: relative;
+		border-radius: 4px;
+		cursor: row-resize;
+		touch-action: none;
+	}
+	.horizontal > .splitter { cursor: col-resize; }
+	.splitter::after {
+		content: '';
+		position: absolute;
+		inset: calc(50% - 1.5px) calc(50% - 1.25rem);
+		border-radius: 2px;
+		background: var(--border);
+	}
+	.horizontal > .splitter::after { inset: calc(50% - 1.25rem) calc(50% - 1.5px); }
+	.splitter:hover::after, .splitter.resizing::after { background: var(--text-muted); }
+	.splitter:focus-visible {
+		outline: 2px solid #127cff;
+		outline-offset: -2px;
 	}
 	.editor-footer { display: flex; flex-direction: column; gap: .25rem; flex-shrink: 0; }
 	.input-pane, .preview-pane {
@@ -647,7 +782,7 @@
 		gap: .35rem;
 		flex-shrink: 0;
 	}
-	.fullscreen-toggle {
+	.fullscreen-toggle, .swap-button {
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -778,6 +913,7 @@
 	@media (forced-colors: active) {
 		textarea.highlighted { color: CanvasText; }
 		.highlight { visibility: hidden; }
+		.splitter::after { background: CanvasText; }
 	}
 	textarea:focus {
 		box-shadow: inset 0 0 0 1.5px #127cff;
