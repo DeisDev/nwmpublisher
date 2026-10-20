@@ -142,13 +142,15 @@ body:
     attributes:
       label: Logs
       description: |
-        Drag `stdout.log` and `stderr.log` here. Copy them right after the problem, because they are replaced each time nwmpublisher starts.
+        Drag the `desktop_*.log` file from when the problem happened here (`cli_*.log` for the command line). Logs are named by the date and time nwmpublisher started, and the last four of each are kept.
 
-        - **Windows:** press Win+R and open `%TEMP%\nwmpublisher\logs`
-        - **macOS:** run `open "$TMPDIR/nwmpublisher/logs"` in Terminal
-        - **Linux:** `/tmp/nwmpublisher/logs` (or `$TMPDIR/nwmpublisher/logs` if `TMPDIR` is set)
+        Open the folder from **Settings > Paths > Open Logs Folder**, or:
 
-        If you changed **Temp Path** in settings, the logs are in a `logs` folder there.
+        - **Windows:** press Win+R and open `%APPDATA%\nwmpublisher\logs`
+        - **macOS:** run `open "$HOME/Library/Application Support/nwmpublisher/logs"` in Terminal
+        - **Linux:** `~/.local/share/nwmpublisher/logs` (or `$XDG_DATA_HOME/nwmpublisher/logs` if `XDG_DATA_HOME` is set)
+
+        If you changed **Logs Path** in settings, the logs are there. If you changed **User Data Path**, they are in a `logs` folder there.
 
   - type: textarea
     id: extra

@@ -2,6 +2,8 @@
 	import { tippy } from '../tippy';
 	import { getLocaleFromNavigator, _ } from 'svelte-i18n';
 	import Gear from '@lucide/svelte/icons/settings';
+	import FolderOpen from '@lucide/svelte/icons/folder-open';
+	import { message } from '@tauri-apps/plugin-dialog';
 	import Modal from './Modal.svelte';
 	import Sidebar from './Sidebar.svelte';
 	import Setting from './Setting.svelte';
@@ -49,6 +51,10 @@
 			}
 		}
 		return after;
+	}
+
+	function openLogs() {
+		invoke('open_logs').catch(error => message(translateError(error), { kind: 'error' }));
 	}
 
 	let form;
@@ -182,6 +188,8 @@
 			<Setting {afterChange} id="downloads" type="directory" initial={AppData.downloads_dir} value={AppSettings.downloads}>{$_('settings.paths.downloads')}</Setting>
 			<Setting {afterChange} id="user_data" type="directory" initial={AppData.user_data_dir} value={AppSettings.user_data}>{$_('settings.paths.user_data')}</Setting>
 			<Setting {afterChange} id="temp" type="directory" initial={AppData.temp_dir} value={AppSettings.temp}>{$_('settings.paths.temp')}</Setting>
+			<Setting {afterChange} id="logs" type="directory" initial={AppData.logs_dir} value={AppSettings.logs}>{$_('settings.paths.logs')}</Setting>
+			<button type="button" class="open-logs" on:click={openLogs}><FolderOpen size="1rem"/>{$_('settings.paths.open_logs')}</button>
 		{:else if activeItem === 'appearance'}
 			<Setting id="theme" type="select" value={AppSettings.theme} choices={themes} afterChange={chooseTheme}>{$_('settings.theme.theme')}</Setting>
 			<Setting afterChange={changeCustomColor} id="color_neutral" type="color" value={AppSettings.color_neutral}>{$_('settings.accessibility.color_neutral')}</Setting>
@@ -201,6 +209,23 @@
 	h2 { margin: 0 0 1rem; font-size: 1.1rem; }
 	h3 { margin: 0 0 1.25rem; font-size: .95rem; }
 	.discord-unavailable { color: var(--text-muted); font-size: .8rem; margin: -.5rem 0 1rem; }
+	.open-logs {
+		align-self: flex-start;
+		display: flex;
+		align-items: center;
+		gap: .5rem;
+		padding: .65rem .9rem;
+		border: 0;
+		border-radius: 4px;
+		background: var(--control);
+		box-shadow: 0px 0px 2px 0px rgb(0 0 0 / 40%);
+		color: var(--text);
+		font: inherit;
+		font-size: .85em;
+		cursor: pointer;
+	}
+	.open-logs:hover { background: var(--control-hover); }
+	.open-logs:focus-visible { outline: 2px solid #127cff; outline-offset: 2px; }
 	.save-status { margin: 0 0 1.5rem; font-size: .8rem; color: var(--text-muted); }
 	section { padding-bottom: 1.5rem; }
 	section + section { padding-top: 1.5rem; border-top: 1px solid var(--border); }

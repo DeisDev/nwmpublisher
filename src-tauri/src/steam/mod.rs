@@ -116,7 +116,7 @@ impl Steam {
 
 		std::mem::forget(steam!().register_callback(|c: SteamServersDisconnected| {
 			steam!().set_connected(false);
-			println!("[Steam] SteamServersDisconnected {:#?}", c);
+			wprintln!("[Steam] SteamServersDisconnected {:#?}", c);
 		}));
 
 		// Callbacks can be missed or arrive out of order, so Steam's own logged-on state is the source of truth

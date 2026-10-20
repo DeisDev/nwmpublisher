@@ -13,6 +13,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 		crate::webview::error,
 		crate::webview::info,
 		crate::webview::warn,
+		crate::logging::open_logs,
 		crate::transactions::snapshots::transaction_snapshot,
 		crate::transactions::snapshots::transaction_snapshots,
 		crate::transactions::snapshots::transaction_data,

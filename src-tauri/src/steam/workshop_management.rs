@@ -515,9 +515,19 @@ pub async fn search_required_addons(query: String, page: u32) -> Result<AddonSea
 
 #[tauri::command]
 pub async fn save_workshop_settings(request: WorkshopSettingsRequest) -> Result<WorkshopSaveResult, String> {
-	tauri::async_runtime::spawn_blocking(move || save_settings(request))
+	let addon = request.addon_id.clone();
+	let result = tauri::async_runtime::spawn_blocking(move || save_settings(request))
 		.await
-		.map_err(|error| error.to_string())?
+		.map_err(|error| error.to_string())
+		.and_then(std::convert::identity);
+	match &result {
+		Ok(WorkshopSaveResult { error: Some(error), .. }) => {
+			wprintln!("Workshop settings for {} were only partly saved: {}", addon, crate::util::english::message(error))
+		}
+		Ok(_) => println!("Saved Workshop settings for {}", addon),
+		Err(error) => eprintln!("Could not save Workshop settings for {}: {}", addon, crate::util::english::message(error)),
+	}
+	result
 }
 
 #[cfg(test)]

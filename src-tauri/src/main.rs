@@ -7,7 +7,6 @@ extern crate turbonone;
 
 #[macro_use]
 mod logging;
-pub use logging::*;
 
 #[macro_use]
 pub mod globals;
@@ -83,7 +82,7 @@ fn main() -> std::process::ExitCode {
 		return exit_code;
 	}
 
-	println!("nwmpublisher v{}", env!("CARGO_PKG_VERSION"));
+	logging::init(logging::Mode::Desktop);
 
 	#[cfg(debug_assertions)]
 	deadlock_watchdog();
@@ -126,9 +125,12 @@ fn main() -> std::process::ExitCode {
 		.build(tauri::generate_context!())
 		.unwrap()
 		.run(|_, event| {
-			if matches!(event, tauri::RunEvent::Exit) { discord::stop(); }
+			if matches!(event, tauri::RunEvent::Exit) {
+				discord::stop();
+				println!("Goodbye!");
+				logging::flush();
+			}
 		});
 
-	println!("Goodbye!");
 	std::process::ExitCode::SUCCESS
 }

@@ -178,6 +178,7 @@ pub async fn review_publish(key: String, workshop_id: String) -> Result<(), Stri
 		record.reviewed = true;
 		record.recoverability = "retry_update".into();
 		save(&record)?;
+		println!("Publish {} was reviewed and matched to Workshop item {}", record.key, id.0);
 		if let Some(path) = record.source {
 			crate::appdata::change_settings(|settings| { settings.my_workshop_local_paths.insert(id, path); Ok(()) })?;
 			app_data!().send();

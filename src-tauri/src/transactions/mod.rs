@@ -5,7 +5,7 @@ use parking_lot::{Mutex, RwLock};
 use rayon::ThreadPool;
 use serde::Serialize;
 use std::sync::{
-	atomic::{AtomicU32, Ordering},
+	atomic::{AtomicBool, AtomicU32, Ordering},
 	Arc, Weak,
 };
 
@@ -101,14 +101,25 @@ pub struct TransactionInner {
 	pub id: u32,
 	state: Mutex<JobState>,
 	cooperative: bool,
+	/// Jobs the user started have a context; only their routine progress is logged.
+	logged: AtomicBool,
 }
 impl TransactionInner {
 	pub fn warning(&self, message: String) {
-		if *crate::cli::CLI_MODE { eprintln!("{}", crate::util::english::message(&message)); return; }
+		let text = crate::util::english::message(&message);
+		wprintln!("Job {} warning: {}", self.id, text);
+		if *crate::cli::CLI_MODE { std::eprintln!("{}", text); return; }
 		self.emit(TransactionMessage::Warning(self.id, message));
 	}
 	pub fn context(&self, context: serde_json::Value) {
+		println!("Job {}: {}", self.id, context);
+		self.logged.store(true, Ordering::Relaxed);
 		snapshots::context(self.id, context);
+	}
+	fn log_state(&self, state: JobState) {
+		if self.logged.load(Ordering::Relaxed) {
+			println!("Job {} {:?}", self.id, state);
+		}
 	}
 	fn emit(&self, message: TransactionMessage) {
 		if *crate::cli::CLI_MODE {
@@ -167,7 +178,14 @@ impl TransactionInner {
 		}
 		*state = JobState::Failed;
 		self.remove();
-		self.emit(TransactionMessage::Error(self.id, msg.into(), json!(data)));
+		let msg = msg.into();
+		let data = json!(data);
+		if data.is_null() {
+			eprintln!("Job {} failed: {}", self.id, crate::util::english::message(&msg));
+		} else {
+			eprintln!("Job {} failed: {} {}", self.id, crate::util::english::message(&msg), data);
+		}
+		self.emit(TransactionMessage::Error(self.id, msg, data));
 	}
 
 	pub fn finished<D: Serialize + Send + 'static>(&self, data: D) {
@@ -177,7 +195,11 @@ impl TransactionInner {
 		}
 		*state = JobState::Finished;
 		self.remove();
-		self.emit(TransactionMessage::Finished(self.id, json!(data)));
+		let data = json!(data);
+		if self.logged.load(Ordering::Relaxed) {
+			if data.is_null() { println!("Job {} finished", self.id); } else { println!("Job {} finished: {}", self.id, data); }
+		}
+		self.emit(TransactionMessage::Finished(self.id, data));
 	}
 
 	pub fn cancel(&self) -> JobState {
@@ -186,10 +208,12 @@ impl TransactionInner {
 			JobState::Running if !self.cooperative => {
 				*state = JobState::Cancelled;
 				self.remove();
+				self.log_state(*state);
 				self.emit(TransactionMessage::Cancelled(self.id));
 			}
 			JobState::Running | JobState::Preparing | JobState::Packing => {
 				*state = JobState::Cancelling;
+				self.log_state(*state);
 				self.emit(TransactionMessage::State(self.id, *state));
 			}
 			_ => {}
@@ -202,6 +226,7 @@ impl TransactionInner {
 		if *state == JobState::Cancelling {
 			*state = JobState::Cancelled;
 			self.remove();
+			self.log_state(*state);
 			self.emit(TransactionMessage::Cancelled(self.id));
 		}
 	}
@@ -212,6 +237,7 @@ impl TransactionInner {
 			return false;
 		}
 		*state = JobState::Packing;
+		self.log_state(*state);
 		self.emit(TransactionMessage::State(self.id, *state));
 		true
 	}
@@ -223,6 +249,7 @@ impl TransactionInner {
 			return false;
 		}
 		*state = JobState::Submitting;
+		self.log_state(*state);
 		self.emit(TransactionMessage::State(self.id, *state));
 		true
 	}
@@ -231,6 +258,7 @@ impl TransactionInner {
 		let mut state = self.state.lock();
 		if state.terminal() || *state == JobState::Cancelling { return false; }
 		*state = JobState::Committing;
+		self.log_state(*state);
 		self.emit(TransactionMessage::State(self.id, *state));
 		true
 	}
@@ -239,6 +267,7 @@ impl TransactionInner {
 		let mut state = self.state.lock();
 		if matches!(*state, JobState::Submitting | JobState::Preparing | JobState::Packing) {
 			*state = JobState::Unknown;
+			wprintln!("Job {}: Steam did not confirm whether the upload finished", self.id);
 			self.emit(TransactionMessage::State(self.id, *state));
 		}
 	}
@@ -298,6 +327,7 @@ fn new_with_state(state: JobState, cooperative: bool) -> Transaction {
 		id: TRANSACTIONS.id.fetch_add(1, Ordering::SeqCst),
 		state: Mutex::new(state),
 		cooperative,
+		logged: AtomicBool::new(false),
 	});
 
 	transactions.push(TransactionRef {

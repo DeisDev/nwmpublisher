@@ -2624,6 +2624,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags 2.13.2",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
 name = "no_std_io2"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2771,6 +2783,7 @@ dependencies = [
  "indexmap 2.14.2",
  "libc",
  "opener",
+ "os_info",
  "parking_lot",
  "path-slash",
  "rayon",
@@ -3070,6 +3083,21 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+
+[[package]]
+name = "os_info"
+version = "3.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cf20a545b305cf1da722b236b5155c9bb35f1d5ceb28c048bd96ca842f41b5b"
+dependencies = [
+ "android_system_properties",
+ "log",
+ "nix 0.31.3",
+ "objc2",
+ "objc2-foundation",
+ "objc2-ui-kit",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "os_pipe"
@@ -3518,7 +3546,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7681987dab9e7839dc146829c97f184f1e20a5e00e21204874ff7be361a9387"
 dependencies = [
  "cfg-if",
- "nix",
+ "nix 0.29.0",
  "quork-proc",
  "thiserror 2.0.21",
  "windows-sys 0.59.0",

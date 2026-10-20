@@ -117,6 +117,16 @@ impl CleanerError {
 		Self::detail("cleaner_error_file", format!("{}: {}", path.display(), error))
 	}
 }
+impl std::fmt::Display for CleanerError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		let text = crate::util::english::format(self.key, &[("detail", &self.detail)]);
+		if self.detail.is_empty() || text.contains(&self.detail) {
+			f.write_str(&text)
+		} else {
+			write!(f, "{} {}", text, self.detail)
+		}
+	}
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -592,7 +602,7 @@ fn remove_files(
 
 #[tauri::command]
 pub async fn scan_addon_cleaner(on_progress: Channel<CleanerProgress>) -> Result<ScanResult, CleanerError> {
-	tauri::async_runtime::spawn_blocking(move || {
+	let result = tauri::async_runtime::spawn_blocking(move || {
 		let mut progress = Progress::new(on_progress);
 		let mut scan = SCAN.try_lock().ok_or_else(|| CleanerError::new("cleaner_error_busy"))?;
 		*scan = None;
@@ -617,7 +627,13 @@ pub async fn scan_addon_cleaner(on_progress: Channel<CleanerProgress>) -> Result
 		Ok(result)
 	})
 	.await
-	.map_err(|error| CleanerError::detail("cleaner_error_task", error))?
+	.map_err(|error| CleanerError::detail("cleaner_error_task", error))
+	.and_then(std::convert::identity);
+	match &result {
+		Ok(scan) => println!("Addon cleaner scan found {} removable files and kept {}", scan.files.len(), scan.kept),
+		Err(error) => eprintln!("Addon cleaner scan failed: {}", error),
+	}
+	result
 }
 
 #[tauri::command]
@@ -627,7 +643,7 @@ pub async fn clean_addons(
 	permanent: bool,
 	on_progress: Channel<CleanerProgress>,
 ) -> Result<CleanResult, CleanerError> {
-	tauri::async_runtime::spawn_blocking(move || {
+	let result = tauri::async_runtime::spawn_blocking(move || {
 		let mut progress = Progress::new(on_progress);
 		let mut scan = SCAN.try_lock().ok_or_else(|| CleanerError::new("cleaner_error_busy"))?;
 		let snapshot = scan.as_ref().ok_or_else(|| CleanerError::new("cleaner_error_scan"))?;
@@ -662,7 +678,18 @@ pub async fn clean_addons(
 		Ok(result)
 	})
 	.await
-	.map_err(|error| CleanerError::detail("cleaner_error_task", error))?
+	.map_err(|error| CleanerError::detail("cleaner_error_task", error))
+	.and_then(std::convert::identity);
+	match &result {
+		Ok(clean) => {
+			println!("Addon cleaner {} {} files", if permanent { "deleted" } else { "moved to Trash" }, clean.removed.len());
+			for failure in &clean.failed {
+				wprintln!("Addon cleaner kept {}: {}", failure.path.display(), failure.error);
+			}
+		}
+		Err(error) => eprintln!("Addon cleanup failed: {}", error),
+	}
+	result
 }
 
 #[cfg(test)]

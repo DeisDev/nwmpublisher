@@ -14,27 +14,23 @@ console.log('Listening for errors');
 	}
 
 	function stringify(...data) {
-		let stringified = '';
-		for (let i = 0; i < data.length - 1; i++) {
-			stringified += JSON.stringify(data[i], null, 4) + '\t';
-		}
-		stringified += JSON.stringify(data[data.length - 1], null, 4);
-		return stringified;
+		return data.map(value => {
+			if (typeof value === 'string') return value;
+			if (value instanceof Error) return value.stack || String(value);
+			return JSON.stringify(value, null, 4);
+		}).join('\t');
 	}
 
 	let _error = window.console.error;
 	let _warn = window.console.warn;
 	let _log = window.console.log;
 
+	window.console.warn = (...data) => {
+		report('warn', { message: stringify(...data) });
+		_warn(...data);
+	};
+
 	if (DEBUG_MODE) {
-		_warn = window.console.warn;
-		_log = window.console.log;
-
-		window.console.warn = (...data) => {
-			report('warn', { message: stringify(...data) });
-			_warn(...data);
-		};
-
 		window.console.log = (...data) => {
 			report('info', { message: stringify(...data) });
 			_log(...data);

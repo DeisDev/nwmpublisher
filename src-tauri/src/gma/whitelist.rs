@@ -204,12 +204,12 @@ fn download_addon_whitelist() -> &'static [&'static str] {
 				return Err(std::io::Error::other("Failed to parse addon whitelist (missing lua/*.lua)"));
 			}
 
-			println!("Downloaded up to date addon whitelist: {wildcard:#?}");
+			println!("Downloaded up to date addon whitelist ({} patterns)", wildcard.len());
 
 			Ok(&*wildcard.leak())
 		})
 		.map_err(|err| {
-			eprintln!("Failed to download addon whitelist: {:#?}", err);
+			wprintln!("Failed to download addon whitelist, using the built-in copy: {}", err);
 			err
 		})
 		.unwrap_or(ADDON_WHITELIST_OFFLINE)

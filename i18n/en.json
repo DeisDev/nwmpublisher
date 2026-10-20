@@ -81,6 +81,8 @@
 	"ERR_SETTINGS_WINDOW_SIZE": "The window size is invalid.",
 	"ERR_SETTINGS_PREVIEW_SPLIT": "The preview size is invalid.",
 	"ERR_SETTINGS_RECOVERY_REQUIRED": "Recover the damaged settings file before saving changes.",
+	"ERR_LOG_MOVE": "The log could not be moved to this folder. Choose another folder.",
+	"ERR_OPEN_LOGS": "Could not open the logs folder.",
 	"ERR_DOWNLOAD_DUPLICATE": "This item is already queued or downloading. Follow its existing job.",
 	"ERR_DOWNLOAD_STALLED": "The download made no progress for two minutes. Other queued downloads can continue.",
 	"ERR_COLLECTION_EXPANSION": "The Workshop collection could not be expanded.",
@@ -374,7 +376,9 @@
 			"user_data": "User Data Path",
 			"gmod": "Garry's Mod Installation Path",
 			"temp": "Temp Path",
-			"downloads": "Downloads Path"
+			"downloads": "Downloads Path",
+			"logs": "Logs Path",
+			"open_logs": "Open Logs Folder"
 		},
 
 		"theme": {
@@ -766,6 +770,7 @@
 		"info_tags": "Tags: {value}",
 		"info_workshop_id": "Workshop ID: {value}",
 		"info_files": "Files: {value}",
-		"info_size": "Size (bytes): {value}"
+		"info_size": "Size (bytes): {value}",
+		"log": "Log: {path}"
 	}
 }

@@ -97,24 +97,22 @@ impl<R: tauri::Runtime> tauri::plugin::Plugin<R> for ErrorReporter {
 
 #[tauri::command]
 pub fn js_error(message: String, stack: String) {
-	eprintln!("\n=== JavaScript Error! ===");
-	eprintln!("{}", message);
-	eprintln!("{}\n", stack);
+	eprintln!("[WebView] JavaScript error: {}\n{}", message, stack);
 }
 
 #[tauri::command]
 pub fn error(message: String) {
-	eprintln!("[WebView] [ERROR] {}", message);
+	eprintln!("[WebView] {}", message);
 }
 
 #[tauri::command]
 pub fn info(message: String) {
-	println!("[WebView] [INFO] {}", message);
+	println!("[WebView] {}", message);
 }
 
 #[tauri::command]
 pub fn warn(message: String) {
-	println!("[WebView] [WARN] {}", message);
+	wprintln!("[WebView] {}", message);
 }
 
 static RELOADED: AtomicBool = AtomicBool::new(false);

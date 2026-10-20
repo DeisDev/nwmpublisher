@@ -244,6 +244,7 @@ pub struct Settings {
 	pub gmod: Option<PathBuf>,
 	pub user_data: Option<PathBuf>,
 	pub downloads: Option<PathBuf>,
+	pub logs: Option<PathBuf>,
 
 	pub sounds: bool,
 	pub discord_rich_presence: bool,
@@ -301,6 +302,7 @@ impl Default for Settings {
 			gmod: None,
 			user_data: None,
 			downloads: None,
+			logs: None,
 
 			extract_destination: ExtractDestination::default(),
 			sounds: true,
@@ -365,11 +367,23 @@ impl Settings {
 
 		match Settings::load(&APP_SETTINGS_PATH, false) {
 			Ok(settings) => settings,
-			Err(error) if error.downcast_ref::<std::io::Error>().is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound) => Settings::default(),
+			Err(error) if error.downcast_ref::<std::io::Error>().is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound) => {
+				println!("No settings file yet, using defaults");
+				Settings::default()
+			}
 			Err(error) => {
+				eprintln!("Could not read settings {}: {}. Using defaults until the user chooses how to recover.", APP_SETTINGS_PATH.display(), error);
 				*SETTINGS_RECOVERY.write() = Some(format!("{}: {}", APP_SETTINGS_PATH.display(), error));
 				Settings::default()
 			}
+		}
+	}
+
+	fn logs_dir(&self) -> PathBuf {
+		match (&self.logs, &self.user_data) {
+			(Some(logs), _) if logs.is_dir() => logs.clone(),
+			(_, Some(user_data)) if user_data.is_dir() => user_data.join("logs"),
+			_ => USER_DATA_DIR.join("logs"),
 		}
 	}
 
@@ -456,6 +470,8 @@ pub struct AppData {
 	user_data_dir: PathBuf,
 	#[serde(serialize_with = "serde_downloads_dir")]
 	downloads_dir: Option<PathBuf>,
+	#[serde(serialize_with = "serde_logs_dir")]
+	logs_dir: PathBuf,
 }
 impl AppData {
 	pub fn init() -> Self {
@@ -470,6 +486,7 @@ impl AppData {
 			user_data_dir: PathBuf::new(),
 			gmod_dir: None,
 			downloads_dir: None,
+			logs_dir: PathBuf::new(),
 		}
 	}
 
@@ -553,6 +570,10 @@ impl AppData {
 
 		RwLockCow::Borrowed(&*DOWNLOADS_DIR)
 	}
+
+	pub fn logs_dir(&self) -> PathBuf {
+		self.settings.read().logs_dir()
+	}
 }
 
 #[cfg(target_os = "windows")]
@@ -615,7 +636,10 @@ pub fn change_settings<T>(change: impl FnOnce(&mut Settings) -> Result<T, String
 	let _commit = SETTINGS_COMMIT.lock();
 	let mut next = app_data!().settings.read().clone();
 	let result = change(&mut next)?;
-	next.save().map_err(|error| format!("ERR_SETTINGS_SAVE:{}", error))?;
+	next.save().map_err(|error| {
+		eprintln!("Could not save settings: {}", error);
+		format!("ERR_SETTINGS_SAVE:{}", error)
+	})?;
 	*app_data!().settings.write() = next;
 	Ok(result)
 }
@@ -645,10 +669,15 @@ fn patched_settings(settings: &Settings, patch: serde_json::Map<String, serde_js
 pub fn update_settings(patch: serde_json::Map<String, serde_json::Value>) -> Result<bool, String> {
 	let rediscover_addons = change_settings(|settings| {
 		let old_gmod = settings.gmod.clone();
+		let old_logs = settings.logs_dir();
 		*settings = patched_settings(settings, patch)?;
 		let source_paths = settings.my_workshop_local_paths.clone();
 		settings.sanitize();
 		settings.my_workshop_local_paths = source_paths;
+		let logs = settings.logs_dir();
+		if logs != old_logs {
+			crate::logging::relocate(logs).map_err(|error| format!("ERR_LOG_MOVE:{}", error))?;
+		}
 		Ok(old_gmod != settings.gmod)
 	})?;
 	if rediscover_addons {
@@ -678,9 +707,15 @@ pub fn recover_settings(use_backup: bool) -> Result<(), String> {
 		settings.save_to(&APP_SETTINGS_PATH)?;
 		Ok(settings)
 	})();
-	let settings = result.map_err(|error| format!("ERR_SETTINGS_SAVE:{}", error))?;
+	let settings = result.map_err(|error| {
+		eprintln!("Could not recover settings: {}", error);
+		format!("ERR_SETTINGS_SAVE:{}", error)
+	})?;
+	println!("Recovered settings {}", if use_backup { "from the backup" } else { "by resetting them" });
 	*app_data!().settings.write() = settings;
 	*SETTINGS_RECOVERY.write() = None;
+	// Failures are logged; recovery itself succeeded.
+	crate::logging::relocate(app_data!().logs_dir()).ok();
 	Ok(())
 }
 
@@ -723,14 +758,19 @@ pub fn legacy_settings_pending() -> bool {
 /// Imports the settings left behind by gmpublisher's config directory.
 #[tauri::command]
 pub fn migrate_legacy_settings() -> Result<(), String> {
-	let settings = Settings::load(&LEGACY_APP_SETTINGS_PATH, true)
-		.map_err(|error| format!("Failed to read gmpublisher settings: {}", error))?;
+	let settings = Settings::load(&LEGACY_APP_SETTINGS_PATH, true).map_err(|error| {
+		eprintln!("Could not read gmpublisher settings {}: {}", LEGACY_APP_SETTINGS_PATH.display(), error);
+		format!("Failed to read gmpublisher settings: {}", error)
+	})?;
 	let rediscover_addons = change_settings(|current| {
 		let changed = current.gmod != settings.gmod;
 		*current = settings;
 		Ok(changed)
 	})?;
 	MIGRATION_RESOLVED.store(true, Ordering::Relaxed);
+	println!("Imported gmpublisher settings");
+	// Failures are logged; the import itself succeeded.
+	crate::logging::relocate(app_data!().logs_dir()).ok();
 
 	if rediscover_addons {
 		game_addons!().refresh();
@@ -797,6 +837,13 @@ where
 	S: serde::Serializer,
 {
 	app_data!().downloads_dir().serialize(serializer)
+}
+
+fn serde_logs_dir<S>(_: &PathBuf, serializer: S) -> Result<S::Ok, S::Error>
+where
+	S: serde::Serializer,
+{
+	app_data!().logs_dir().serialize(serializer)
 }
 
 pub fn write_tauri_settings() -> Option<()> {
@@ -1092,6 +1139,20 @@ mod tests {
 		let settings = super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"theme": "light"})).unwrap()).unwrap();
 		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
 		assert_eq!(loaded.theme, super::Theme::Light);
+	}
+
+	#[test]
+	fn logs_default_to_user_data_and_use_an_existing_custom_folder() {
+		let folder = tempfile::tempdir().unwrap();
+		assert_eq!(serde_json::from_str::<Settings>("{}").unwrap().logs, None);
+		let mut settings = Settings { user_data: Some(folder.path().to_owned()), ..Settings::default() };
+		assert_eq!(settings.logs_dir(), folder.path().join("logs"));
+		settings.logs = Some(folder.path().join("missing"));
+		assert_eq!(settings.logs_dir(), folder.path().join("logs"));
+		settings.logs = Some(folder.path().to_owned());
+		assert_eq!(settings.logs_dir(), folder.path());
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
+		assert_eq!(loaded.logs, settings.logs);
 	}
 
 	#[test]

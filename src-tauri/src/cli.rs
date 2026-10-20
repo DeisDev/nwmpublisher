@@ -14,6 +14,7 @@ use crate::{
 		write::{package_archive, PackageRequest, ADDON_TAGS, ADDON_TYPES},
 		ExtractDestination, ExtractGMAMut, ExtractOptions,
 	},
+	logging::Level,
 	steam::publishing::{run_publish, PublishOutcome, PublishRequest},
 	util::english,
 	GMAError, GMAFile, IoError,
@@ -178,10 +179,8 @@ pub(super) fn stdin() -> Option<ExitCode> {
 	#[cfg(target_os = "windows")]
 	attach_console();
 
-	// Remove the logging::panic() hook.
-	let _ = std::panic::take_hook();
-
 	let matches = command().get_matches();
+	crate::logging::init(crate::logging::Mode::Cli);
 
 	let result = if let Some(path) = matches.get_one::<PathBuf>("extract") {
 		extract(path, &matches)
@@ -197,13 +196,37 @@ pub(super) fn stdin() -> Option<ExitCode> {
 		unreachable!("clap requires one action")
 	};
 
-	Some(match result {
-		Ok(()) => ExitCode::SUCCESS,
+	let exit_code = match result {
+		Ok(()) => {
+			println!("Finished");
+			ExitCode::SUCCESS
+		}
 		Err(message) => {
-			std::eprintln!("{message}");
+			notify(Level::Error, message);
+			print_log_location();
 			ExitCode::FAILURE
 		}
-	})
+	};
+	crate::logging::flush();
+	Some(exit_code)
+}
+
+/// Prints a message for the user on standard error and records it in the log.
+fn notify(level: Level, message: String) {
+	std::eprintln!("{message}");
+	crate::logging::write(level, message);
+}
+
+pub(crate) fn print_log_location() {
+	if let Some(path) = crate::logging::current() {
+		std::eprintln!("{}", english::format("cli.log", &[("path", &path.display().to_string())]));
+	}
+}
+
+/// Prints a result on standard output and records it in the log.
+fn print_result(line: String) -> Result<(), String> {
+	println!("{line}");
+	write_output([line])
 }
 
 fn open_failure(path: &Path, error: GMAError) -> String {
@@ -235,9 +258,9 @@ fn extract(extract_path: &Path, matches: &ArgMatches) -> Result<(), String> {
 	let output = gma
 		.extract(dest, &transaction, false, true, &options)
 		.map_err(|error| format!("Failed to extract archive \"{}\": {}", extract_path.display(), failure_details(error)))?;
-	std::println!("Extracted to \"{}\"", output.path.display());
+	print_result(format!("Extracted to \"{}\"", output.path.display()))?;
 	if let Some(metadata) = &output.metadata {
-		std::println!("{}", english::format("cli.metadata_saved", &[("path", &metadata.display().to_string())]));
+		print_result(english::format("cli.metadata_saved", &[("path", &metadata.display().to_string())]))?;
 	}
 	let output = output.path;
 	if !matches.get_flag("no-open") && app_data!().settings.read().open_folder_after_extract {
@@ -378,7 +401,7 @@ fn pack(folder: &Path, matches: &ArgMatches) -> Result<(), String> {
 	match package_archive(request, ignore, &transaction) {
 		Ok(path) => {
 			transaction.finished(());
-			write_output([english::format("cli.packed", &[("path", &path.display().to_string())])])
+			print_result(english::format("cli.packed", &[("path", &path.display().to_string())]))
 		}
 		Err(error) => {
 			let error = error.to_string();
@@ -389,7 +412,7 @@ fn pack(folder: &Path, matches: &ArgMatches) -> Result<(), String> {
 }
 
 fn connect_steam() -> Result<(), String> {
-	std::eprintln!("{}", english::text("cli.connecting"));
+	notify(Level::Info, english::text("cli.connecting").to_owned());
 	std::sync::LazyLock::force(&crate::STEAMWORKS);
 	let deadline = Instant::now() + STEAM_CONNECT_TIMEOUT;
 	while !steam!().connected() {
@@ -428,18 +451,18 @@ fn publish(folder: &Path, matches: &ArgMatches) -> Result<(), String> {
 	};
 
 	connect_steam()?;
-	std::eprintln!("{}", english::text("cli.publishing"));
+	notify(Level::Info, english::text("cli.publishing").to_owned());
 	let transaction = crate::transactions::new_publish();
 	match run_publish(request, &transaction) {
 		PublishOutcome::Published { id, legal_agreement, job, warnings, settings_error } => {
 			for warning in warnings.iter().chain(&settings_error) {
-				std::eprintln!("{}", english::message(warning));
+				notify(Level::Warn, english::message(warning));
 			}
 			transaction.finished(job.finish(&transaction, "published", warnings));
 			if legal_agreement {
-				std::eprintln!("{}", english::text("cli.legal_agreement"));
+				notify(Level::Warn, english::text("cli.legal_agreement").to_owned());
 			}
-			write_output([english::format("cli.published", &[("id", &id.0.to_string())])])
+			print_result(english::format("cli.published", &[("id", &id.0.to_string())]))
 		}
 		PublishOutcome::Cancelled => {
 			transaction.cancelled();

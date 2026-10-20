@@ -146,8 +146,10 @@ pub fn has_extension<P: AsRef<Path>, S: AsRef<str>>(path: P, extension: S) -> bo
 pub fn open<P: AsRef<Path>>(path: P) {
 	let path = path.as_ref();
 	if let Err(error) = open_with_default_app(path) {
+		let message = format!("Failed to open {}: {}", path.display(), error);
+		eprintln!("{message}");
 		if *crate::cli::CLI_MODE {
-			eprintln!("Failed to open {}: {}", path.display(), error);
+			std::eprintln!("{message}");
 			return;
 		}
 		webview!().window().dialog().message(path.to_string_lossy()).title("File").show(|_| {});

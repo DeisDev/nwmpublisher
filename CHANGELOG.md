@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Drag to resize the description and changelog previews, and swap them to the other side.
+- Add a Logs Path setting and an Open Logs Folder button in Settings > Paths.
+
+### Changed
+
+- Save logs in the user data folder, named by start date and time, with separate logs for the app and the command line. The last four of each are kept, so a crash log survives a restart.
+- Logs now show the OS and app version, timestamps, warning and error levels, and more detail about jobs, settings, and the addon cleaner.
 
 ### Fixed
 
