@@ -8,7 +8,7 @@
 	import { formatSize } from '../format.js';
 	import Loading from '../components/Loading.svelte';
 	import Dead from '../components/Dead.svelte';
-	import { Steam } from '../steam';
+	import { Steam, installedAddonsRevision } from '../steam';
 	import PreviewGMA from '../components/PreviewGMA.svelte';
 	import { registerContext } from '../components/ContextMenu.svelte';
 
@@ -390,6 +390,11 @@
 	}
 
 	onMount(analyze);
+	let analyzedRevision = $installedAddonsRevision;
+	$: if ($installedAddonsRevision !== analyzedRevision) {
+		analyzedRevision = $installedAddonsRevision;
+		analyze();
+	}
 	onDestroy(() => {
 		clearTimeout(resizedTimeout);
 		transaction?.cancel();

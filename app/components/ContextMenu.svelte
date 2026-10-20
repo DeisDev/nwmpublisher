@@ -77,6 +77,10 @@
 	import LinkOut from '@lucide/svelte/icons/external-link';
 	import Image from '@lucide/svelte/icons/image';
 	import CloudDownload from '@lucide/svelte/icons/cloud-download';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import CircleMinus from '@lucide/svelte/icons/circle-minus';
+	import { addonName, addonRemoval, requestDelete, requestUnsubscribe } from '../addon-removal.js';
+	import { settings } from '../settings.js';
 	import { get, writable } from 'svelte/store';
 	import Loading from './Loading.svelte';
 	import { onDestroy, onMount } from 'svelte';
@@ -209,6 +213,9 @@ import { playSound } from '../sounds';
 			}));
 	}
 
+	let workshopItem = null;
+	workshop.then(item => workshopItem = item, () => {});
+
 	async function download() {
 		await invoke('workshop_download', { ids: [(await workshop).id] });
 
@@ -235,6 +242,19 @@ import { playSound } from '../sounds';
 							<span slot="icon"><Folder class="icon" size="1rem"/></span>
 							<span slot="label">{$_('open_addon_location')}</span>
 						</ContextMenuItem>
+						{#await addonRemoval(gma.path) then removal}
+							{#if removal === 'unsubscribe'}
+								<ContextMenuItem click={() => requestUnsubscribe(gma.path, addonName(workshopItem, gma))}>
+									<span slot="icon"><CircleMinus class="icon" size="1rem"/></span>
+									<span slot="label">{$_($settings.unsubscribe_delete_files ? 'addon_unsubscribe_delete' : 'addon_unsubscribe')}</span>
+								</ContextMenuItem>
+							{:else if removal === 'delete'}
+								<ContextMenuItem click={() => requestDelete(gma.path, addonName(workshopItem, gma))}>
+									<span slot="icon"><Trash2 class="icon" size="1rem"/></span>
+									<span slot="label">{$_('addon_delete')}</span>
+								</ContextMenuItem>
+							{/if}
+						{/await}
 					{/if}
 				{/if}
 			{/await}

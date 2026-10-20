@@ -8,6 +8,7 @@
 	import MigrateSettings from './components/MigrateSettings.svelte';
 	import RecoverSettings from './components/RecoverSettings.svelte';
 	import PublishRecovery from './components/PublishRecovery.svelte';
+	import DeleteAddon from './components/DeleteAddon.svelte';
 	import { settingsSave } from './settings.js';
 	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
@@ -64,6 +65,8 @@
 	{#if migrateSettings}
 		<MigrateSettings bind:active={migrateSettings}/>
 	{/if}
+
+	<DeleteAddon/>
 
 </main>
 

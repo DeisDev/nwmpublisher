@@ -1,7 +1,7 @@
 <script>
 	import { writable } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
-	import { Steam } from '../steam';
+	import { Steam, installedAddonsRevision } from '../steam';
 	import { saveSettings } from '../settings.js';
 	import Filter from '@lucide/svelte/icons/list-filter';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
@@ -23,7 +23,8 @@
 		let page = 0;
 		return () => Steam.getInstalledAddons(++page, selectedSort, selectedTypes);
 	}
-	$: next = pager(sort, types);
+	let next;
+	$: $installedAddonsRevision, next = pager(sort, types);
 
 	function savePreferences(nextTypes, nextSort) {
 		const request = ++saveRequest;

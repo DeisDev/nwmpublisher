@@ -7,6 +7,8 @@
 	import SteamID from 'steamid';
 	import LinkOut from '@lucide/svelte/icons/external-link';
 	import { invoke } from '@tauri-apps/api/core';
+	import { addonName, addonRemoval, requestDelete, requestUnsubscribe } from '../addon-removal.js';
+	import { settings } from '../settings.js';
 	import WorkshopStats from './WorkshopStats.svelte';
 	import BBCode from './BBCode.svelte';
 	import { onDestroy } from 'svelte';
@@ -80,6 +82,36 @@
 		destinationSelect = true;
 	}
 
+	let removal = null;
+	let removalPath = null;
+	let removing = false;
+	function checkRemoval(path) {
+		const currentSelection = selection;
+		removalPath = path;
+		removal = null;
+		if (!path) return;
+		addonRemoval(path).then(value => {
+			if (selection === currentSelection && removalPath === path) removal = value;
+		});
+	}
+
+	async function unsubscribe(workshop, gma) {
+		const path = removalPath;
+		const currentSelection = selection;
+		removing = true;
+		await requestUnsubscribe(path, addonName(workshop, gma), () => {
+			if (selection === currentSelection) interceptCancel();
+		});
+		removing = false;
+	}
+
+	function remove(workshop, gma) {
+		const currentSelection = selection;
+		requestDelete(removalPath, addonName(workshop, gma), () => {
+			if (selection === currentSelection) interceptCancel();
+		});
+	}
+
 	let addon = new Promise(() => {});
 	let previewError = null;
 	function updatePromises(promises) {
@@ -93,6 +125,7 @@
 		$entriesList = [];
 		previewError = null;
 		destinationSelect = false;
+		checkRemoval(null);
 
 		let workshopData = null;
 		let gmaData = null;
@@ -105,6 +138,7 @@
 			const path = gmaData?.path ?? workshopData?.localFile ?? null;
 			if (path === previewPath) return;
 			previewPath = path;
+			checkRemoval(path);
 			selectedEntry = null;
 			gmaPath = null;
 			$entriesList = [];
@@ -170,6 +204,11 @@
 					<div class="preview-actions">
 						{#if (gma && gma.id) || workshop}
 							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut class="icon" size=".8rem"/></a></div>
+						{/if}
+						{#if removal === 'unsubscribe'}
+							<button type="button" class="removal-btn" disabled={removing} on:click={() => unsubscribe(workshop, gma)}>{$_($settings.unsubscribe_delete_files ? 'addon_unsubscribe_delete' : 'addon_unsubscribe')}</button>
+						{:else if removal === 'delete'}
+							<button type="button" class="removal-btn" on:click={() => remove(workshop, gma)}>{$_('addon_delete')}</button>
 						{/if}
 						<button type="button" class="extract-btn" disabled={!gmaPath} on:click={chooseDestination}>{$_('extract')}</button>
 					</div>
@@ -430,6 +469,18 @@
 		color: var(--text-muted);
 		background-color: var(--control-hover-alt);
 	}
+	.removal-btn {
+		font: inherit;
+		border: 0;
+		border-radius: 4px;
+		padding: .7rem;
+		background-color: var(--control);
+		color: var(--text);
+		line-height: 1;
+		cursor: pointer;
+	}
+	.removal-btn:hover:not(:disabled) { background-color: var(--control-hover); }
+	.removal-btn:disabled { cursor: default; color: var(--text-muted); }
 
 	#author-loading {
 		display: flex;

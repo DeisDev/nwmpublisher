@@ -57,6 +57,7 @@
 	//import ContentGenerator from '../pages/ContentGenerator.svelte';
 	import SidebarItem from './SidebarItem.svelte';
 	import Logo from './Logo.svelte';
+	import ReportProblem from './ReportProblem.svelte';
 
 	function selectPage(page) {
 		$pages[page].created = true;
@@ -72,6 +73,7 @@
 		<Logo/><br>
 		nwmpublisher v{AppData.version} by DeisDev "CatSniffer"<br>
 		<a tabindex="-1" href="https://github.com/DeisDev/nwmpublisher/stargazers" target="_blank">{$_('github_star')}</a>&nbsp;🤩
+		<ReportProblem/>
 	</div>
 </Sidebar>
 
@@ -84,6 +86,7 @@
 		max-width: 250px;
 		top: 70px;
 		left: 0;
+		z-index: 3;
 	}
 
 	#credits {

@@ -237,6 +237,15 @@ pub enum InstalledAddonsSort {
 	Type,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum AddonDeleteMode {
+	#[default]
+	Ask,
+	Trash,
+	Permanent,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Settings {
@@ -278,6 +287,8 @@ pub struct Settings {
 
 	pub extract_overwrite_mode: ExtractionOverwriteMode,
 	pub addon_cleaner_permanent_delete: bool,
+	pub addon_delete_mode: AddonDeleteMode,
+	pub unsubscribe_delete_files: bool,
 	pub bbcode_preview_layout: PreviewLayout,
 	pub bbcode_preview_first: bool,
 	pub bbcode_preview_split: f64,
@@ -340,6 +351,8 @@ impl Default for Settings {
 
 			extract_overwrite_mode: ExtractionOverwriteMode::default(),
 			addon_cleaner_permanent_delete: false,
+			addon_delete_mode: AddonDeleteMode::Ask,
+			unsubscribe_delete_files: false,
 			bbcode_preview_layout: PreviewLayout::Horizontal,
 			bbcode_preview_first: false,
 			bbcode_preview_split: 0.5,
@@ -1017,6 +1030,21 @@ mod tests {
 		let settings = super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"addon_cleaner_permanent_delete": true})).unwrap()).unwrap();
 		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
 		assert!(loaded.addon_cleaner_permanent_delete);
+	}
+
+	#[test]
+	fn addon_removal_preferences_ask_by_default_and_round_trip() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
+		assert_eq!(defaults.addon_delete_mode, super::AddonDeleteMode::Ask);
+		assert!(!defaults.unsubscribe_delete_files);
+		let settings = super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"unsubscribe_delete_files": true})).unwrap()).unwrap();
+		assert!(serde_json::from_value::<Settings>(serde_json::to_value(settings).unwrap()).unwrap().unsubscribe_delete_files);
+		for (value, mode) in [("trash", super::AddonDeleteMode::Trash), ("permanent", super::AddonDeleteMode::Permanent), ("ask", super::AddonDeleteMode::Ask)] {
+			let settings = super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"addon_delete_mode": value})).unwrap()).unwrap();
+			let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+			assert_eq!(loaded.addon_delete_mode, mode);
+		}
+		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"addon_delete_mode": "Trash"})).unwrap()).is_err());
 	}
 
 	#[test]

@@ -104,16 +104,16 @@ pub struct CleanerError {
 }
 
 impl CleanerError {
-	fn new(key: &'static str) -> Self {
+	pub(crate) fn new(key: &'static str) -> Self {
 		Self { key, detail: String::new() }
 	}
-	fn detail(key: &'static str, detail: impl std::fmt::Display) -> Self {
+	pub(crate) fn detail(key: &'static str, detail: impl std::fmt::Display) -> Self {
 		Self {
 			key,
 			detail: detail.to_string(),
 		}
 	}
-	fn io(path: &Path, error: impl std::fmt::Display) -> Self {
+	pub(crate) fn io(path: &Path, error: impl std::fmt::Display) -> Self {
 		Self::detail("cleaner_error_file", format!("{}: {}", path.display(), error))
 	}
 }
@@ -176,14 +176,14 @@ pub struct ScanResult {
 
 #[derive(Serialize)]
 pub struct FileFailure {
-	path: PathBuf,
-	error: CleanerError,
+	pub(crate) path: PathBuf,
+	pub(crate) error: CleanerError,
 }
 
 #[derive(Default, Serialize)]
 pub struct CleanResult {
-	removed: Vec<PathBuf>,
-	failed: Vec<FileFailure>,
+	pub(crate) removed: Vec<PathBuf>,
+	pub(crate) failed: Vec<FileFailure>,
 }
 
 #[derive(Serialize)]
@@ -303,7 +303,7 @@ fn subscriptions(owner: SteamId, progress: &mut Progress) -> Result<HashSet<Publ
 	Ok(ids)
 }
 
-fn is_link(metadata: &Metadata) -> bool {
+pub(crate) fn is_link(metadata: &Metadata) -> bool {
 	#[cfg(windows)]
 	{
 		use std::os::windows::fs::MetadataExt;
@@ -468,11 +468,54 @@ fn unchanged(file: &Candidate) -> Result<(), CleanerError> {
 	Ok(())
 }
 
-fn remove_empty_folder(folder: &Path) -> Result<(), CleanerError> {
+pub(crate) fn remove_empty_folder(folder: &Path) -> Result<(), CleanerError> {
 	if read_entries(folder)?.is_empty() {
 		fs::remove_dir(folder).map_err(|error| CleanerError::io(folder, error))?;
 	}
 	Ok(())
+}
+
+pub(crate) fn remove_file(path: &Path, permanent: bool) -> Result<(), CleanerError> {
+	if permanent {
+		return fs::remove_file(path).map_err(|error| CleanerError::io(path, error));
+	}
+	trash::delete(path).map_err(|error| CleanerError::io(path, error))?;
+	// Some shell operations can report success even when the user cancels.
+	match fs::symlink_metadata(path) {
+		Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+		Err(error) => Err(CleanerError::io(path, error)),
+		Ok(_) => Err(CleanerError::new("cleaner_error_retained")),
+	}
+}
+
+/// Garry's Mod's copies of one Workshop item. Steam removes its own copy once the game closes, and still reports
+/// the item as subscribed right after unsubscribing, so its content folder is left alone.
+pub(crate) fn item_archives(gmod: &Path, id: PublishedFileId, selected: &Path) -> Result<Vec<PathBuf>, CleanerError> {
+	check_ancestors(gmod)?;
+	let mut files = Vec::new();
+	for (folder, legacy) in [(gmod.join("garrysmod/addons"), true), (gmod.join("garrysmod/cache/workshop"), false)] {
+		files.extend(entries(&folder)?.into_iter().filter(|path| archive_id(path, legacy) == Some(id.0)));
+	}
+	if crate::game_addons::GameAddons::workshop_content_id(selected).is_none() {
+		files.push(selected.to_owned());
+	}
+	let mut seen = HashSet::new();
+	files.retain(|path| {
+		fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file() && !is_link(&metadata))
+			&& seen.insert(dunce::canonicalize(path).unwrap_or_else(|_| path.clone()))
+	});
+	Ok(files)
+}
+
+pub(crate) fn remove_archives(files: Vec<PathBuf>, permanent: bool) -> CleanResult {
+	let mut result = CleanResult::default();
+	for path in files {
+		match remove_file(&path, permanent) {
+			Ok(()) => result.removed.push(path),
+			Err(error) => result.failed.push(FileFailure { path, error }),
+		}
+	}
+	result
 }
 
 fn selected_files(snapshot: &Snapshot, id: &str, selected: &[usize]) -> Result<Vec<Candidate>, CleanerError> {
@@ -566,16 +609,8 @@ fn remove_files(
 		let removal = authorize(&file).and_then(|_| unchanged(&file)).and_then(|_| {
 			if file.folder {
 				fs::remove_dir(&file.path).map_err(|error| CleanerError::io(&file.path, error))
-			} else if permanent {
-				fs::remove_file(&file.path).map_err(|error| CleanerError::io(&file.path, error))
 			} else {
-				trash::delete(&file.path).map_err(|error| CleanerError::io(&file.path, error))?;
-				// Some shell operations can report success even when the user cancels.
-				match fs::symlink_metadata(&file.path) {
-					Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-					Err(error) => Err(CleanerError::io(&file.path, error)),
-					Ok(_) => Err(CleanerError::new("cleaner_error_retained")),
-				}
+				remove_file(&file.path, permanent)
 			}
 		});
 		match removal {
@@ -830,6 +865,50 @@ mod tests {
 			files.iter().map(|file| file.workshop_id.as_str()).collect::<HashSet<_>>(),
 			HashSet::from(["10", "20", "30", "60", "70"])
 		);
+	}
+
+	#[test]
+	fn unsubscribing_removes_garrys_mod_copies_and_leaves_steams_copy() {
+		let root = tempfile::tempdir().unwrap();
+		let root_path = fs::canonicalize(root.path()).unwrap();
+		let gmod = root_path.join("steamapps/common/GarrysMod");
+		for path in [
+			"steamapps/common/GarrysMod/garrysmod/addons/name_10.gma",
+			"steamapps/common/GarrysMod/garrysmod/addons/named10.gma",
+			"steamapps/common/GarrysMod/garrysmod/addons/name_100.gma",
+			"steamapps/common/GarrysMod/garrysmod/cache/workshop/10.gma",
+			"steamapps/common/GarrysMod/garrysmod/cache/workshop/ds_10.gma",
+			"steamapps/common/GarrysMod/garrysmod/cache/workshop/20.gma",
+			"steamapps/workshop/content/4000/10/content.gma",
+		] {
+			let path = root_path.join(path);
+			fs::create_dir_all(path.parent().unwrap()).unwrap();
+			fs::write(path, b"test").unwrap();
+		}
+		let selected = gmod.join("garrysmod/addons/named10.gma");
+		let mut found = item_archives(&gmod, PublishedFileId(10), &selected).unwrap();
+		found.sort();
+		let mut expected: Vec<_> = [
+			"steamapps/common/GarrysMod/garrysmod/addons/name_10.gma",
+			"steamapps/common/GarrysMod/garrysmod/addons/named10.gma",
+			"steamapps/common/GarrysMod/garrysmod/cache/workshop/10.gma",
+			"steamapps/common/GarrysMod/garrysmod/cache/workshop/ds_10.gma",
+		]
+		.iter()
+		.map(|path| root_path.join(path))
+		.collect();
+		expected.sort();
+		assert_eq!(found, expected);
+		assert_eq!(item_archives(&gmod, PublishedFileId(10), &gmod.join("garrysmod/addons/name_10.gma")).unwrap().len(), 3);
+		let steam_copy = root_path.join("steamapps/workshop/content/4000/10/content.gma");
+		assert_eq!(item_archives(&gmod, PublishedFileId(10), &steam_copy).unwrap().len(), 3);
+
+		let result = remove_archives(found, true);
+		assert_eq!(result.removed.len(), 4);
+		assert!(result.failed.is_empty());
+		assert!(steam_copy.exists());
+		assert!(gmod.join("garrysmod/addons/name_100.gma").exists());
+		assert!(gmod.join("garrysmod/cache/workshop/20.gma").exists());
 	}
 
 	#[test]

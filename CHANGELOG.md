@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Drag to resize the description and changelog previews, and swap them to the other side.
 - Add a Logs Path setting and an Open Logs Folder button in Settings > Paths.
+- Add a Report a problem button at the bottom of the sidebar to copy your log and open a GitHub report.
+- Delete or unsubscribe from installed addons from their right-click menu or preview. Choose Trash or permanent deletion each time, or set a default in Settings > Installed Addons, where you can also make Unsubscribe delete Garry's Mod's copies of the addon.
 
 ### Changed
 

@@ -144,6 +144,8 @@ body:
       description: |
         Drag the `desktop_*.log` file from when the problem happened here (`cli_*.log` for the command line). Logs are named by the date and time nwmpublisher started, and the last four of each are kept.
 
+        If the problem happened in the window that's still open, you can click **Report a problem > Copy log** at the bottom of the sidebar and paste it here instead.
+
         Open the folder from **Settings > Paths > Open Logs Folder**, or:
 
         - **Windows:** press Win+R and open `%APPDATA%\nwmpublisher\logs`

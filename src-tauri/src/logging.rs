@@ -330,6 +330,20 @@ pub async fn open_logs() -> Result<(), String> {
 	.map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+pub async fn read_current_log() -> Result<String, String> {
+	tauri::async_runtime::spawn_blocking(|| {
+		flush();
+		let path = current().ok_or_else(|| "ERR_READ_LOG".to_owned())?;
+		fs::read(&path).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()).map_err(|error| {
+			eprintln!("Could not read the log {}: {error}", path.display());
+			format!("ERR_READ_LOG:{}: {error}", path.display())
+		})
+	})
+	.await
+	.map_err(|error| error.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

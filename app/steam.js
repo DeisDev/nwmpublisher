@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event';
+import { writable } from 'svelte/store';
 import { Transaction } from './transactions';
 
 class DeferredPromise {
@@ -254,9 +255,11 @@ function getFileTypeInfo(path) {
 }
 
 const steam = new Steam();
+const installedAddonsRevision = writable(0);
 
 listen('InstalledAddonsRefreshed', () => {
 	steam.InstalledAddons = {};
+	installedAddonsRevision.update(revision => revision + 1);
 });
 
 invoke('workshop_item_channel').then(transaction_id => {
@@ -268,4 +271,4 @@ invoke('workshop_item_channel').then(transaction_id => {
 	});
 });
 
-export { steam as Steam, getFileTypeInfo, trimPath }
+export { steam as Steam, getFileTypeInfo, trimPath, installedAddonsRevision }

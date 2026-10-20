@@ -30,6 +30,7 @@
 	const sections = [
 		['general', 'settings.general.general'],
 		['extraction', 'settings.extraction.title'],
+		['installed', 'settings.installed.title'],
 		['editors', 'settings.editors.title'],
 		['changelog', 'changelog_defaults.nav'],
 		['paths', 'settings.paths.paths'],
@@ -120,6 +121,12 @@
 		saveSettings({ extract_metadata_filename: name }).then(() => AppSettings.extract_metadata_filename = name, () => {});
 	}
 
+	const addonDeleteModes = [
+		['ask', ['settings.installed.delete_ask']],
+		['trash', ['cleaner_trash']],
+		['permanent', ['cleaner_permanent']],
+	];
+
 	const extractOverwriteModes = [
 		['Overwrite', ['settings.extract_overwrite_mode.overwrite']],
 		['Recycle', ['settings.extract_overwrite_mode.recycle']],
@@ -161,6 +168,9 @@
 			<Setting afterChange={changeSaveMetadata} id="extract_workshop_metadata" type="bool" value={saveMetadata} tooltip={$_('settings.extraction.workshop_metadata_tooltip')}>{$_('settings.extraction.workshop_metadata')}</Setting>
 			<Setting afterChange={changeMetadataName} id="extract_metadata_filename" type="text" value={AppSettings.extract_metadata_filename} disabled={!saveMetadata}>{$_('settings.extraction.metadata_filename')}</Setting>
 			<Setting {afterChange} id="extract_workshop_icon" type="bool" value={AppSettings.extract_workshop_icon} tooltip={$_('settings.extraction.workshop_icon_tooltip')}>{$_('settings.extraction.workshop_icon')}</Setting>
+		{:else if activeItem === 'installed'}
+			<Setting {afterChange} id="addon_delete_mode" type="select" value={$settings.addon_delete_mode} choices={addonDeleteModes}>{$_('settings.installed.delete_mode')}</Setting>
+			<Setting {afterChange} id="unsubscribe_delete_files" type="bool" value={$settings.unsubscribe_delete_files} tooltip={$_('settings.installed.unsubscribe_delete_files_tooltip')}>{$_('settings.installed.unsubscribe_delete_files')}</Setting>
 		{:else if activeItem === 'editors'}
 			<section>
 				<h3>{$_('settings.editors.shared')}</h3>
