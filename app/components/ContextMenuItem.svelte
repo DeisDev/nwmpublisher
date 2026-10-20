@@ -1,14 +1,26 @@
 <script>
 	export let click = null;
+	export let disabled = false;
+
+	function onClick(event) {
+		if (disabled) event.stopPropagation();
+		else click?.(event);
+	}
+
+	function onKeydown(event) {
+		if (event.key !== 'Enter' && event.key !== ' ') return;
+		event.preventDefault();
+		event.currentTarget.click();
+	}
 </script>
 
-<main on:click={click}>
+<div class="item" role="menuitem" tabindex="-1" aria-disabled={disabled || null} class:disabled on:click={onClick} on:keydown={onKeydown}>
 	<slot name="icon"></slot>
 	<slot name="label"></slot>
-</main>
+</div>
 
 <style>
-	main {
+	.item {
 		display: flex;
 		align-items: center;
 		padding: .7rem;
@@ -16,10 +28,18 @@
 		background-color: rgba(255,255,255,0);
 		transition: background-color .1s;
 	}
-	main > :global(*:not(:last-child)) {
+	.item > :global(*:not(:last-child)) {
 		margin-right: .5rem;
 	}
-	main:hover {
+	.item:hover, .item:focus {
 		background-color: var(--fill);
+		outline: none;
+	}
+	.item.disabled {
+		opacity: .45;
+		cursor: default;
+	}
+	.item.disabled:hover {
+		background-color: transparent;
 	}
 </style>

@@ -7,7 +7,7 @@
 	import SteamID from 'steamid';
 	import LinkOut from '@lucide/svelte/icons/external-link';
 	import { invoke } from '@tauri-apps/api/core';
-	import { addonName, addonRemoval, requestDelete, requestUnsubscribe } from '../addon-removal.js';
+	import { addonName, addonRemoval, removalJob, requestDelete, requestUnsubscribe } from '../addon-removal.js';
 	import { settings } from '../settings.js';
 	import WorkshopStats from './WorkshopStats.svelte';
 	import BBCode from './BBCode.svelte';
@@ -206,9 +206,9 @@
 							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut class="icon" size=".8rem"/></a></div>
 						{/if}
 						{#if removal === 'unsubscribe'}
-							<button type="button" class="removal-btn" disabled={removing} on:click={() => unsubscribe(workshop, gma)}>{$_($settings.unsubscribe_delete_files ? 'addon_unsubscribe_delete' : 'addon_unsubscribe')}</button>
+							<button type="button" class="removal-btn" disabled={removing || !!$removalJob} on:click={() => unsubscribe(workshop, gma)}>{$_($settings.unsubscribe_delete_files ? 'addon_unsubscribe_delete' : 'addon_unsubscribe')}</button>
 						{:else if removal === 'delete'}
-							<button type="button" class="removal-btn" on:click={() => remove(workshop, gma)}>{$_('addon_delete')}</button>
+							<button type="button" class="removal-btn" disabled={!!$removalJob} on:click={() => remove(workshop, gma)}>{$_('addon_delete')}</button>
 						{/if}
 						<button type="button" class="extract-btn" disabled={!gmaPath} on:click={chooseDestination}>{$_('extract')}</button>
 					</div>

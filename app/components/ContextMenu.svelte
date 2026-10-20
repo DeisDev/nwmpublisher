@@ -30,20 +30,22 @@
 			let workshop;
 			let gma;
 			let disableDownload;
+			let items;
 
 			if (typeof register[0] === 'function') {
 				register = register[0](e);
 				if (!register) return;
 			}
 
-			[workshop, gma, disableDownload] = register;
+			[workshop, gma, disableDownload, items] = register;
 
 			currentContext.set({
 				x: e.pageX,
 				y: e.pageY,
 				workshop,
 				gma,
-				disableDownload
+				disableDownload,
+				items: items ?? null
 			});
 
 			e.preventDefault();
@@ -79,11 +81,11 @@
 	import CloudDownload from '@lucide/svelte/icons/cloud-download';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import CircleMinus from '@lucide/svelte/icons/circle-minus';
-	import { addonName, addonRemoval, requestDelete, requestUnsubscribe } from '../addon-removal.js';
+	import { addonName, addonRemoval, removalJob, requestDelete, requestUnsubscribe } from '../addon-removal.js';
 	import { settings } from '../settings.js';
 	import { get, writable } from 'svelte/store';
 	import Loading from './Loading.svelte';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import DestinationSelect from './DestinationSelect.svelte';
 	import { formatSize } from '../format.js';
@@ -95,17 +97,21 @@ import { playSound } from '../sounds';
 	export let x;
 	export let y;
 	export let disableDownload = false;
+	export let items = null;
 
 	let subscription;
 
 	const me = get(currentContext);
 	if (!me) throw new Error('currentContext invalid');
 
-	if (!workshop || !gma) {
+	if (!items && (!workshop || !gma)) {
 		throw new Error('Tried to create a context menu with no Workshop or GMA promise');
 	}
 
-	let loading = new Promise(resolve => {
+	const previousFocus = document.activeElement;
+	const openedByKeyboard = !!previousFocus?.matches?.(':focus-visible');
+
+	let loading = items ? Promise.resolve() : new Promise(resolve => {
 		if (workshop) {
 			workshop.then(workshop => {
 				resolve();
@@ -132,6 +138,10 @@ import { playSound } from '../sounds';
 
 		onSoftDestroy();
 
+		if (contextMenu?.contains(document.activeElement)) {
+			previousFocus?.focus?.({ preventScroll: true });
+		}
+
 		if ($currentContext == me) {
 			$currentContext = null;
 		}
@@ -148,11 +158,46 @@ import { playSound } from '../sounds';
 		contextMenu.style.transformOrigin = y >= top ? 'top' : 'bottom';
 	}
 
-	onMount(() => {
+	onMount(async () => {
 		me.element = contextMenu;
 		new ResizeObserver(updatePosition).observe(contextMenu);
 		updatePosition();
+
+		await loading;
+		await tick();
+		if (destroyed) return;
+		const first = openedByKeyboard && contextMenu.querySelector('[role="menuitem"]:not([aria-disabled="true"])');
+		(first || contextMenu).focus({ preventScroll: true });
 	});
+
+	function onKeydown(event) {
+		const items = [...contextMenu.querySelectorAll('[role="menuitem"]:not([aria-disabled="true"])')];
+		const index = items.indexOf(document.activeElement);
+		let next;
+		switch (event.key) {
+			case 'ArrowDown':
+				next = items[(index + 1) % items.length];
+				break;
+			case 'ArrowUp':
+				next = items[index <= 0 ? items.length - 1 : index - 1];
+				break;
+			case 'Home':
+				next = items[0];
+				break;
+			case 'End':
+				next = items[items.length - 1];
+				break;
+			case 'Escape':
+			case 'Tab':
+				event.preventDefault();
+				destroy();
+				return;
+			default:
+				return;
+		}
+		event.preventDefault();
+		next?.focus({ preventScroll: true });
+	}
 	$: { updatePosition(); }
 
 	function onClickOff(e) {
@@ -214,7 +259,7 @@ import { playSound } from '../sounds';
 	}
 
 	let workshopItem = null;
-	workshop.then(item => workshopItem = item, () => {});
+	workshop?.then(item => workshopItem = item, () => {});
 
 	async function download() {
 		await invoke('workshop_download', { ids: [(await workshop).id] });
@@ -226,11 +271,22 @@ import { playSound } from '../sounds';
 
 <DestinationSelect active={choosingExtractDestination} cancel={() => choosingExtractDestination = false} callback={extractGMA} text={$_('extract')} extractedName={extractedName}/>
 
-<main class="context-menu" bind:this={contextMenu} class:destroyed={destroyed} on:resize={updatePosition}>
+<div class="context-menu" role="menu" tabindex="-1" bind:this={contextMenu} class:destroyed={destroyed} on:resize={updatePosition} on:keydown={onKeydown}>
 	{#await loading}
 		<Loading size="2rem"/>
 	{:then}
-		{#if gma}
+		{#if items}
+			{#each items as item}
+				{#if item.divider}
+					<div class="divider" role="separator"></div>
+				{:else}
+					<ContextMenuItem click={item.click} disabled={item.disabled}>
+						<span slot="icon"><svelte:component this={item.icon} class="icon" size="1rem"/></span>
+						<span slot="label">{item.label}</span>
+					</ContextMenuItem>
+				{/if}
+			{/each}
+		{:else if gma}
 			{#await gma then gma}
 				{#if gma}
 					{#if gma.path}
@@ -244,12 +300,12 @@ import { playSound } from '../sounds';
 						</ContextMenuItem>
 						{#await addonRemoval(gma.path) then removal}
 							{#if removal === 'unsubscribe'}
-								<ContextMenuItem click={() => requestUnsubscribe(gma.path, addonName(workshopItem, gma))}>
+								<ContextMenuItem click={() => requestUnsubscribe(gma.path, addonName(workshopItem, gma))} disabled={!!$removalJob}>
 									<span slot="icon"><CircleMinus class="icon" size="1rem"/></span>
 									<span slot="label">{$_($settings.unsubscribe_delete_files ? 'addon_unsubscribe_delete' : 'addon_unsubscribe')}</span>
 								</ContextMenuItem>
 							{:else if removal === 'delete'}
-								<ContextMenuItem click={() => requestDelete(gma.path, addonName(workshopItem, gma))}>
+								<ContextMenuItem click={() => requestDelete(gma.path, addonName(workshopItem, gma))} disabled={!!$removalJob}>
 									<span slot="icon"><Trash2 class="icon" size="1rem"/></span>
 									<span slot="label">{$_('addon_delete')}</span>
 								</ContextMenuItem>
@@ -259,15 +315,17 @@ import { playSound } from '../sounds';
 				{/if}
 			{/await}
 		{/if}
-		{#await Promise.allSettled([workshop, gma]) then [workshop, gma]}
-			{#if workshop?.value && gma?.value}
-				<div class="divider"></div>
-			{/if}
-		{/await}
-		{#if workshop}
+		{#if !items}
+			{#await Promise.allSettled([workshop, gma]) then [workshop, gma]}
+				{#if workshop?.value && gma?.value}
+					<div class="divider" role="separator"></div>
+				{/if}
+			{/await}
+		{/if}
+		{#if workshop && !items}
 			{#await workshop then workshop}
 				{#if workshop && !workshop.dead}
-					<a class="nostyle" href="https://steamcommunity.com/sharedfiles/filedetails/?id={workshop.id}" target="_blank">
+					<a class="nostyle" href="https://steamcommunity.com/sharedfiles/filedetails/?id={workshop.id}" target="_blank" tabindex="-1">
 						<ContextMenuItem>
 							<span slot="icon"><LinkOut class="icon" size="1rem"/></span>
 							<span slot="label">{$_('steam_workshop')}</span>
@@ -284,8 +342,8 @@ import { playSound } from '../sounds';
 						</ContextMenuItem>
 					{/if}
 					{#if workshop.previewUrl}
-						<div class="divider"></div>
-						<a class="nostyle" href={workshop.previewUrl} target="_blank">
+						<div class="divider" role="separator"></div>
+						<a class="nostyle" href={workshop.previewUrl} target="_blank" tabindex="-1">
 							<ContextMenuItem>
 								<span slot="icon"><LinkOut class="icon" size="1rem"/></span>
 								<span slot="label">{$_('open_image')}</span>
@@ -300,7 +358,7 @@ import { playSound } from '../sounds';
 			{/await}
 		{/if}
 	{/await}
-</main>
+</div>
 
 <style>
 	.context-menu {
@@ -314,6 +372,9 @@ import { playSound } from '../sounds';
 		overflow: hidden;
 		width: max-content;
 		transform-origin: top;
+	}
+	.context-menu:focus {
+		outline: none;
 	}
 	.context-menu.destroyed {
 		animation: context-menu-reverse .25s forwards;

@@ -108,7 +108,7 @@
 	function doCallback() {
 		switch (extractPath[0]) {
 			case 'browse':
-				return callback({'Directory': extractPath[1]});
+				return callback((forceCreateFolder || extractPath[2]) ? { NamedDirectory: extractPath[1] } : { Directory: extractPath[1] });
 
 			case 'tmp':
 				return callback('Temp');

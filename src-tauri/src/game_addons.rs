@@ -3,27 +3,33 @@ use std::{
 	fs::DirEntry,
 	path::{Path, PathBuf},
 	sync::{
-		atomic::{AtomicU8, Ordering},
+		atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
 		mpsc, Arc,
 	},
 	time::{Duration, SystemTime},
 };
 
-use parking_lot::{RwLock, RwLockReadGuard};
+use parking_lot::{Mutex, RwLock, RwLockReadGuard};
 use rayon::ThreadPool;
 use serde::Serialize;
 use steamworks::{ItemState, PublishedFileId};
+use tauri::ipc::Channel;
 
 use crate::{
 	addon_cleaner::{self, CleanResult, CleanerError},
 	appdata::InstalledAddonsSort,
-	gma::{extract::{ExtractGMAMut, ExtractOptions}, AddonType},
+	gma::{
+		extract::{ExtractDestination, ExtractGMAMut, ExtractOptions},
+		AddonType,
+	},
 	webview::Addon,
 	GMAFile,
 };
 
 static DISCOVERY_POOL: std::sync::LazyLock<ThreadPool> = std::sync::LazyLock::new(|| thread_pool!(4));
 const STEAM_TIMEOUT: Duration = Duration::from_secs(30);
+static REMOVAL: Mutex<()> = Mutex::new(());
+static REMOVAL_STOP: AtomicBool = AtomicBool::new(false);
 
 #[repr(u8)]
 enum Discovered {
@@ -49,9 +55,26 @@ impl From<Discovered> for u8 {
 	}
 }
 
+/// Only one caller runs `refresh`; the others wait for it. `refresh` leaves the state at `No` when the game is missing.
+fn await_discovery(state: &AtomicU8, refresh: impl FnOnce()) {
+	loop {
+		match state.load(Ordering::Acquire).into() {
+			Discovered::Yes => return,
+			Discovered::No => {
+				if state.compare_exchange(Discovered::No.into(), Discovered::Discovering.into(), Ordering::AcqRel, Ordering::Acquire).is_ok() {
+					return refresh();
+				}
+			}
+			Discovered::Discovering => sleep_ms!(25),
+		}
+	}
+}
+
 #[derive(Debug)]
 pub struct GameAddons {
 	discovered: AtomicU8,
+	/// Bumped whenever the caches are cleared, so a scan that started earlier is not marked current.
+	generation: AtomicU64,
 	paths: RwLock<HashMap<PathBuf, Arc<Addon>>>,
 	pages: RwLock<Vec<Arc<Addon>>>,
 	external: RwLock<HashMap<PathBuf, Option<Arc<Addon>>>>,
@@ -63,6 +86,7 @@ impl GameAddons {
 	pub fn init() -> GameAddons {
 		GameAddons {
 			discovered: AtomicU8::new(Discovered::No.into()),
+			generation: AtomicU64::new(0),
 			paths: RwLock::new(HashMap::new()),
 			pages: RwLock::new(Vec::new()),
 			external: RwLock::new(HashMap::new()),
@@ -122,6 +146,7 @@ impl GameAddons {
 
 	pub fn refresh(&self) {
 		self.discovered.store(Discovered::Discovering.into(), Ordering::Release);
+		let generation = self.generation.load(Ordering::Acquire);
 
 		let mut gmod = if let Some(gmod) = app_data!().gmod_dir() {
 			gmod
@@ -272,10 +297,12 @@ impl GameAddons {
 
 			println!("Discovered {} addons", paths.len());
 
-			ids
+			// Set while the maps are still locked, so a concurrent free_caches cannot be overwritten.
+			let current = self.generation.load(Ordering::Acquire) == generation;
+			self.discovered.store(if current { Discovered::Yes } else { Discovered::No }.into(), Ordering::Release);
+			current.then_some(ids)
 		};
-
-		self.discovered.store(Discovered::Yes.into(), Ordering::Release);
+		let Some(ids) = ids else { return };
 
 		let (sort, types) = {
 			let settings = app_data!().settings.read();
@@ -287,15 +314,7 @@ impl GameAddons {
 
 	pub fn discover_addons(&self) {
 		main_thread_forbidden!();
-
-		match self.discovered.load(Ordering::Acquire).into() {
-			Discovered::Yes => {}
-			Discovered::No => self.refresh(),
-			Discovered::Discovering => loop {
-				sleep_ms!(25);
-				game_addons!().discover_addons();
-			},
-		}
+		await_discovery(&self.discovered, || self.refresh());
 	}
 
 	/// Paths sent to the webview are canonical, while discovery keeps the paths it read.
@@ -344,6 +363,12 @@ pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<
 	(selected.len(), page)
 }
 
+#[tauri::command]
+pub fn browse_all_installed_addons(sort: InstalledAddonsSort, types: Vec<AddonType>) -> Vec<Arc<Addon>> {
+	let unsubscribed = game_addons!().unsubscribed.read().clone();
+	select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Removal {
@@ -375,28 +400,76 @@ fn installed_addon(path: &Path) -> Result<Arc<Addon>, CleanerError> {
 }
 
 #[tauri::command]
-pub fn installed_addon_removal(path: PathBuf) -> Option<Removal> {
-	addon_removal(game_addons!().from_path(path)?.installed())
+pub fn installed_addon_removal(paths: Vec<PathBuf>) -> Vec<Option<Removal>> {
+	game_addons!().discover_addons();
+	let known = game_addons!().paths.read();
+	let mut canonical: Option<HashMap<PathBuf, Arc<Addon>>> = None;
+	paths
+		.iter()
+		.map(|path| {
+			let addon = known.get(path).cloned().or_else(|| {
+				let canonical = canonical.get_or_insert_with(|| known.iter().filter_map(|(path, addon)| Some((dunce::canonicalize(path).ok()?, addon.clone()))).collect());
+				canonical.get(&dunce::canonicalize(path).ok()?).cloned()
+			})?;
+			addon_removal(addon.installed())
+		})
+		.collect()
+}
+
+#[derive(Clone, Serialize)]
+pub struct RemovalProgress {
+	completed: usize,
+	total: usize,
+}
+
+#[derive(Serialize)]
+pub struct RemovalOutcome {
+	path: PathBuf,
+	error: Option<CleanerError>,
+	files: Option<CleanResult>,
+}
+
+/// Removes addons one at a time until done or stopped. Items left after a stop have no outcome.
+fn run_removal(paths: Vec<PathBuf>, on_progress: &Channel<RemovalProgress>, mut remove: impl FnMut(&Path) -> Result<Option<CleanResult>, CleanerError>) -> Vec<RemovalOutcome> {
+	let total = paths.len();
+	let mut progress = Some(on_progress);
+	let mut outcomes = Vec::with_capacity(total);
+	for path in paths {
+		if REMOVAL_STOP.load(Ordering::Acquire) {
+			break;
+		}
+		outcomes.push(match remove(&path) {
+			Ok(files) => RemovalOutcome { path, error: None, files },
+			Err(error) => RemovalOutcome { path, error: Some(error), files: None },
+		});
+		if let Some(channel) = progress {
+			if let Err(error) = channel.send(RemovalProgress { completed: outcomes.len(), total }) {
+				eprintln!("Addon removal progress delivery failed: {error}");
+				progress = None;
+			}
+		}
+	}
+	outcomes
 }
 
 #[tauri::command]
-pub async fn unsubscribe_installed_addon(path: PathBuf, delete_files: bool, permanent: bool) -> Result<CleanResult, CleanerError> {
-	let result = tauri::async_runtime::spawn_blocking(move || {
-		let addon = installed_addon(&path)?;
-		let gma = addon.installed();
-		if !steam!().connected() {
-			return Err(CleanerError::new("addon_unsubscribe_offline"));
-		}
-		let id = match (addon_removal(gma), gma.id) {
-			(Some(Removal::Unsubscribe), Some(id)) => id,
-			_ => return Err(CleanerError::new("addon_unsubscribe_not_subscribed")),
-		};
-		let files = if delete_files {
-			let gmod = app_data!().gmod_dir().ok_or_else(|| CleanerError::new("cleaner_error_gmod"))?;
-			addon_cleaner::item_archives(&gmod, id, &gma.path)?
-		} else {
-			Vec::new()
-		};
+pub fn stop_installed_addon_removal() {
+	REMOVAL_STOP.store(true, Ordering::Release);
+}
+
+fn unsubscribe_addon(path: &Path, gmod: Option<&Path>, permanent: bool, unsubscribed: &mut HashSet<PublishedFileId>) -> Result<(PublishedFileId, CleanResult), CleanerError> {
+	let addon = installed_addon(path)?;
+	let gma = addon.installed();
+	let id = match (addon_removal(gma), gma.id) {
+		(Some(Removal::Unsubscribe), Some(id)) => id,
+		_ => return Err(CleanerError::new("addon_unsubscribe_not_subscribed")),
+	};
+	let files = match gmod {
+		Some(gmod) => addon_cleaner::item_archives(gmod, id, &gma.path)?,
+		None => Vec::new(),
+	};
+	// Copies of one item share its ID, and Steam still reports it as subscribed right after unsubscribing.
+	if !unsubscribed.contains(&id) {
 		let (sender, receiver) = mpsc::sync_channel(1);
 		steam!().client().ugc().unsubscribe_item(id, move |result| {
 			let _ = sender.send(result);
@@ -405,73 +478,95 @@ pub async fn unsubscribe_installed_addon(path: PathBuf, delete_files: bool, perm
 			.recv_timeout(STEAM_TIMEOUT)
 			.map_err(|_| CleanerError::new("addon_unsubscribe_timeout"))?
 			.map_err(|error| CleanerError::detail("addon_unsubscribe_error", error))?;
+		unsubscribed.insert(id);
 		game_addons!().unsubscribed.write().insert(id);
-		let result = addon_cleaner::remove_archives(files, permanent);
-		if !result.removed.is_empty() {
-			crate::commands::free_caches();
-		}
-		webview_emit!("InstalledAddonsRefreshed");
-		Ok((id, result))
-	})
-	.await
-	.map_err(|error| CleanerError::detail("cleaner_error_task", error))
-	.and_then(std::convert::identity);
-	match result {
-		Ok((id, result)) => {
-			println!("Unsubscribed from Workshop item {}", id.0);
-			if delete_files {
-				println!("{} {} files of Workshop item {}", if permanent { "Deleted" } else { "Moved to Trash" }, result.removed.len(), id.0);
-			}
-			for failure in &result.failed {
-				wprintln!("Kept {} after unsubscribing: {}", failure.path.display(), failure.error);
-			}
-			Ok(result)
-		}
-		Err(error) => {
-			eprintln!("Could not unsubscribe from an installed addon: {}", error);
-			Err(error)
-		}
 	}
+	Ok((id, addon_cleaner::remove_archives(files, permanent)))
 }
 
 #[tauri::command]
-pub async fn delete_installed_addon(path: PathBuf, permanent: bool) -> Result<(), CleanerError> {
-	let result = tauri::async_runtime::spawn_blocking(move || {
-		let addon = installed_addon(&path)?;
-		let gma = addon.installed();
-		match addon_removal(gma) {
-			Some(Removal::Delete) => {}
-			Some(Removal::Unsubscribe) => return Err(CleanerError::new("cleaner_error_subscribed")),
-			None => return Err(CleanerError::new("cleaner_error_steam")),
+pub async fn unsubscribe_installed_addons(paths: Vec<PathBuf>, delete_files: bool, permanent: bool, on_progress: Channel<RemovalProgress>) -> Result<Vec<RemovalOutcome>, CleanerError> {
+	tauri::async_runtime::spawn_blocking(move || {
+		let _removal = REMOVAL.try_lock().ok_or_else(|| CleanerError::new("addon_removal_busy"))?;
+		REMOVAL_STOP.store(false, Ordering::Release);
+		if !steam!().connected() {
+			return Err(CleanerError::new("addon_unsubscribe_offline"));
 		}
-		let path = gma.path.clone();
-		let metadata = std::fs::symlink_metadata(&path).map_err(|error| CleanerError::io(&path, error))?;
-		if !metadata.is_file() || addon_cleaner::is_link(&metadata) {
-			return Err(CleanerError::new("addon_removal_changed"));
-		}
-		addon_cleaner::remove_file(&path, permanent)?;
-		if GameAddons::workshop_content_id(&path).is_some() {
-			if let Err(error) = addon_cleaner::remove_empty_folder(path.parent().unwrap()) {
-				wprintln!("Could not remove the empty Workshop folder of {}: {}", path.display(), error);
+		let gmod = if delete_files { Some(app_data!().gmod_dir().ok_or_else(|| CleanerError::new("cleaner_error_gmod"))?) } else { None };
+		let mut unsubscribed = HashSet::new();
+		let outcomes = run_removal(paths, &on_progress, |path| match unsubscribe_addon(path, gmod.as_deref(), permanent, &mut unsubscribed) {
+			Ok((id, result)) => {
+				println!("Unsubscribed from Workshop item {}", id.0);
+				if delete_files {
+					println!("{} {} files of Workshop item {}", if permanent { "Deleted" } else { "Moved to Trash" }, result.removed.len(), id.0);
+				}
+				for failure in &result.failed {
+					wprintln!("Kept {} after unsubscribing: {}", failure.path.display(), failure.error);
+				}
+				Ok(Some(result))
 			}
+			Err(error) => {
+				eprintln!("Could not unsubscribe from an installed addon: {}", error);
+				Err(error)
+			}
+		});
+		if outcomes.iter().any(|outcome| outcome.files.as_ref().is_some_and(|files| !files.removed.is_empty())) {
+			crate::commands::free_caches();
 		}
-		crate::commands::free_caches();
-		webview_emit!("InstalledAddonsRefreshed");
-		Ok(path)
+		if outcomes.iter().any(|outcome| outcome.error.is_none()) {
+			webview_emit!("InstalledAddonsRefreshed");
+		}
+		Ok(outcomes)
 	})
 	.await
-	.map_err(|error| CleanerError::detail("cleaner_error_task", error))
-	.and_then(std::convert::identity);
-	match result {
-		Ok(path) => {
-			println!("{} installed addon {}", if permanent { "Deleted" } else { "Moved to Trash" }, path.display());
-			Ok(())
-		}
-		Err(error) => {
-			eprintln!("Could not delete an installed addon: {}", error);
-			Err(error)
+	.map_err(|error| CleanerError::detail("cleaner_error_task", error))?
+}
+
+fn delete_addon(path: &Path, permanent: bool) -> Result<PathBuf, CleanerError> {
+	let addon = installed_addon(path)?;
+	let gma = addon.installed();
+	match addon_removal(gma) {
+		Some(Removal::Delete) => {}
+		Some(Removal::Unsubscribe) => return Err(CleanerError::new("cleaner_error_subscribed")),
+		None => return Err(CleanerError::new("cleaner_error_steam")),
+	}
+	let path = gma.path.clone();
+	let metadata = std::fs::symlink_metadata(&path).map_err(|error| CleanerError::io(&path, error))?;
+	if !metadata.is_file() || addon_cleaner::is_link(&metadata) {
+		return Err(CleanerError::new("addon_removal_changed"));
+	}
+	addon_cleaner::remove_file(&path, permanent)?;
+	if GameAddons::workshop_content_id(&path).is_some() {
+		if let Err(error) = addon_cleaner::remove_empty_folder(path.parent().unwrap()) {
+			wprintln!("Could not remove the empty Workshop folder of {}: {}", path.display(), error);
 		}
 	}
+	Ok(path)
+}
+
+#[tauri::command]
+pub async fn delete_installed_addons(paths: Vec<PathBuf>, permanent: bool, on_progress: Channel<RemovalProgress>) -> Result<Vec<RemovalOutcome>, CleanerError> {
+	tauri::async_runtime::spawn_blocking(move || {
+		let _removal = REMOVAL.try_lock().ok_or_else(|| CleanerError::new("addon_removal_busy"))?;
+		REMOVAL_STOP.store(false, Ordering::Release);
+		let outcomes = run_removal(paths, &on_progress, |path| match delete_addon(path, permanent) {
+			Ok(path) => {
+				println!("{} installed addon {}", if permanent { "Deleted" } else { "Moved to Trash" }, path.display());
+				Ok(None)
+			}
+			Err(error) => {
+				eprintln!("Could not delete an installed addon: {}", error);
+				Err(error)
+			}
+		});
+		if outcomes.iter().any(|outcome| outcome.error.is_none()) {
+			crate::commands::free_caches();
+			webview_emit!("InstalledAddonsRefreshed");
+		}
+		Ok(outcomes)
+	})
+	.await
+	.map_err(|error| CleanerError::detail("cleaner_error_task", error))?
 }
 
 #[tauri::command]
@@ -540,13 +635,58 @@ pub fn downloader_extract_gmas(paths: Vec<PathBuf>) {
 	}
 }
 
+/// Extracting into the chosen folder itself would merge every addon into one folder.
+fn separate_folders(destination: ExtractDestination) -> ExtractDestination {
+	match destination {
+		ExtractDestination::Directory(path) => ExtractDestination::NamedDirectory(path),
+		destination => destination,
+	}
+}
+
+/// Queues installed addons in the Downloader's extraction list. Returns how many were queued; copies of one Workshop item are extracted once.
+#[tauri::command]
+pub fn extract_installed_addons(paths: Vec<PathBuf>, destination: ExtractDestination) -> usize {
+	let destination = separate_folders(destination);
+	let options = ExtractOptions::from_settings();
+	let mut ids = HashSet::new();
+	let mut queued = 0;
+	for path in paths {
+		let Some(addon) = game_addons!().from_path(&path) else { continue };
+		let id = addon.installed().id;
+		if id.is_some_and(|id| !ids.insert(id)) {
+			continue;
+		}
+		let file_name = path.file_name().map(|name| name.to_string_lossy().to_string());
+		let transaction = crate::transactions::new_extraction();
+		transaction.context(serde_json::json!({ "kind": "extract", "sourcePath": path, "fileName": file_name, "workshopId": id }));
+		webview_emit!("ExtractionStarted", (transaction.id, Some(path.clone()), file_name, id));
+		let destination = destination.clone();
+		let mut options = options.clone();
+		crate::gma::extract::THREAD_POOL.spawn(move || match GMAFile::open(&path) {
+			Ok(mut gma) => {
+				if let Some(id) = id {
+					gma.set_ws_id(id);
+				}
+				transaction.data((turbonone!(), gma.size));
+				if !crate::steam::item_info::attach(&mut options, gma.inferred_ws_id(), true, None, &transaction) { return transaction.cancelled(); }
+				let _ = gma.extract(destination, &transaction, false, true, &options);
+			}
+			Err(error) => transaction.error(error.to_string(), turbonone!()),
+		});
+		queued += 1;
+	}
+	queued
+}
+
 pub fn free_caches() {
-	crate::game_addons!().external.write().clear();
-	let mut paths = crate::game_addons!().paths.write();
-	let mut pages = crate::game_addons!().pages.write();
-	*paths = HashMap::new();
+	let game_addons = crate::game_addons!();
+	game_addons.external.write().clear();
+	let mut pages = game_addons.pages.write();
+	let mut paths = game_addons.paths.write();
 	*pages = Vec::new();
-	crate::game_addons!().discovered.store(Discovered::No.into(), Ordering::Release);
+	*paths = HashMap::new();
+	game_addons.generation.fetch_add(1, Ordering::AcqRel);
+	game_addons.discovered.store(Discovered::No.into(), Ordering::Release);
 }
 
 #[cfg(test)]
@@ -563,6 +703,40 @@ mod tests {
 		for path in [content.join("abc/addon.gma"), content.join("0/addon.gma"), Path::new("content/4001/123/addon.gma").to_owned(), Path::new("downloads/123/addon.gma").to_owned()] {
 			assert_eq!(GameAddons::workshop_content_id(&path), None, "{}", path.display());
 		}
+	}
+
+	#[test]
+	fn discovery_runs_one_refresh_and_waits_for_it() {
+		let state = Arc::new(AtomicU8::new(Discovered::No.into()));
+		let refreshes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+		let callers: Vec<_> = (0..4)
+			.map(|_| {
+				let (state, refreshes) = (state.clone(), refreshes.clone());
+				std::thread::spawn(move || {
+					await_discovery(&state, || {
+						refreshes.fetch_add(1, Ordering::SeqCst);
+						sleep_ms!(50);
+						state.store(Discovered::Yes.into(), Ordering::Release);
+					})
+				})
+			})
+			.collect();
+		for caller in callers {
+			caller.join().unwrap();
+		}
+		assert_eq!(refreshes.load(Ordering::SeqCst), 1);
+
+		let missing_game = AtomicU8::new(Discovered::No.into());
+		await_discovery(&missing_game, || missing_game.store(Discovered::No.into(), Ordering::Release));
+		assert_eq!(missing_game.load(Ordering::Acquire), u8::from(Discovered::No));
+	}
+
+	#[test]
+	fn bulk_extraction_gives_each_addon_its_own_folder() {
+		let folder = PathBuf::from("extracted");
+		assert!(matches!(separate_folders(ExtractDestination::Directory(folder.clone())), ExtractDestination::NamedDirectory(path) if path == folder));
+		assert!(matches!(separate_folders(ExtractDestination::NamedDirectory(folder.clone())), ExtractDestination::NamedDirectory(path) if path == folder));
+		assert!(matches!(separate_folders(ExtractDestination::Temp), ExtractDestination::Temp));
 	}
 
 	#[test]

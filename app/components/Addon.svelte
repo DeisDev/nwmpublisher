@@ -1,6 +1,7 @@
 <script>
 	import { _ } from 'svelte-i18n';
 	import CirclePlus from '@lucide/svelte/icons/circle-plus';
+	import Check from '@lucide/svelte/icons/check';
 	import { Steam } from '../steam';
 	import { tippyFollow } from '../tippy';
 	import Loading from './Loading.svelte';
@@ -14,6 +15,10 @@
 	export let onClick = null;
 	export let previewing = false;
 	export let fallbackName = null;
+	export let selectable = false;
+	export let selecting = false;
+	export let selected = false;
+	export let contextItems = null;
 
 	let workshop = workshopData;
 	let installed = installedData;
@@ -49,7 +54,7 @@
 	let addonElement;
 	if (!newAddon && !previewing) {
 		onMount(() => {
-			registerContext(addonElement, workshop, installed, !!installedData);
+			registerContext(addonElement, () => [workshop, installed, !!installedData, contextItems?.()]);
 		});
 	}
 
@@ -59,7 +64,7 @@
 	}
 </script>
 
-<main class="addon" class:previewing={previewing} on:click={e => onClick?.(e, workshop, installed)} bind:this={addonElement}>
+<main class="addon" class:previewing={previewing} class:selecting class:selected on:click={e => onClick?.(e, workshop, installed)} bind:this={addonElement}>
 	<div id="card">
 		<div id="stats">
 			{#if newAddon}
@@ -92,6 +97,9 @@
 					</span>
 					<img use:tippyFollow={'0.00%'} id="score" src="/img/0-star.png"/>
 				{/await}
+			{/if}
+			{#if selectable}
+				<span class="select-toggle" data-select-toggle aria-hidden="true"><Check size=".9rem" strokeWidth={3}/></span>
 			{/if}
 		</div>
 
@@ -163,10 +171,44 @@
 		text-align: center;
 	}
 	main #stats {
+		position: relative;
 		display: flex;
 		flex-direction: row;
 		text-align: center;
 		align-items: center;
+	}
+	.select-toggle {
+		position: absolute;
+		top: calc(100% + 1.2rem);
+		left: .4rem;
+		z-index: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.5rem;
+		height: 1.5rem;
+		border: 2px solid #fff;
+		border-radius: 4px;
+		background-color: rgb(0 0 0 / 45%);
+		box-shadow: 0 0 3px rgb(0 0 0 / 60%);
+		color: transparent;
+		opacity: 0;
+		transition: opacity .1s, background-color .1s;
+	}
+	main:hover .select-toggle, main.selecting .select-toggle, :global(:focus-visible) > main .select-toggle {
+		opacity: 1;
+	}
+	main.selected:not(.previewing) #card, main.selected:not(.previewing):hover #card {
+		background-color: hsl(var(--neutral-custom), var(--neutral-custom-l), .18);
+		box-shadow: inset 0 0 0 2px var(--neutral);
+	}
+	main.selected .select-toggle {
+		border-color: var(--neutral);
+		background-color: var(--neutral);
+		color: #fff;
+	}
+	main.selecting :global(.select) {
+		user-select: none;
 	}
 	main #stats * {
 		vertical-align: middle;

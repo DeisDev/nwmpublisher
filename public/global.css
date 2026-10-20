@@ -69,6 +69,8 @@
 	--border-stronger: #555;
 	--border-muted: #666;
 	--overlay-border: rgba(255, 255, 255, .4);
+	--scrollbar-thumb: #4a4a4a;
+	--scrollbar-thumb-hover: #606060;
 }
 
 :root[data-theme='light'] {
@@ -123,6 +125,8 @@
 	--border-stronger: #b3b9c1;
 	--border-muted: #aeb4bc;
 	--overlay-border: rgba(0, 0, 0, .3);
+	--scrollbar-thumb: #c1c6cd;
+	--scrollbar-thumb-hover: #a6acb5;
 }
 
 *:not(.select) {
@@ -187,6 +191,25 @@ body, .hide-scroll {
 body::-webkit-scrollbar, .hide-scroll::-webkit-scrollbar { /* WebKit */
     width: 0;
     height: 0;
+}
+
+.scrollbar {
+	overflow: auto;
+}
+.scrollbar::-webkit-scrollbar {
+	width: 12px;
+	height: 12px;
+}
+.scrollbar::-webkit-scrollbar-track, .scrollbar::-webkit-scrollbar-corner {
+	background: transparent;
+}
+.scrollbar::-webkit-scrollbar-thumb {
+	border: 3px solid transparent;
+	border-radius: 6px;
+	background: var(--scrollbar-thumb) padding-box;
+}
+.scrollbar::-webkit-scrollbar-thumb:hover, .scrollbar::-webkit-scrollbar-thumb:active {
+	background-color: var(--scrollbar-thumb-hover);
 }
 
 .icon, .icon + *, .icon ~ * {

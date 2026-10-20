@@ -13,16 +13,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a Logs Path setting and an Open Logs Folder button in Settings > Paths.
 - Add a Report a problem button at the bottom of the sidebar to copy your log and open a GitHub report.
 - Delete or unsubscribe from installed addons from their right-click menu or preview. Choose Trash or permanent deletion each time, or set a default in Settings > Installed Addons, where you can also make Unsubscribe delete Garry's Mod's copies of the addon.
+- Select many installed addons with Ctrl-click, Shift-click, the Select button, or the keyboard, then extract, unsubscribe, delete, copy links, or open folders for all of them at once.
+- Move through installed addons with the arrow keys, Page Up, Page Down, Home, and End. Right-click menus open with Shift+F10 or the Menu key and work with the keyboard.
 
 ### Changed
 
 - Save logs in the user data folder, named by start date and time, with separate logs for the app and the command line. The last four of each are kept, so a crash log survives a restart.
 - Logs now show the OS and app version, timestamps, warning and error levels, and more detail about jobs, settings, and the addon cleaner.
+- Installed Addons and My Workshop now show a scrollbar.
 
 ### Fixed
 
 - Fix extracting addons with thousands of files failing with "Too many open files".
 - Fix extraction progress staying at 0% and then jumping ahead. It now shows "Verifying" while the addon is checked.
+- Fix deleting or unsubscribing from an addon sometimes never finishing while the addon list was reloading.
+- Fix the Create folder option being ignored when extracting an addon to a folder you choose.
 
 ## [3.6.0] - 2026-10-16
 
