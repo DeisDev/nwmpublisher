@@ -33,7 +33,7 @@ impl ContentManifest {
 		{
 			return Err(GMAError::InvalidContentPath);
 		}
-		Self::collect(root, ignore, is_cancelled, WalkDir::new(root).follow_links(false))
+		Self::collect(root, ignore, is_cancelled, WalkDir::new(root).follow_links(true))
 	}
 
 	fn collect(
@@ -126,9 +126,21 @@ impl ContentManifest {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
 	use super::*;
 	use std::fs;
+
+	pub(crate) fn link_directory(target: &Path, link: &Path) {
+		#[cfg(unix)]
+		std::os::unix::fs::symlink(target, link).unwrap();
+		#[cfg(windows)]
+		{
+			// mklink reads forward slashes as switches.
+			let (link, target): (PathBuf, PathBuf) = (link.components().collect(), target.components().collect());
+			let output = std::process::Command::new("cmd").arg("/C").arg("mklink").arg("/J").arg(&link).arg(&target).output().unwrap();
+			assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+		}
+	}
 
 	#[test]
 	fn normalizes_paths_and_applies_exclusions_before_the_whitelist() {
@@ -165,17 +177,47 @@ mod tests {
 
 	#[cfg(unix)]
 	#[test]
-	fn rejects_ascii_case_collisions_and_skips_symlinks() {
+	fn rejects_ascii_case_collisions() {
 		let directory = tempfile::tempdir().unwrap();
 		let root = directory.path();
 		fs::create_dir(root.join("lua")).unwrap();
 		fs::write(root.join("lua/test.lua"), b"test").unwrap();
-		std::os::unix::fs::symlink(root.join("lua/test.lua"), root.join("lua/link.lua")).unwrap();
-		std::os::unix::fs::symlink(root.join("missing"), root.join("broken")).unwrap();
-		std::os::unix::fs::symlink(root, root.join("loop")).unwrap();
-		assert_eq!(ContentManifest::build(root, &[], || false).unwrap().entries.len(), 1);
 		fs::write(root.join("lua/Test.lua"), b"duplicate").unwrap();
 		assert!(matches!(ContentManifest::build(root, &[], || false), Err(GMAError::DuplicateEntry(path)) if path == "lua/test.lua"));
+	}
+
+	#[test]
+	fn follows_linked_folders_and_rejects_broken_links_and_loops() {
+		let directory = tempfile::tempdir().unwrap();
+		let (root, outside) = (directory.path().join("root"), directory.path().join("outside"));
+		fs::create_dir_all(root.join("lua")).unwrap();
+		fs::create_dir_all(outside.join("Nested")).unwrap();
+		fs::write(outside.join("Nested/Test.lua"), b"linked").unwrap();
+		let linked = root.join("lua/linked");
+		link_directory(&outside, &linked);
+		let manifest = ContentManifest::build(&root, &[], || false).unwrap();
+		assert_eq!(manifest.entries[0].source_path, linked.join("Nested/Test.lua"));
+		let (preview, size) = manifest.into_preview();
+		assert_eq!((preview.len(), preview[0].path.as_str(), size), (1, "lua/linked/nested/test.lua", 6));
+
+		link_directory(&root, &outside.join("loop"));
+		assert!(matches!(ContentManifest::build(&root, &[], || false), Err(GMAError::IOError(details)) if details.path == linked.join("loop")));
+		fs::remove_dir_all(&outside).unwrap();
+		assert!(matches!(ContentManifest::build(&root, &[], || false), Err(GMAError::IOError(details)) if details.path == linked));
+	}
+
+	#[cfg(unix)]
+	#[test]
+	fn follows_linked_files() {
+		let directory = tempfile::tempdir().unwrap();
+		let root = directory.path().join("root");
+		fs::create_dir_all(root.join("lua")).unwrap();
+		fs::write(directory.path().join("outside.lua"), b"outside").unwrap();
+		std::os::unix::fs::symlink(directory.path().join("outside.lua"), root.join("lua/test.lua")).unwrap();
+		let (preview, size) = ContentManifest::build(&root, &[], || false).unwrap().into_preview();
+		assert_eq!((preview.len(), preview[0].path.as_str(), size), (1, "lua/test.lua", 7));
+		std::os::unix::fs::symlink(directory.path().join("missing.lua"), root.join("lua/broken.lua")).unwrap();
+		assert!(matches!(ContentManifest::build(&root, &[], || false), Err(GMAError::IOError(details)) if details.path == root.join("lua/broken.lua")));
 	}
 
 	#[test]

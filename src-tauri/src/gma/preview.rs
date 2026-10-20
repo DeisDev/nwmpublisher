@@ -1,7 +1,7 @@
 use std::{io::{Read, SeekFrom}, path::{Path, PathBuf}, sync::Arc};
 use serde::Serialize;
 
-use super::{extract::ExtractGMAImmut, manifest::ContentManifest, output::Directory, ExtractDestination, ExtractOptions, GMAEntry, GMAError, GMAFile, GMAReader};
+use super::{extract::ExtractGMAImmut, manifest::ContentManifest, ExtractDestination, ExtractOptions, GMAEntry, GMAError, GMAFile, GMAReader};
 use parking_lot::Mutex;
 
 static PREVIEW_GMA: std::sync::LazyLock<Mutex<Option<Arc<GMAFile>>>> = std::sync::LazyLock::new(|| Mutex::new(None));
@@ -175,21 +175,12 @@ fn folder_entry_preview(content_path: &Path, entry_path: &str, ignore: &[String]
 	let entry = manifest.into_entries().into_iter().find(|entry| entry.archive_path == entry_path).ok_or_else(|| GMAError::EntryNotFound.to_string())?;
 	check_preview_size(kind, entry.size)?;
 	let file_error = |error| GMAError::io("read preview file", &entry.source_path, error).to_string();
-	let relative = entry.source_path.strip_prefix(content_path).map_err(|_| GMAError::InvalidContentPath.to_string())?;
-	let mut parts = relative.components().peekable();
-	let mut directory = Directory::open(content_path, false).map_err(file_error)?;
-	while let Some(part) = parts.next() {
-		if parts.peek().is_none() {
-			let file = directory.read_file(Path::new(part.as_os_str())).map_err(file_error)?;
-			let limit = check_preview_size(kind, file.metadata().map_err(file_error)?.len())?;
-			let mut bytes = Vec::new();
-			file.take(limit + 1).read_to_end(&mut bytes).map_err(file_error)?;
-			check_preview_size(kind, bytes.len() as u64)?;
-			return decode_preview(kind, mime, bytes);
-		}
-		directory = directory.child(Path::new(part.as_os_str()), false).map_err(file_error)?;
-	}
-	Err(GMAError::EntryNotFound.to_string())
+	let file = std::fs::File::open(&entry.source_path).map_err(file_error)?;
+	let limit = check_preview_size(kind, file.metadata().map_err(file_error)?.len())?;
+	let mut bytes = Vec::new();
+	file.take(limit + 1).read_to_end(&mut bytes).map_err(file_error)?;
+	check_preview_size(kind, bytes.len() as u64)?;
+	decode_preview(kind, mime, bytes)
 }
 
 #[tauri::command]
@@ -264,6 +255,18 @@ mod tests {
 			assert_eq!(folder_entry_preview(root, path, &[]).unwrap_err(), "ERR_GMA_ENTRY_NOT_FOUND");
 		}
 		assert_eq!(folder_entry_preview(root, "model.mdl", &[]).unwrap_err(), "ERR_FILE_PREVIEW_UNSUPPORTED");
+	}
+
+	#[test]
+	fn previews_files_in_linked_folders() {
+		let directory = tempfile::tempdir().unwrap();
+		let (root, outside) = (directory.path().join("root"), directory.path().join("outside"));
+		std::fs::create_dir_all(root.join("lua")).unwrap();
+		std::fs::create_dir(&outside).unwrap();
+		std::fs::write(outside.join("test.lua"), "print('linked')").unwrap();
+		super::super::manifest::tests::link_directory(&outside, &root.join("lua/linked"));
+		let preview = folder_entry_preview(&root, "lua/linked/test.lua", &[]).unwrap();
+		assert_eq!((preview.kind, preview.data.as_str()), ("lua", "print('linked')"));
 	}
 
 	#[test]

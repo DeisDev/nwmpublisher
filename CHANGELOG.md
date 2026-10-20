@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix extraction progress staying at 0% and then jumping ahead. It now shows "Verifying" while the addon is checked.
 - Fix deleting or unsubscribing from an addon sometimes never finishing while the addon list was reloading.
 - Fix the Create folder option being ignored when extracting an addon to a folder you choose.
+- Fix files in symlinked or junctioned folders being left out of uploads. A broken link now shows an error instead.
 
 ## [3.6.0] - 2026-10-16
 
