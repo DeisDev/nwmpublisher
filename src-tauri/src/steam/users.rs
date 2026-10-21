@@ -16,8 +16,8 @@ pub struct SteamUser {
 	pub name: String,
 	pub avatar: Option<crate::Base64Image>,
 }
-impl<Manager: steamworks::Manager> From<Friend<Manager>> for SteamUser {
-	fn from(friend: Friend<Manager>) -> Self {
+impl From<Friend> for SteamUser {
+	fn from(friend: Friend) -> Self {
 		SteamUser {
 			steamid: friend.id(),
 			name: friend.name(),

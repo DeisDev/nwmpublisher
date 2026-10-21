@@ -222,8 +222,8 @@ pub fn attach_cli(options: &mut ExtractOptions, id: Option<PublishedFileId>, id_
 		std::env::remove_var("SteamGameId");
 	}
 	let (info, warnings) = match &connection {
-		Some((client, single)) => collect(Some(client), id, id_inferred, None, &|| false, &mut || {
-			single.run_callbacks();
+		Some(client) => collect(Some(client), id, id_inferred, None, &|| false, &mut || {
+			client.run_callbacks();
 			sleep_ms!(50);
 		}),
 		None => collect(None, id, id_inferred, None, &|| false, &mut || {}),
@@ -258,6 +258,7 @@ mod tests {
 			tags_truncated: false,
 			file_type: steamworks::FileType::Community,
 			file_size: 0,
+			file_name: String::new(),
 			url: String::new(),
 			num_upvotes: 0,
 			num_downvotes: 0,

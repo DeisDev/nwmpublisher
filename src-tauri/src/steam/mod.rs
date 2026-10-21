@@ -5,7 +5,7 @@ use std::{
 };
 
 use steamworks::{
-	Callback, CallbackHandle, Client, ClientManager, PublishedFileId, SingleClient, SteamId, SteamServersConnected, SteamServersDisconnected,
+	Callback, CallbackHandle, Client, PublishedFileId, SteamId, SteamServersConnected, SteamServersDisconnected,
 };
 
 use atomic_refcell::AtomicRefCell;
@@ -50,7 +50,6 @@ where
 
 pub struct Interface {
 	client: Client,
-	single: SingleClient,
 	pub steam_id: SteamId,
 }
 impl std::ops::Deref for Interface {
@@ -59,8 +58,8 @@ impl std::ops::Deref for Interface {
 		&self.client
 	}
 }
-impl From<(Client, SingleClient)> for Interface {
-	fn from((client, single): (Client, SingleClient)) -> Self {
+impl From<Client> for Interface {
+	fn from(client: Client) -> Self {
 		let user = client.user();
 
 		client.friends().request_user_information(user.steam_id(), false);
@@ -68,7 +67,6 @@ impl From<(Client, SingleClient)> for Interface {
 		Interface {
 			steam_id: user.steam_id(),
 			client,
-			single,
 		}
 	}
 }
@@ -298,7 +296,7 @@ impl Steam {
 		true
 	}
 
-	pub fn register_callback<C, F>(&'static self, f: F) -> CallbackHandle<ClientManager>
+	pub fn register_callback<C, F>(&'static self, f: F) -> CallbackHandle
 	where
 		C: Callback,
 		F: FnMut(C) + 'static + Send,
@@ -308,7 +306,7 @@ impl Steam {
 
 	pub fn run_callbacks(&self) {
 		if let Some(_dispatch) = self.callback_dispatch.try_lock() {
-			self.client().single.run_callbacks();
+			self.client().run_callbacks();
 		}
 		sleep_ms!(50);
 	}

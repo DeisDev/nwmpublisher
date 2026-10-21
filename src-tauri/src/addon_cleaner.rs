@@ -298,8 +298,8 @@ fn subscriptions(owner: SteamId, progress: &mut Progress) -> Result<HashSet<Publ
 	if account()? != owner {
 		return Err(CleanerError::new("cleaner_error_account"));
 	}
-	// Keep local subscriptions too, including items missing from a server query.
-	ids.extend(steam!().client().ugc().subscribed_items());
+	// Keep local subscriptions too, including items missing from a server query and items disabled locally in Steam.
+	ids.extend(steam!().client().ugc().subscribed_items(true));
 	Ok(ids)
 }
 

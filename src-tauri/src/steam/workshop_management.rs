@@ -76,7 +76,7 @@ fn dependency_changes(
 	Ok((added, removed))
 }
 
-// steamworks 0.11 consumes even unregistered call results in its callback pump.
+// steamworks consumes even unregistered call results in its callback pump.
 // Hold the dispatch lock until this raw result is read; other callbacks remain
 // queued while Steam's periodic frame work continues, including on timeout.
 fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool) -> Result<(), String> {
@@ -85,7 +85,7 @@ fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool)
 	let dispatch = steam!().callback_dispatch.lock();
 	let _client = steam!().client();
 	unsafe {
-		let ugc = sys::SteamAPI_SteamUGC_v018();
+		let ugc = sys::SteamAPI_SteamUGC_v021();
 		let utils = sys::SteamAPI_SteamUtils_v010();
 		if ugc.is_null() || utils.is_null() {
 			return Err("Steam Workshop is unavailable.".into());
