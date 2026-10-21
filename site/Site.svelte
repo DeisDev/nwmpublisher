@@ -12,7 +12,7 @@
 	import editing from '../public/screenshots/Edit.webp';
 	import addonSettings from '../public/screenshots/Addon Settings.webp';
 	import extraction from '../public/screenshots/Addon Extract.webp';
-	import { detectPlatform, getLatestRelease, repositoryUrl, releasesUrl } from './downloads.js';
+	import { detectPlatform, getLatestRelease, getNightlyRelease, nightlyUrl, repositoryUrl, releasesUrl } from './downloads.js';
 
 	const screenshots = [
 		{ id: 'workshop', image: workshop },
@@ -29,11 +29,15 @@
 		{ id: 'macos', icon: apple, packages: ['macos'] },
 		{ id: 'linux', icon: linux, packages: ['linux', 'deb', 'rpm'] }
 	];
+	const nightlyPackages = ['windows', 'windows_portable', 'macos', 'linux'];
 	let screenshot = screenshots[0];
 	let detectedPlatform = null;
 	let release = null;
 	let loading = true;
 	let failed = false;
+	let nightly = null;
+	let nightlyLoading = true;
+	let nightlyFailed = false;
 	$: recommendedDownload = release?.downloads[detectedPlatform];
 
 	onMount(() => {
@@ -41,16 +45,25 @@
 		const controller = new AbortController();
 		let active = true;
 		const timeout = setTimeout(() => controller.abort(), 10000);
-		getLatestRelease(controller.signal).then(result => {
+		const stable = getLatestRelease(controller.signal).then(result => {
 			if (active) release = result;
 		}).catch(error => {
 			if (!active) return;
 			console.error('Could not load release downloads:', error);
 			failed = true;
 		}).finally(() => {
-			clearTimeout(timeout);
 			if (active) loading = false;
 		});
+		const development = getNightlyRelease(controller.signal).then(result => {
+			if (active) nightly = result;
+		}).catch(error => {
+			if (!active) return;
+			console.error('Could not load development build downloads:', error);
+			nightlyFailed = true;
+		}).finally(() => {
+			if (active) nightlyLoading = false;
+		});
+		Promise.all([stable, development]).then(() => clearTimeout(timeout));
 		return () => {
 			active = false;
 			clearTimeout(timeout);
@@ -166,6 +179,26 @@
 			<p>{$_('website.steam_note')}</p>
 			<a class="text-link" href={releasesUrl}>{$_('website.releases_link')}<ArrowUpRight size={16}/></a>
 		</div>
+		<section class="nightly" aria-labelledby="nightly-title">
+			<div class="nightly-heading">
+				<h3 id="nightly-title">{$_('website.nightly_heading')}</h3>
+				{#if nightly}<span class="nightly-version">{$_('website.nightly_version', { values: { version: nightly.version } })}</span>{/if}
+			</div>
+			<p class="nightly-intro">{$_('website.nightly_intro')}</p>
+			<p class="release-status" role="status">
+				{#if nightlyLoading}{$_('website.nightly_loading')}{:else if nightlyFailed}{$_('website.nightly_load_error')}{/if}
+			</p>
+			<div class="nightly-links">
+				{#each nightlyPackages as pkg}
+					{#if nightly?.downloads[pkg]}
+						<a class="button package" href={nightly.downloads[pkg]}><Download size={16}/>{$_(`website.nightly_package_${pkg}`)}</a>
+					{:else}
+						<span class="button unavailable">{$_(`website.nightly_package_${pkg}`)}<span>{$_(nightlyLoading ? 'website.pending' : 'website.unavailable')}</span></span>
+					{/if}
+				{/each}
+			</div>
+			<a class="text-link" href={nightlyUrl}>{$_('website.nightly_link')}<ArrowUpRight size={16}/></a>
+		</section>
 	</section>
 </main>
 

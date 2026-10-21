@@ -68,6 +68,16 @@
 		"install_linux": "Install the package for your distribution, or allow the AppImage to run as a program in its file properties. On Steam Deck, use Desktop Mode.",
 		"steam_note": "Keep Steam running and signed in for Workshop features.",
 		"releases_link": "GitHub Releases & checksums",
+		"nightly_heading": "Development build",
+		"nightly_intro": "Built each night from the newest changes, when there are any. It may have bugs. It installs alongside the stable app and keeps its own settings.",
+		"nightly_version": "Nightly {version}",
+		"nightly_loading": "Finding the latest development build…",
+		"nightly_load_error": "Could not load the development build. Open the nightly release on GitHub below.",
+		"nightly_package_windows": "Windows installer (.msi)",
+		"nightly_package_windows_portable": "Windows portable (.zip)",
+		"nightly_package_macos": "macOS disk image (.dmg)",
+		"nightly_package_linux": "Linux AppImage",
+		"nightly_link": "Nightly release & checksums",
 		"maintained": "Maintained by DeisDev (CatSniffer).",
 		"credits": "Based on gmpublisher by William Venner and contributors."
 	}

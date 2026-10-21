@@ -11,17 +11,19 @@
 <?endif?>
 
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-	<Product Id="*" Name="{{{product_name}}}" UpgradeCode="0B8B261A-4840-4A5A-9E82-B51D66D26E7B" Language="1033" Codepage="1252" Manufacturer="{{{manufacturer}}}" Version="{{{version}}}">
+	<Product Id="*" Name="{{{product_name}}}" UpgradeCode="{{{upgrade_code}}}" Language="1033" Codepage="1252" Manufacturer="{{{manufacturer}}}" Version="{{{version}}}">
 
 		<Package Id="*" Description="{{{product_name}}} Installer" Manufacturer="{{{manufacturer}}}" Comments="Garry's Mod Workshop Publishing Utility" Keywords="Installer" InstallerVersion="450" Languages="1033" Compressed="yes" InstallScope="perMachine" SummaryCodepage="1252"/>
 
 		<MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="!(loc.DowngradeErrorMessage)" AllowSameVersionUpgrades="yes" />
 
 		<!-- nwmpublisher 3.0.0 to 3.1.3 shared gmpublisher's upgrade code. Remove only those versions
-		     so a gmpublisher install stays in place. -->
+		     so a gmpublisher install stays in place. Nightly builds install alongside them. -->
+		{{#if (eq bundle_id "nwmpublisher")}}
 		<Upgrade Id="9C296848-ABD3-4538-92D0-3BC4E408F34C">
 			<UpgradeVersion Minimum="3.0.0" IncludeMinimum="yes" Maximum="3.1.3" IncludeMaximum="yes" MigrateFeatures="yes" Property="SHARED_UPGRADE_CODE_DETECTED" />
 		</Upgrade>
+		{{/if}}
 
 		<Media Id="1" Cabinet="app.cab" EmbedCab="yes" />
 
@@ -68,29 +70,29 @@
 			-->
 
 			<Component Id="FileTypeAssociationsReg" Guid="*" Win64="$(var.Win64)">
-				<ProgId Id="nwmpublisher.gma.Document" Description="Packed Garry's Mod Addon" Icon="EXE" IconIndex="0">
+				<ProgId Id="{{{main_binary_name}}}.gma.Document" Description="Packed Garry's Mod Addon" Icon="EXE" IconIndex="0">
 					<Extension Id="gma" ContentType="application/gma">
 						<Verb Id="open" Command="Open" TargetFile="EXE" Argument="-e &quot;%1&quot;" />
 					</Extension>
 				</ProgId>
 
-				<RegistryValue Root="HKLM" Key="SOFTWARE\nwmpublisher\Capabilities" Name="ApplicationDescription" Value="Garry's Mod Workshop Publishing Utility" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\nwmpublisher\Capabilities" Name="ApplicationIcon" Value="&quot;[#EXE]&quot;,0" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\nwmpublisher\Capabilities" Name="ApplicationName" Value="nwmpublisher" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\nwmpublisher\Capabilities\FileAssociations" Name=".gma" Value="nwmpublisher.gma.Document" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\nwmpublisher\Capabilities\MIMEAssociations" Name="application/gma" Value="nwmpublisher.gma.Document" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE&#92;{{{main_binary_name}}}\Capabilities" Name="ApplicationDescription" Value="Garry's Mod Workshop Publishing Utility" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE&#92;{{{main_binary_name}}}\Capabilities" Name="ApplicationIcon" Value="&quot;[#EXE]&quot;,0" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE&#92;{{{main_binary_name}}}\Capabilities" Name="ApplicationName" Value="{{{product_name}}}" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE&#92;{{{main_binary_name}}}\Capabilities\FileAssociations" Name=".gma" Value="{{{main_binary_name}}}.gma.Document" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE&#92;{{{main_binary_name}}}\Capabilities\MIMEAssociations" Name="application/gma" Value="{{{main_binary_name}}}.gma.Document" Type="string" />
 
-				<RegistryValue Root="HKLM" Key="SOFTWARE\RegisteredApplications" Name="nwmpublisher" Value="SOFTWARE\nwmpublisher\Capabilities" Type="string" KeyPath="yes" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE\RegisteredApplications" Name="{{{product_name}}}" Value="SOFTWARE&#92;{{{main_binary_name}}}\Capabilities" Type="string" KeyPath="yes" />
 
 				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\.gma" Name="Content Type" Value="application/gma" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\.gma\OpenWithList\nwmpublisher.exe" Value="" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\.gma\OpenWithProgids" Name="nwmpublisher.gma.Document" Value="" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\Applications\nwmpublisher.exe\SupportedTypes" Name=".gma" Value="" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\Applications\nwmpublisher.exe" Name="FriendlyAppName" Value="nwmpublisher" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\Applications\nwmpublisher.exe\shell\open\command" Value="&quot;[#EXE]&quot; -e &quot;%1&quot;" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\.gma\OpenWithList&#92;{{{main_binary_name}}}.exe" Value="" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\.gma\OpenWithProgids" Name="{{{main_binary_name}}}.gma.Document" Value="" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\Applications&#92;{{{main_binary_name}}}.exe\SupportedTypes" Name=".gma" Value="" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\Applications&#92;{{{main_binary_name}}}.exe" Name="FriendlyAppName" Value="{{{product_name}}}" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE\Classes\Applications&#92;{{{main_binary_name}}}.exe\shell\open\command" Value="&quot;[#EXE]&quot; -e &quot;%1&quot;" Type="string" />
 
-				<RegistryValue Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\nwmpublisher.exe" Value="[#EXE]" Type="string" />
-				<RegistryValue Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\nwmpublisher.exe" Name="Path" Value="[INSTALLDIR]" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths&#92;{{{main_binary_name}}}.exe" Value="[#EXE]" Type="string" />
+				<RegistryValue Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths&#92;{{{main_binary_name}}}.exe" Name="Path" Value="[INSTALLDIR]" Type="string" />
 			</Component>
 		</DirectoryRef>
 
@@ -149,7 +151,7 @@
 			</Feature>
 			-->
 
-			<Feature Id="FileTypeAssociations" Title="File Type Associations" Description="Associates .gma with nwmpublisher for extractions" Level="1" Absent="allow" AllowAdvertise="no">
+			<Feature Id="FileTypeAssociations" Title="File Type Associations" Description="Associates .gma with {{{product_name}}} for extractions" Level="1" Absent="allow" AllowAdvertise="no">
 				<ComponentRef Id="ProgramBinary"/>
 				<ComponentRef Id="FileTypeAssociationsReg"/>
 			</Feature>

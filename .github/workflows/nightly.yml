@@ -1,0 +1,117 @@
+name: nightly
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Skip if master has not changed
+      id: version
+      shell: bash
+      run: |
+        set -euo pipefail
+        published=$(git ls-remote origin refs/tags/nightly | cut -f1)
+        if [[ "$GITHUB_EVENT_NAME" == schedule && "$published" == "$GITHUB_SHA" ]]; then
+          echo "The nightly build is already up to date with master."
+          exit 0
+        fi
+        echo "version=$(jq -r .version src-tauri/tauri.conf.json).$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+
+  build_linux:
+    needs: check
+    if: needs.check.outputs.version
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      nightly: ${{ needs.check.outputs.version }}
+
+  build_windows:
+    needs: check
+    if: needs.check.outputs.version
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      nightly: ${{ needs.check.outputs.version }}
+
+  build_macos:
+    needs: check
+    if: needs.check.outputs.version
+    uses: ./.github/workflows/build-macos.yml
+    with:
+      nightly: ${{ needs.check.outputs.version }}
+    secrets: inherit
+
+  publish:
+    needs: [check, build_linux, build_windows, build_macos]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.check.outputs.version }}
+    steps:
+    - uses: actions/download-artifact@v5
+      with:
+        pattern: packages-*
+        path: artifacts
+        merge-multiple: true
+
+    - name: Collect packages and checksums
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir release
+        find artifacts -type f \( -name '*.AppImage' -o -name '*.dmg' -o -name '*.msi' -o -name '*_x64_portable.zip' \) -exec cp -t release -- {} +
+        cd release
+        for extension in AppImage dmg msi zip; do
+          packages=(*."$extension")
+          test "${#packages[@]}" -eq 1
+          test -f "${packages[0]}"
+        done
+        sha256sum * > SHA256SUMS
+
+    - name: Publish nightly release
+      shell: bash
+      run: |
+        set -euo pipefail
+        {
+          printf 'Development build of [`%s`](%s/%s/commit/%s), built %s. It may have bugs. It installs alongside the stable app and keeps its own settings.\n\n' \
+            "${GITHUB_SHA::7}" "$GITHUB_SERVER_URL" "$GH_REPO" "$GITHUB_SHA" "$(date -u +%F)"
+          cat <<'EOF'
+        - **Windows:** download and run the `.msi` installer, or extract the whole `x64_portable.zip` and run `nwmpublisher-nightly.exe`. The portable app requires [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section).
+        - **macOS 13.3+ (Intel and Apple Silicon):** open the universal `.dmg`, drag nwmpublisher-nightly into Applications, then open it from Applications. Builds without Developer ID signing require approval in System Settings → Privacy & Security → Open Anyway after the first launch attempt.
+        - **Linux / Steam Deck:** download the `.AppImage`, mark it executable in its file properties, and open it.
+
+        Choose **Nightly** when you report a problem. `SHA256SUMS` contains checksums for every download.
+        EOF
+        } > "$RUNNER_TEMP/notes.md"
+
+        # The app's update check and the website read the nightly version from this title.
+        title="nwmpublisher-nightly $VERSION"
+        cd release
+        if gh release view nightly > /dev/null; then
+          gh release upload nightly * --clobber
+          for asset in $(gh release view nightly --json assets --jq '.assets[].name'); do
+            [[ -f "$asset" ]] || gh release delete-asset nightly "$asset" --yes
+          done
+          gh release edit nightly --prerelease --title "$title" --notes-file "$RUNNER_TEMP/notes.md"
+          # Move the tag last so a failed update is retried on the next run.
+          gh api --method PATCH "repos/$GH_REPO/git/refs/tags/nightly" -f sha="$GITHUB_SHA" -F force=true > /dev/null
+        else
+          gh release create nightly * --target "$GITHUB_SHA" --prerelease --title "$title" --notes-file "$RUNNER_TEMP/notes.md"
+        fi

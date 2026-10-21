@@ -12,7 +12,7 @@ use chrono::{DateTime, Local, NaiveDateTime};
 use crossbeam::channel::{Receiver, Sender};
 use parking_lot::Mutex;
 
-use crate::{app_data, ignore};
+use crate::{app_data, ignore, APP_NAME, APP_VERSION};
 
 const OLDER_LOGS_KEPT: usize = 3;
 const FILE_TIME_FORMAT: &str = "%Y-%m-%d_%H-%M-%S";
@@ -161,7 +161,7 @@ fn create_unique(directory: &Path, stem: &str) -> io::Result<(PathBuf, File)> {
 fn header(mode: Mode, started: DateTime<Local>) -> String {
 	let os = os_info::get();
 	let mut lines = vec![
-		format!("nwmpublisher {} ({}, {})", env!("CARGO_PKG_VERSION"), mode.name(), std::env::consts::ARCH),
+		format!("{APP_NAME} {APP_VERSION} ({}, {})", mode.name(), std::env::consts::ARCH),
 		format!("Started: {}", started.format("%Y-%m-%d %H:%M:%S %:z")),
 		format!("OS: {os}, {}", os.architecture().unwrap_or("unknown architecture")),
 	];
@@ -363,7 +363,7 @@ mod tests {
 		assert_eq!(second.path.file_name().unwrap(), "desktop_2026-10-19_14-32-05_2.log");
 		assert_eq!(cli.path.file_name().unwrap(), "cli_2026-10-19_14-32-05.log");
 		let text = fs::read_to_string(&first.path).unwrap();
-		assert!(text.starts_with(&format!("nwmpublisher {} (desktop,", env!("CARGO_PKG_VERSION"))));
+		assert!(text.starts_with(&format!("{APP_NAME} {APP_VERSION} (desktop,")));
 		assert!(text.contains("\nOS: "));
 		assert!(fs::read_to_string(&cli.path).unwrap().contains("\nCommand line: "));
 		assert!(log_order(Mode::Desktop, "desktop_2026-10-19_14-32-05.log") < log_order(Mode::Desktop, "desktop_2026-10-19_14-32-05_2.log"));
@@ -422,7 +422,7 @@ mod tests {
 		assert_eq!(moved, new.join("desktop_2026-10-19_14-32-05_2.log"));
 		assert!(!old.exists());
 		let text = fs::read_to_string(&moved).unwrap();
-		assert!(text.starts_with("nwmpublisher "));
+		assert!(text.starts_with(&format!("{APP_NAME} ")));
 		assert!(text.ends_with(" WARN  before\n2026-10-19 14:32:05.000 ERROR after\n"), "{text}");
 		assert_eq!(fs::read_to_string(new.join("desktop_2026-10-19_14-32-05.log")).unwrap(), "another instance");
 		move_log(&mut log, Mode::Desktop, started, &new).unwrap();

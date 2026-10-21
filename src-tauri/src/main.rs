@@ -102,7 +102,7 @@ fn main() -> std::process::ExitCode {
 
 			let window = app.get_webview_window("nwmpublisher").unwrap();
 
-			window.set_title(&format!("nwmpublisher v{}", env!("CARGO_PKG_VERSION"))).ok();
+			window.set_title(&format!("{APP_NAME} v{APP_VERSION}")).ok();
 
 			window
 				.set_size(tauri::Size::Logical(tauri::LogicalSize {

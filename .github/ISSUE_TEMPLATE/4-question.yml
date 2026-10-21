@@ -31,3 +31,12 @@ body:
     attributes:
       label: nwmpublisher version
       description: Shown at the bottom of the sidebar.
+
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Stable or nightly?
+      description: Nightly builds are called nwmpublisher-nightly.
+      options:
+        - Stable
+        - Nightly

@@ -1,0 +1,13 @@
+{
+	"$schema": "https://schema.tauri.app/config/2",
+	"productName": "nwmpublisher-nightly",
+	"mainBinaryName": "nwmpublisher-nightly",
+	"identifier": "nwmpublisher.nightly",
+	"bundle": {
+		"windows": {
+			"wix": {
+				"upgradeCode": "B826EFEE-66AF-489B-8438-7311D27919AA"
+			}
+		}
+	}
+}

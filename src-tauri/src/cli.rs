@@ -17,7 +17,7 @@ use crate::{
 	logging::Level,
 	steam::publishing::{run_publish, PublishOutcome, PublishRequest},
 	util::english,
-	GMAError, GMAFile, IoError,
+	GMAError, GMAFile, IoError, APP_NAME, APP_VERSION,
 };
 
 pub static CLI_MODE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| std::env::args_os().len() > 1);
@@ -62,8 +62,8 @@ fn only_with(arg: Arg, actions: &[&str]) -> Arg {
 }
 
 fn command() -> Command {
-	Command::new("nwmpublisher")
-		.version(env!("CARGO_PKG_VERSION"))
+	Command::new(APP_NAME)
+		.version(APP_VERSION)
 		.author("William Venner <william@venner.io>")
 		.about(english::text("cli.about"))
 		.after_help("Run without arguments to launch the GUI.\nExit codes: 0 = success, 1 = operation failed, 2 = invalid arguments.")

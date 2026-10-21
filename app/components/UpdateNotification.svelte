@@ -4,12 +4,13 @@
 	import { _ } from 'svelte-i18n';
 	import tippy from 'tippy.js';
 
-	import { getUpdateVersion } from '../update-check.js';
+	import { getUpdate } from '../update-check.js';
 
 	let updateAvailable = checkForUpdate();
 
 	function checkForUpdate(options) {
-		return getUpdateVersion(AppData.version, options).catch(error => {
+		const nightly = AppData.nightly_version != null;
+		return getUpdate(nightly ? AppData.nightly_version : AppData.version, { ...options, nightly }).catch(error => {
 			console.warn('Could not check for updates', error);
 			throw error;
 		});
@@ -56,9 +57,9 @@
 	}
 </script>
 
-{#await updateAvailable} {:then newVersion}
-	{#if newVersion}
-		<a href="https://github.com/DeisDev/nwmpublisher/releases/tag/{encodeURIComponent(newVersion)}" target="_blank" use:tooltip={newVersion} class="nav-icon">
+{#await updateAvailable} {:then update}
+	{#if update}
+		<a href={update.url} target="_blank" use:tooltip={update.version} class="nav-icon">
 			<CloudDownload class="icon" size="1.5rem" stroke-width="1.5" id="update-icon"/>
 		</a>
 	{/if}

@@ -90,6 +90,12 @@ h3 { font-size: 1.125rem; font-weight: 600; }
 .download-footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-block-start: 1.5rem; }
 .download-footer p { font-size: .875rem; }
 .download-footer a { flex-shrink: 0; color: var(--link); }
+.nightly { margin-block-start: 2.5rem; padding: 1.6rem; background: var(--content); border: 1px solid var(--border); border-radius: 5px; }
+.nightly-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: .5rem 1rem; }
+.nightly-version { color: var(--muted); font-size: .875rem; }
+.nightly-intro { font-size: .875rem; margin-block-start: .5rem; max-inline-size: 75ch; }
+.nightly-links { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1.4rem 1.2rem; }
+.nightly > .text-link { color: var(--link); }
 .site-footer { display: flex; align-items: center; gap: 2rem; padding-block: 2rem; border-block-start: 1px solid var(--border); }
 .site-footer p { font-size: .8125rem; }
 .site-footer > a { margin-inline-start: auto; }
@@ -102,7 +108,7 @@ h3 { font-size: 1.125rem; font-weight: 600; }
 	.intro { max-inline-size: 55ch; }
 	.feature-list article { grid-template-columns: 1fr; gap: 1.25rem; }
 	.feature-copy { max-inline-size: 65ch; }
-	.download-grid article { padding: 1.2rem; }
+	.download-grid article, .nightly { padding: 1.2rem; }
 	.site-footer { flex-wrap: wrap; gap: 1rem 2rem; }
 }
 
@@ -111,6 +117,7 @@ h3 { font-size: 1.125rem; font-weight: 600; }
 	.site-header { flex-wrap: wrap; justify-content: center; gap: .8rem; padding-block: 1.1rem; }
 	nav { gap: 1.25rem; }
 	.download-grid { grid-template-columns: 1fr; }
+	.nightly-links { flex-direction: column; }
 	.hero { padding-block: 2.5rem; }
 	.preview-tabs { flex-wrap: wrap; }
 	.preview-tabs button { padding-inline: .5rem; }

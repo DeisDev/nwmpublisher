@@ -2,6 +2,11 @@ name: build linux
 
 on:
   workflow_call:
+    inputs:
+      nightly:
+        description: Nightly version, such as 3.6.0.42. Leave empty for a stable build. Nightly builds only make an AppImage.
+        type: string
+        default: ''
   workflow_dispatch:
 
 permissions:
@@ -9,6 +14,8 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  NWMPUBLISHER_NIGHTLY: ${{ inputs.nightly }}
+  NWMPUBLISHER_COMMIT: ${{ github.sha }}
 
 jobs:
   build_linux:
@@ -40,24 +47,22 @@ jobs:
         cargo test --locked
 
     - name: Build Linux packages
-      run: npm run tauri build -- --ci -v -- --locked
+      run: npm run tauri build -- --ci -v ${NWMPUBLISHER_NIGHTLY:+--bundles appimage --config src-tauri/tauri.nightly.conf.json} -- --locked
       env:
         APPIMAGE_EXTRACT_AND_RUN: "1"
 
-    - name: Verify packaged libraries and launchers
+    - name: Verify .deb and .rpm packages
+      if: ${{ !inputs.nightly }}
       shell: bash
       run: |
         set -euo pipefail
         bundle="$GITHUB_WORKSPACE/src-tauri/target/release/bundle"
         debs=("$bundle"/deb/*.deb)
         rpms=("$bundle"/rpm/*.rpm)
-        appimages=("$bundle"/appimage/*.AppImage)
         test "${#debs[@]}" -eq 1
         test -f "${debs[0]}"
         test "${#rpms[@]}" -eq 1
         test -f "${rpms[0]}"
-        test "${#appimages[@]}" -eq 1
-        test -f "${appimages[0]}"
 
         dpkg-deb --info "${debs[0]}"
         deb_dependencies=$(dpkg-deb --field "${debs[0]}" Depends | tr ',' '\n' | sed 's/^ *//; s/ *$//')
@@ -87,6 +92,17 @@ jobs:
           grep -Fx '50:application/x-gma:*.gma' "$package-mime/globs2"
           env -u LD_LIBRARY_PATH "$RUNNER_TEMP/$package/usr/bin/nwmpublisher" --help
         done
+
+    - name: Verify AppImage
+      shell: bash
+      run: |
+        set -euo pipefail
+        appimages=("$GITHUB_WORKSPACE"/src-tauri/target/release/bundle/appimage/*.AppImage)
+        test "${#appimages[@]}" -eq 1
+        test -f "${appimages[0]}"
+
+        # Extract and launch away from the build tree without a library-path override.
+        cd "$RUNNER_TEMP"
         "${appimages[0]}" --appimage-extract > /dev/null
         appdir="$RUNNER_TEMP/squashfs-root"
         test -f "$appdir/usr/lib/nwmpublisher/libsteam_api.so"
@@ -127,6 +143,7 @@ jobs:
       with:
         name: packages-linux
         if-no-files-found: error
+        retention-days: ${{ inputs.nightly && 1 || 0 }}
         path: |
           src-tauri/target/release/bundle/appimage/*.AppImage
           src-tauri/target/release/bundle/deb/*.deb

@@ -12,7 +12,7 @@ body:
     attributes:
       label: Before you start
       options:
-        - label: I'm using the [latest release](https://github.com/DeisDev/nwmpublisher/releases/latest).
+        - label: I'm using the [latest release](https://github.com/DeisDev/nwmpublisher/releases/latest) or the latest [nightly build](https://github.com/DeisDev/nwmpublisher/releases/tag/nightly).
           required: true
         - label: I [searched existing issues](https://github.com/DeisDev/nwmpublisher/issues?q=is%3Aissue) and didn't find this one.
           required: true
@@ -21,8 +21,19 @@ body:
     id: version
     attributes:
       label: nwmpublisher version
-      description: Shown at the bottom of the sidebar, or run `nwmpublisher --version`.
+      description: Shown at the bottom of the sidebar, or run `nwmpublisher --version` (`nwmpublisher-nightly --version` for nightly builds).
       placeholder: "3.4.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Stable or nightly?
+      description: Nightly builds are called nwmpublisher-nightly.
+      options:
+        - Stable
+        - Nightly
     validations:
       required: true
 
@@ -151,6 +162,8 @@ body:
         - **Windows:** press Win+R and open `%APPDATA%\nwmpublisher\logs`
         - **macOS:** run `open "$HOME/Library/Application Support/nwmpublisher/logs"` in Terminal
         - **Linux:** `~/.local/share/nwmpublisher/logs` (or `$XDG_DATA_HOME/nwmpublisher/logs` if `XDG_DATA_HOME` is set)
+
+        Nightly builds use `nwmpublisher-nightly` in place of `nwmpublisher` in these paths.
 
         If you changed **Logs Path** in settings, the logs are there. If you changed **User Data Path**, they are in a `logs` folder there.
 

@@ -14,7 +14,7 @@ use crate::{
 	RwLockCow,
 };
 
-use crate::GMOD_APP_ID;
+use crate::{APP_NAME, APP_VERSION, GMOD_APP_ID, NIGHTLY_VERSION};
 use parking_lot::{Mutex, RwLock, RwLockReadGuard};
 use serde::{Deserialize, Serialize};
 use steamworks::PublishedFileId;
@@ -22,19 +22,20 @@ use steamworks::PublishedFileId;
 static USER_DATA_DIR: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| {
 	dirs::data_dir()
 		.unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir()))
-		.join("nwmpublisher")
+		.join(APP_NAME)
 });
 static APP_SETTINGS_PATH: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| {
 	dirs::config_dir()
 		.unwrap_or_else(|| dirs::data_dir().unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir())))
-		.join("nwmpublisher/settings.json")
+		.join(APP_NAME)
+		.join("settings.json")
 });
 static LEGACY_APP_SETTINGS_PATH: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| {
 	dirs::config_dir()
 		.unwrap_or_else(|| dirs::data_dir().unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir())))
 		.join("gmpublisher/settings.json")
 });
-static TEMP_DIR: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| std::env::temp_dir().join("nwmpublisher"));
+static TEMP_DIR: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| std::env::temp_dir().join(APP_NAME));
 static DOWNLOADS_DIR: std::sync::LazyLock<Option<PathBuf>> = std::sync::LazyLock::new(dirs::download_dir);
 /// Whether nwmpublisher already had settings of its own when it started.
 /// Evaluated before anything can write settings, so it stays true for the whole run.
@@ -472,7 +473,9 @@ impl Settings {
 #[derive(Debug, Serialize)]
 pub struct AppData {
 	pub settings: RwLock<Settings>,
+	pub name: &'static str,
 	pub version: &'static str,
+	pub nightly_version: Option<&'static str>,
 	pub open_count: OpenCount,
 
 	#[serde(serialize_with = "serde_temp_dir")]
@@ -491,7 +494,9 @@ impl AppData {
 		let settings = Settings::init();
 		Self {
 			settings: RwLock::new(settings),
-			version: env!("CARGO_PKG_VERSION"),
+			name: APP_NAME,
+			version: APP_VERSION,
+			nightly_version: NIGHTLY_VERSION,
 			open_count: OpenCount::init(),
 
 			// Placeholders
@@ -864,7 +869,7 @@ pub fn write_tauri_settings() -> Option<()> {
 	use std::io::{BufReader, BufWriter};
 
 	let mut settings_path = dirs::config_dir()?;
-	settings_path.push("nwmpublisher");
+	settings_path.push(APP_NAME);
 
 	fs::create_dir_all(&settings_path).ok()?;
 

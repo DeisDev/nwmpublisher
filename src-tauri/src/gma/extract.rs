@@ -70,7 +70,7 @@ fn extraction_temp_dir() -> Result<PathBuf, GMAError> {
 	// Resolve the OS-provided base (notably /var on macOS), then enforce no-follow
 	// traversal for the application directory and every extraction beneath it.
 	let base = std::env::temp_dir();
-	base.canonicalize().map(|base| base.join("nwmpublisher"))
+	base.canonicalize().map(|base| base.join(crate::APP_NAME))
 		.map_err(|error| GMAError::io("resolve system temporary directory", &base, error))
 }
 

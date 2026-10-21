@@ -1,4 +1,7 @@
 pub const GMOD_APP_ID: steamworks::AppId = steamworks::AppId(4000);
+pub const APP_NAME: &str = env!("NWMPUBLISHER_NAME");
+pub const APP_VERSION: &str = env!("NWMPUBLISHER_VERSION");
+pub const NIGHTLY_VERSION: Option<&str> = option_env!("NWMPUBLISHER_NIGHTLY_VERSION");
 
 pub static STEAMWORKS: std::sync::LazyLock<crate::steam::Steam> = std::sync::LazyLock::new(crate::steam::Steam::init);
 pub static GAME_ADDONS: std::sync::LazyLock<crate::game_addons::GameAddons> = std::sync::LazyLock::new(crate::game_addons::GameAddons::init);

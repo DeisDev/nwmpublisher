@@ -2,6 +2,11 @@ name: build windows
 
 on:
   workflow_call:
+    inputs:
+      nightly:
+        description: Nightly version, such as 3.6.0.42. Leave empty for a stable build.
+        type: string
+        default: ''
   workflow_dispatch:
 
 permissions:
@@ -9,6 +14,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  NWMPUBLISHER_NIGHTLY: ${{ inputs.nightly }}
+  NWMPUBLISHER_COMMIT: ${{ github.sha }}
+  APP_NAME: ${{ inputs.nightly && 'nwmpublisher-nightly' || 'nwmpublisher' }}
 
 jobs:
   build_windows:
@@ -23,7 +31,15 @@ jobs:
       run: npm install --global npm@12.0.2 && npm ci
 
     - name: Build
-      run: npm run tauri build -- -v -- --locked
+      shell: pwsh
+      run: |
+        $nightlyConfig = @()
+        if ($env:NWMPUBLISHER_NIGHTLY) {
+          $versionConfig = Join-Path $env:RUNNER_TEMP 'nightly-version.json'
+          @{ bundle = @{ windows = @{ wix = @{ version = $env:NWMPUBLISHER_NIGHTLY } } } } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $versionConfig -Encoding utf8NoBOM
+          $nightlyConfig = '--config', 'src-tauri/tauri.nightly.conf.json', '--config', $versionConfig
+        }
+        npm run tauri build -- -v @nightlyConfig -- --locked
       env:
         RUSTFLAGS: -Ctarget-feature=+crt-static
 
@@ -34,9 +50,9 @@ jobs:
         $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
         $packageDir = 'src-tauri/target/release/bundle/portable'
         New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
-        $archive = "$packageDir/nwmpublisher_${version}_x64_portable.zip"
+        $archive = "$packageDir/$($env:APP_NAME)_${version}_x64_portable.zip"
         $files = @(
-          'src-tauri/target/release/nwmpublisher.exe'
+          "src-tauri/target/release/$($env:APP_NAME).exe"
           'src-tauri/target/release/steam_api64.dll'
           'LICENSE'
         )
@@ -53,7 +69,7 @@ jobs:
 
         # Launch the extracted GUI-subsystem executable away from the build tree.
         foreach ($argument in @('--help', '--version')) {
-          $cliProcess = Start-Process -FilePath "$extracted/nwmpublisher.exe" -ArgumentList $argument -WorkingDirectory $env:RUNNER_TEMP -WindowStyle Hidden -Wait -PassThru
+          $cliProcess = Start-Process -FilePath "$extracted/$($env:APP_NAME).exe" -ArgumentList $argument -WorkingDirectory $env:RUNNER_TEMP -WindowStyle Hidden -Wait -PassThru
           if ($cliProcess.ExitCode -ne 0) {
             throw "Portable launch failed for $argument with exit code $($cliProcess.ExitCode)"
           }
@@ -64,6 +80,7 @@ jobs:
       with:
         name: packages-windows
         if-no-files-found: error
+        retention-days: ${{ inputs.nightly && 1 || 0 }}
         path: |
-          src-tauri/target/release/bundle/msi/nwmpublisher_*.msi
-          src-tauri/target/release/bundle/portable/nwmpublisher_*_x64_portable.zip
+          src-tauri/target/release/bundle/msi/${{ env.APP_NAME }}_*.msi
+          src-tauri/target/release/bundle/portable/${{ env.APP_NAME }}_*_x64_portable.zip

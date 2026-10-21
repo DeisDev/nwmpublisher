@@ -104,7 +104,8 @@
 				"silent": true
 			},
 			"wix": {
-				"template": "msi/msi.wxs"
+				"template": "msi/msi.wxs",
+				"upgradeCode": "0B8B261A-4840-4A5A-9E82-B51D66D26E7B"
 			}
 		}
 	}
