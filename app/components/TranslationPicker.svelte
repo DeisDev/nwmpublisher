@@ -217,6 +217,8 @@
 	select, input, button { font: inherit; border: none; border-radius: 4px; color: var(--text); }
 	select { appearance: none; min-width: 12rem; padding: .6rem .7rem; background: var(--fill); box-shadow: 0px 0px 2px 0px rgb(0 0 0 / 40%); cursor: pointer; }
 	select:disabled { opacity: .5; cursor: default; }
+	option { background: var(--control); color: var(--text); }
+	option:hover { background: var(--toggle-on); color: var(--toggle-on-text); }
 	input { width: 100%; padding: .7rem; font-size: .85em; background: var(--fill); box-shadow: 0px 0px 2px 0px rgba(0, 0, 0, .4); }
 	input:disabled { opacity: .5; }
 	select:focus, input:focus { box-shadow: inset 0 0 0px 1.5px #127cff; outline: none; }
