@@ -30,7 +30,6 @@
 	"cleaner_previous": "上一页",
 	"cleaner_next": "下一页",
 	"cleaner_account": "已检查 Steam 账户 {account} 的订阅。",
-	"cleaner_kept": "{count, plural, other {已跳过 # 个未订阅但仍由 Steam 管理的模组。若在此处删除，Steam 会重新下载它们。}}",
 	"cleaner_empty": "未找到未订阅的创意工坊文件或文件夹。",
 	"cleaner_empty_folder": "空文件夹",
 	"cleaner_select_all": "全选 {count, plural, other {# 个文件}}",

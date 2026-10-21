@@ -30,7 +30,6 @@
 	"cleaner_previous": "Anterior",
 	"cleaner_next": "Próxima",
 	"cleaner_account": "Inscrições verificadas para a conta Steam {account}.",
-	"cleaner_kept": "{count, plural, one {Ignorado # addon sem inscrição que o Steam ainda gerencia. O Steam o baixaria novamente se fosse excluído aqui.} other {Ignorados # addons sem inscrição que o Steam ainda gerencia. O Steam os baixaria novamente se fossem excluídos aqui.}}",
 	"cleaner_empty": "Nenhum arquivo ou pasta da Oficina sem inscrição encontrado.",
 	"cleaner_empty_folder": "Pasta vazia",
 	"cleaner_select_all": "Selecionar tudo ({count, plural, one {# arquivo} other {# arquivos}})",

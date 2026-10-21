@@ -190,6 +190,7 @@
 	{#if result}
 		<div class="result" role="status">
 			<p>{$_('cleaner_result', { values: { removed: result.removed.length, failed: result.failed.length } })}</p>
+			{#if result.steamCache.length > 0}<p>{$_('cleaner_result_steam', { values: { count: result.steamCache.length } })}</p>{/if}
 			{#each result.failed as failure}
 				<p class="error"><span class="path">{failure.path}</span><br>{errorText(failure.error)}</p>
 			{/each}
@@ -197,7 +198,6 @@
 	{/if}
 	{#if scan}
 		<p class="account">{$_('cleaner_account', { values: { account: scan.account } })}</p>
-		{#if scan.kept > 0}<p class="kept">{$_('cleaner_kept', { values: { count: scan.kept } })}</p>{/if}
 		{#if scan.files.length === 0}
 			<p role="status">{$_('cleaner_empty')}</p>
 		{:else}
@@ -225,7 +225,7 @@
 						<div class="file-info">
 							<a class="title" href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${file.workshopId}`} target="_blank" rel="noreferrer">{details[file.workshopId]?.title ?? file.fileName}</a>
 							{#if details[file.workshopId] && !details[file.workshopId].title}<small>{$_('cleaner_details_unavailable')}</small>{/if}
-							<small>{$_(`cleaner_source_${file.source}`)} · {$_('cleaner_workshop_id', { values: { id: file.workshopId } })}{#if file.folder} · {$_('cleaner_empty_folder')}{/if}</small>
+							<small>{$_(file.steamCache ? 'cleaner_source_steam_cache' : `cleaner_source_${file.source}`)} ·{$_('cleaner_workshop_id', { values: { id: file.workshopId } })}{#if file.folder} · {$_('cleaner_empty_folder')}{/if}</small>
 							<small class="path">{file.path}</small>
 						</div>
 						<span class="size">{formatSize(file.size, $locale)}</span>
@@ -263,7 +263,7 @@
 	.cleaner { height: 100%; overflow: auto; padding: 1.5rem; }
 	h2 { margin: 0 0 .75rem; }
 	p { line-height: 1.5; }
-	header > p, .account, .kept, small { color: var(--text-muted); }
+	header > p, .account, small { color: var(--text-muted); }
 	.toolbar, .selection, .actions, footer { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
 	.toolbar { margin: 1rem 0; }
 	.mode { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }

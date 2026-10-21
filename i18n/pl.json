@@ -30,7 +30,6 @@
 	"cleaner_previous": "Wstecz",
 	"cleaner_next": "Dalej",
 	"cleaner_account": "Obserwacje sprawdzono dla konta Steam {account}.",
-	"cleaner_kept": "{count, plural, one {Pominięto # dodatek bez obserwacji, którym nadal zarządza Steam. Steam pobrałby go ponownie po usunięciu tutaj.} few {Pominięto # dodatki bez obserwacji, którymi nadal zarządza Steam. Steam pobrałby je ponownie po usunięciu tutaj.} many {Pominięto # dodatków bez obserwacji, którymi nadal zarządza Steam. Steam pobrałby je ponownie po usunięciu tutaj.} other {Pominięto # dodatku bez obserwacji, którymi nadal zarządza Steam. Steam pobrałby je ponownie po usunięciu tutaj.}}",
 	"cleaner_empty": "Nie znaleziono plików ani folderów Warsztatu bez obserwacji.",
 	"cleaner_empty_folder": "Pusty folder",
 	"cleaner_select_all": "Zaznacz wszystko: {count, plural, one {# plik} few {# pliki} many {# plików} other {# pliku}}",

@@ -30,7 +30,6 @@
 	"cleaner_previous": "Önceki",
 	"cleaner_next": "Sonraki",
 	"cleaner_account": "Abonelikler {account} Steam hesabı için denetlendi.",
-	"cleaner_kept": "{count, plural, one {Steam'in hâlâ yönettiği abone olunmamış # eklenti atlandı. Burada silinseydi Steam onu yeniden indirirdi.} other {Steam'in hâlâ yönettiği abone olunmamış # eklenti atlandı. Burada silinselerdi Steam bunları yeniden indirirdi.}}",
 	"cleaner_empty": "Abone olunmamış Atölye dosyası veya klasörü bulunamadı.",
 	"cleaner_empty_folder": "Boş klasör",
 	"cleaner_select_all": "{count, plural, one {# dosyanın} other {# dosyanın}} tümünü seç",

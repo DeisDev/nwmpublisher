@@ -30,7 +30,6 @@
 	"cleaner_previous": "이전",
 	"cleaner_next": "다음",
 	"cleaner_account": "스팀 계정 {account}의 구독을 확인했습니다.",
-	"cleaner_kept": "{count, plural, other {스팀이 여전히 관리하는 구독 취소된 애드온 #개를 건너뛰었습니다. 여기서 삭제하면 스팀이 다시 다운로드합니다.}}",
 	"cleaner_empty": "구독 취소된 창작마당 파일이나 폴더가 없습니다.",
 	"cleaner_empty_folder": "빈 폴더",
 	"cleaner_select_all": "{count, plural, other {파일 #개}} 모두 선택",

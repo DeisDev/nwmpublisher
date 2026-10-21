@@ -30,7 +30,6 @@
 	"cleaner_previous": "Précédent",
 	"cleaner_next": "Suivant",
 	"cleaner_account": "Abonnements vérifiés pour le compte Steam {account}.",
-	"cleaner_kept": "{count, plural, one {# addon désabonné que Steam gère encore a été ignoré. Steam le téléchargerait de nouveau s’il était supprimé ici.} other {# addons désabonnés que Steam gère encore ont été ignorés. Steam les téléchargerait de nouveau s’ils étaient supprimés ici.}}",
 	"cleaner_empty": "Aucun fichier ou dossier Workshop désabonné trouvé.",
 	"cleaner_empty_folder": "Dossier vide",
 	"cleaner_select_all": "Sélectionner {count, plural, one {# fichier} other {les # fichiers}}",

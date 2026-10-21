@@ -30,7 +30,6 @@
 	"cleaner_previous": "Vorige",
 	"cleaner_next": "Volgende",
 	"cleaner_account": "Abonnementen gecontroleerd voor Steam-account {account}.",
-	"cleaner_kept": "{count, plural, one {# afgemelde addon overgeslagen die Steam nog beheert. Steam zou deze opnieuw downloaden als je hem hier verwijdert.} other {# afgemelde addons overgeslagen die Steam nog beheert. Steam zou ze opnieuw downloaden als je ze hier verwijdert.}}",
 	"cleaner_empty": "Geen Workshop-bestanden of -mappen zonder abonnement gevonden.",
 	"cleaner_empty_folder": "Lege map",
 	"cleaner_select_all": "Alle {count, plural, one {# bestand} other {# bestanden}} selecteren",

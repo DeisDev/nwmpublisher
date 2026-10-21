@@ -30,7 +30,6 @@
 	"cleaner_previous": "Anterior",
 	"cleaner_next": "Siguiente",
 	"cleaner_account": "Suscripciones comprobadas para la cuenta de Steam {account}.",
-	"cleaner_kept": "{count, plural, one {Se omitió # addon sin suscripción que Steam sigue gestionando. Steam volvería a descargarlo si se eliminara aquí.} other {Se omitieron # addons sin suscripción que Steam sigue gestionando. Steam volvería a descargarlos si se eliminaran aquí.}}",
 	"cleaner_empty": "No se encontraron archivos ni carpetas del Workshop sin suscripción.",
 	"cleaner_empty_folder": "Carpeta vacía",
 	"cleaner_select_all": "Seleccionar {count, plural, one {# archivo} other {todos los # archivos}}",

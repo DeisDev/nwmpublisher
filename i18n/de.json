@@ -30,7 +30,6 @@
 	"cleaner_previous": "Zurück",
 	"cleaner_next": "Weiter",
 	"cleaner_account": "Abonnements für das Steam-Konto {account} geprüft.",
-	"cleaner_kept": "{count, plural, one {# nicht abonniertes Addon übersprungen, das Steam weiterhin verwaltet. Steam würde es erneut herunterladen, wenn es hier gelöscht würde.} other {# nicht abonnierte Addons übersprungen, die Steam weiterhin verwaltet. Steam würde sie erneut herunterladen, wenn sie hier gelöscht würden.}}",
 	"cleaner_empty": "Keine nicht abonnierten Workshop-Dateien oder -Ordner gefunden.",
 	"cleaner_empty_folder": "Leerer Ordner",
 	"cleaner_select_all": "{count, plural, one {# Datei auswählen} other {Alle # Dateien auswählen}}",

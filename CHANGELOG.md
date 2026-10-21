@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Save logs in the user data folder, named by start date and time, with separate logs for the app and the command line. The last four of each are kept, so a crash log survives a restart.
 - Logs now show the OS and app version, timestamps, warning and error levels, and more detail about jobs, settings, and the addon cleaner.
 - Installed Addons and My Workshop now show a scrollbar.
+- The addon cleaner now lists unsubscribed addons that Steam still keeps in its cache, and tells Steam it no longer needs them when you remove them.
 - Update to Steamworks SDK 1.64.
 
 ### Fixed
