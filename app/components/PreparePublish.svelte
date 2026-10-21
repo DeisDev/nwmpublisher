@@ -22,6 +22,7 @@
 	import FilePreview from './FilePreview.svelte';
 	import BBCodeEditor from './BBCodeEditor.svelte';
 	import ChangelogEditor from './ChangelogEditor.svelte';
+	import TranslationPicker from './TranslationPicker.svelte';
 	import { markdownPasteToBBCode, markdownToBBCode } from '../bbcode';
 	import { readAddonDocument } from '../addon-documents';
 	import ChangelogDefaults from './ChangelogDefaults.svelte';
@@ -52,12 +53,21 @@
 	let descriptionEditor;
 	let importingReadme = false;
 	let changelogSettingsBusy = false;
+	let translationPicker;
+	let translationLanguage = '';
+	let translationDrafts = {};
+	let translation = null;
+	let translationName = '';
+	let translationDescriptionError = null;
+	let translationsBusy = false;
+	let translationsInvalid = null;
 
 	async function togglePreparePublish() {
 		if (settingsBusy || changelogSettingsBusy) return;
 		if ($preparePublish && settingsDirty && !await dialog.confirm($_('workshop_discard_confirm'), { title: $_('workshop_settings'), kind: 'warning' })) return;
 		try {
 			await changelogEditor.flush();
+			await translationPicker.flush();
 		} catch (error) {
 			await dialog.message(String(error), { kind: 'error' });
 			return;
@@ -101,11 +111,15 @@
 	let editorHistoryKey = 0;
 	let ignoreOpen = false;
 	const tabs = ['files', 'description', 'changelog', 'settings'];
-	$: descriptionBytes = descriptionEncoder.encode(description).length;
+	$: editorText = translationLanguage ? translation?.description ?? '' : description;
+	$: descriptionBytes = descriptionEncoder.encode(editorText).length;
 	$: canUpdateDescription = !!$updatingAddon && descriptionTouched && descriptionError === null
 		&& description !== ($updatingAddon.description ?? '');
+	$: hasTranslations = Object.keys(translationDrafts).length > 0;
 	$: descriptionOnly = !packageOnly && !!$updatingAddon && publishMode === 'description';
-	$: canSubmit = !savingPublishMode && !changelogSettingsBusy && (descriptionOnly ? canUpdateDescription : readyForPublish && (packageOnly || (!changelogBusy && descriptionError === null)));
+	$: canSubmit = !savingPublishMode && !changelogSettingsBusy && (descriptionOnly
+		? descriptionError === null && !translationsBusy && (canUpdateDescription || hasTranslations)
+		: readyForPublish && (packageOnly || (!changelogBusy && descriptionError === null && !translationsBusy)));
 	$: publishLabel = packageOnly ? $_('package_only') : descriptionOnly ? $_('update_description') : $_($updatingAddon ? 'package_update' : 'package_publish');
 	$: publishHelp = packageOnly ? $_('package_only_help') : descriptionOnly ? $_('update_description_help') : $_($updatingAddon ? 'package_update_help' : 'package_publish_help');
 	$: if (!$preparePublish || $isPublishing) publishModeOpen = false;
@@ -164,6 +178,18 @@
 			? 'ERR_DESCRIPTION_TOO_LONG'
 			: description.includes('\0') ? 'ERR_DESCRIPTION_CONTAINS_NUL' : null;
 		checkForm();
+	}
+
+	function onEditorInput(event) {
+		if (translationLanguage) translationPicker.setDescription(event.detail);
+		else onDescriptionInput(event);
+	}
+
+	function translationsPublished(publishingAddon, sent, failures = []) {
+		if ($updatingAddon === publishingAddon) translationPicker.published(sent, failures);
+		if (!failures.length) return;
+		const list = failures.map(failure => $_('translation_failure', { values: { language: translationPicker.nameOf(failure.language), error: translateError(failure.error) } })).join('\n');
+		dialog.message($_('translation_failures', { values: { failures: list } }), { kind: 'warning' });
 	}
 
 	function onTabKeydown(event, index) {
@@ -392,6 +418,7 @@
 		if (!readyForPublish || descriptionError || $isPublishing || changelogBusy) return;
 		const publishingAddon = $updatingAddon;
 		const descriptionUpdate = descriptionTouched ? description : null;
+		const translations = translationDrafts;
 		$isPublishing = true;
 
 		const request = {
@@ -405,8 +432,9 @@
 			upscale: canUpscale && upscale.checked,
 			updateId: publishingAddon?.id,
 			changes: changes || null,
+			translations,
 		};
-		changelogEditor.flush().then(() => {
+		Promise.all([changelogEditor.flush(), translationPicker.flush()]).then(() => {
 			playSound('success');
 			return invoke('publish', { request });
 		}).then(transactionId => {
@@ -427,6 +455,7 @@
 					$remountAddonScroller = true;
 					Steam.MyWorkshop = [];
 					if (publishingAddon && $updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
+					translationsPublished(publishingAddon, translations, event.data?.translationFailures);
 					if (event.data?.cleanupWarnings?.length) dialog.message($_('publish_cleanup_warning') + '\n' + event.data.cleanupWarnings.join('\n'), { kind: 'warning' });
 					if (event.data?.settingsError) dialog.message($_('changelog_defaults.published_save_error', { values: { error: event.data.settingsError } }), { kind: 'error' });
 				}
@@ -482,26 +511,33 @@
 	}
 
 	async function publishDescription() {
-		if (!canUpdateDescription || $isPublishing || settingsBusy || changelogSettingsBusy) return;
+		if (!canSubmit || $isPublishing || settingsBusy || changelogSettingsBusy) return;
 		const publishingAddon = $updatingAddon;
-		const descriptionUpdate = description;
+		const descriptionUpdate = canUpdateDescription ? description : null;
+		const translations = translationDrafts;
 		const historyKey = editorHistoryKey;
 		$isPublishing = true;
 
 		try {
+			await translationPicker.flush();
 			const transactionId = await invoke('publish_description', {
 				addonId: publishingAddon.id,
 				description: descriptionUpdate,
+				translations,
 			});
-			const transaction = new Transaction(transactionId, () => $_('PUBLISH_UPDATING_DESCRIPTION'));
+			const transaction = new Transaction(transactionId, transaction => $_(transaction.status ?? (descriptionUpdate === null ? 'PUBLISH_UPDATING_TRANSLATIONS' : 'PUBLISH_UPDATING_DESCRIPTION'), { values: { pct: transaction.progress } }));
 			transaction.listen(event => {
 				if (event.finished) {
-					publishingAddon.description = descriptionUpdate;
-					if ($updatingAddon === publishingAddon && editorHistoryKey === historyKey && description === descriptionUpdate) descriptionTouched = false;
+					if (descriptionUpdate !== null) {
+						publishingAddon.description = descriptionUpdate;
+						if ($updatingAddon === publishingAddon && editorHistoryKey === historyKey && description === descriptionUpdate) descriptionTouched = false;
+					}
 					$remountAddonScroller = true;
 					Steam.MyWorkshop = [];
 					playSound('success');
 					if ($updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
+					translationsPublished(publishingAddon, translations, event.data?.translationFailures);
+					if (event.data?.settingsError) dialog.message($_('changelog_defaults.published_save_error', { values: { error: event.data.settingsError } }), { kind: 'error' });
 				}
 				if (event.finished || event.error || event.cancelled || event.state === 'unknown') $isPublishing = false;
 			});
@@ -827,7 +863,7 @@
 	<div id="publish-workspace">
 		<div class="workspace-tabs" role="tablist" aria-label={$_('publish_tabs.label')}>
 			{#each tabs as tab, index}
-				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={(tab === 'description' && descriptionError !== null) || (tab === 'changelog' && changelogInvalid !== null)} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'settings' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
+				<button type="button" role="tab" id={`publish-tab-${tab}`} aria-controls={`publish-panel-${tab}`} aria-selected={activeTab === tab} tabindex={activeTab === tab ? 0 : -1} class:invalid={(tab === 'description' && (descriptionError !== null || translationsInvalid !== null)) || (tab === 'changelog' && changelogInvalid !== null)} on:click={() => activeTab = tab} on:keydown={event => onTabKeydown(event, index)}>{$_('publish_tabs.' + tab)}{#if tab === 'settings' && settingsDirty}<span class="pending-dot" aria-label={$_('workshop_unsaved')}> •</span>{/if}</button>
 			{/each}
 		</div>
 		<div id="publish-panel-files" class="workspace-panel files-panel" role="tabpanel" aria-labelledby="publish-tab-files" tabindex="0" hidden={activeTab !== 'files'}>
@@ -843,7 +879,8 @@
 			</div>
 		</div>
 		<div id="publish-panel-description" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-description" tabindex="0" hidden={activeTab !== 'description'}>
-			<BBCodeEditor bind:this={descriptionEditor} id="description" label={$_('workshop_description')} value={description} on:input={onDescriptionInput} convertPaste={convertDescriptionPaste} importLabel={$_('addon_document.import', { values: { file: 'README.md' } })} importDisabled={!pathValue || importingReadme} on:import={importReadme} disabled={$isPublishing} error={descriptionError} help={$_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'} historyKey={editorHistoryKey}/>
+			<TranslationPicker bind:this={translationPicker} addonId={$updatingAddon?.id ?? null} contentPath={pathValue || null} active={$preparePublish} disabled={$isPublishing} bind:language={translationLanguage} bind:drafts={translationDrafts} bind:current={translation} bind:languageName={translationName} bind:descriptionError={translationDescriptionError} bind:busy={translationsBusy} bind:invalid={translationsInvalid}/>
+			<BBCodeEditor bind:this={descriptionEditor} id="description" label={translationLanguage ? $_('translation_description', { values: { language: translationName } }) : $_('workshop_description')} value={editorText} on:input={onEditorInput} convertPaste={convertDescriptionPaste} importLabel={$_('addon_document.import', { values: { file: 'README.md' } })} importDisabled={!pathValue || importingReadme} on:import={importReadme} disabled={$isPublishing || (!!translationLanguage && !translation)} error={translationLanguage ? translationDescriptionError : descriptionError} help={translationLanguage ? '' : $_('workshop_description_help')} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} bind:formattingOpen={descriptionFormattingOpen} active={$preparePublish && activeTab === 'description'} historyKey={`${editorHistoryKey}:${translationLanguage}`}/>
 		</div>
 		<div id="publish-panel-changelog" class="workspace-panel" role="tabpanel" aria-labelledby="publish-tab-changelog" tabindex="0" hidden={activeTab !== 'changelog'}>
 			<ChangelogEditor bind:this={changelogEditor} addonId={$updatingAddon?.id ?? null} contentPath={pathValue || null} bind:value={changes} bind:busy={changelogBusy} bind:invalid={changelogInvalid} disabled={$isPublishing} active={$preparePublish} editorActive={activeTab === 'changelog'}/>

@@ -28,6 +28,9 @@ pub enum PublishError {
 	DescriptionContainsNul,
 	ChangelogTooLong,
 	ChangelogContainsNul,
+	TitleTooLong,
+	TitleContainsNul,
+	TranslationLanguage,
 	IOError(#[source] crate::IoError),
 	SteamError(#[source] SteamError),
 	ImageError {
@@ -53,6 +56,9 @@ impl std::fmt::Display for PublishError {
 			PublishError::DescriptionContainsNul => write!(f, "ERR_DESCRIPTION_CONTAINS_NUL"),
 			PublishError::ChangelogTooLong => write!(f, "ERR_CHANGELOG_TOO_LONG"),
 			PublishError::ChangelogContainsNul => write!(f, "ERR_CHANGELOG_CONTAINS_NUL"),
+			PublishError::TitleTooLong => write!(f, "ERR_TITLE_TOO_LONG"),
+			PublishError::TitleContainsNul => write!(f, "ERR_TITLE_CONTAINS_NUL"),
+			PublishError::TranslationLanguage => write!(f, "ERR_TRANSLATION_LANGUAGE"),
 			PublishError::IOError(error) => write!(f, "ERR_IO_ERROR:{}", error),
 			PublishError::SteamError(error) => write!(f, "ERR_STEAM_ERROR:{}", error),
 			PublishError::ImageError { operation, path, source } => write!(f, "ERR_IMAGE_ERROR:{} \"{}\": {}", operation, path.display(), source),
@@ -89,7 +95,7 @@ impl PublishError {
 	}
 }
 
-use super::{Steam, publish_jobs::{PublishJob, PublishResult}};
+use super::{Steam, publish_jobs::{PublishJob, PublishResult}, translations::{self, TranslationFailure, Translations}};
 pub struct ContentPath(PathBuf);
 impl std::ops::Deref for ContentPath {
 	type Target = PathBuf;
@@ -284,7 +290,7 @@ const WORKSHOP_DESCRIPTION_MAX_BYTES: usize = 7999;
 // k_cchPublishedDocumentChangeDescriptionMax is also 8000, including the C string terminator.
 const WORKSHOP_CHANGELOG_MAX_BYTES: usize = 7999;
 
-fn validate_description(description: Option<&str>) -> Result<(), PublishError> {
+pub(super) fn validate_description(description: Option<&str>) -> Result<(), PublishError> {
 	if let Some(description) = description {
 		if description.len() > WORKSHOP_DESCRIPTION_MAX_BYTES {
 			return Err(PublishError::DescriptionTooLong);
@@ -645,20 +651,39 @@ pub fn publish_icon(icon_path: PathBuf, upscale: bool, addon_id: PublishedFileId
 }
 
 #[tauri::command]
-pub fn publish_description(addon_id: PublishedFileId, description: String) -> Result<u32, PublishError> {
-	validate_description(Some(&description))?;
+pub fn publish_description(addon_id: PublishedFileId, description: Option<String>, translations: Translations) -> Result<u32, PublishError> {
+	validate_description(description.as_deref())?;
+	translations::validate(&translations)?;
 	let transaction = crate::transactions::new_publish();
 	let id = transaction.id;
 
 	std::thread::spawn(move || {
 		let job = match PublishJob::new(&transaction, Some(addon_id), None) { Ok(job) => job, Err(error) => return transaction.error(error, turbonone!()) };
-		transaction.status("PUBLISH_UPDATING_DESCRIPTION");
-		match steam!().update(addon_id, WorkshopUpdateType::Description { description }, &transaction, &job) {
+		let published = match description {
+			Some(description) => {
+				transaction.status("PUBLISH_UPDATING_DESCRIPTION");
+				steam!().update(addon_id, WorkshopUpdateType::Description { description }, &transaction, &job)
+			}
+			None => job
+				.submitting()
+				.map_err(PublishError::Journal)
+				.and_then(|_| if transaction.begin_submission() { Ok(false) } else { Err(PublishError::Cancelled) }),
+		};
+		match published {
 			Ok(legal_agreement) => {
 				if legal_agreement {
 					crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
 				}
-				transaction.finished(job.finish(&transaction, "published", Vec::new()));
+				let (sent, translation_failures) = translations::publish(addon_id, &translations, &transaction);
+				let settings_error = crate::appdata::change_settings(|settings| {
+					translations::forget_published(&mut settings.translations, None, addon_id, &sent);
+					Ok(())
+				})
+				.err();
+				let mut result = serde_json::to_value(job.finish(&transaction, "published", Vec::new())).unwrap();
+				result["translationFailures"] = json!(translation_failures);
+				result["settingsError"] = json!(settings_error);
+				transaction.finished(result);
 			}
 			Err(PublishError::Cancelled) => { job.finish(&transaction, "cancelled", Vec::new()); transaction.cancelled(); },
 			Err(PublishError::Unknown) => job.uncertain(&transaction),
@@ -682,12 +707,14 @@ pub struct PublishRequest {
 	pub(crate) update_id: Option<PublishedFileId>,
 	pub(crate) changes: Option<String>,
 	pub(crate) gma_name: Option<String>,
+	#[serde(default)]
+	pub(crate) translations: Translations,
 	#[serde(skip)]
 	pub(crate) ignore: Vec<String>,
 }
 
 pub(crate) enum PublishOutcome {
-	Published { id: PublishedFileId, legal_agreement: bool, job: PublishJob, warnings: Vec<String>, settings_error: Option<String> },
+	Published { id: PublishedFileId, legal_agreement: bool, job: PublishJob, warnings: Vec<String>, settings_error: Option<String>, translation_failures: Vec<TranslationFailure> },
 	Cancelled,
 	Unknown,
 	Failed(String, Option<PublishResult>),
@@ -699,7 +726,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 	let id = transaction.id;
 
 	std::thread::spawn(move || match run_publish(request, &transaction) {
-		PublishOutcome::Published { id, legal_agreement, job, warnings, settings_error } => {
+		PublishOutcome::Published { id, legal_agreement, job, warnings, settings_error, translation_failures } => {
 			if !transaction.aborted() {
 				if legal_agreement {
 					crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
@@ -709,6 +736,7 @@ pub fn publish(request: PublishRequest) -> u32 {
 				}
 				let mut result = serde_json::to_value(job.finish(&transaction, "published", warnings)).unwrap();
 				result["settingsError"] = json!(settings_error);
+				result["translationFailures"] = json!(translation_failures);
 				transaction.finished(result);
 			}
 		}
@@ -732,6 +760,7 @@ pub(crate) fn run_publish(request: PublishRequest, transaction: &Transaction) ->
 		update_id,
 		changes,
 		gma_name,
+		translations,
 		ignore: extra_ignore,
 	} = request;
 	let is_updating = update_id.is_some();
@@ -750,6 +779,7 @@ pub(crate) fn run_publish(request: PublishRequest, transaction: &Transaction) ->
 		job.staging(root)?;
 		validate_description(description.as_deref()).map_err(|error| error.to_string())?;
 		validate_changelog(changes.as_deref()).map_err(|error| error.to_string())?;
+		translations::validate(&translations).map_err(|error| error.to_string())?;
 		if transaction.aborted() {
 			return Ok(None);
 		}
@@ -849,13 +879,15 @@ pub(crate) fn run_publish(request: PublishRequest, transaction: &Transaction) ->
 
 	match result {
 		Ok(StagingResult { value: Some((id, legal_agreement)), warnings }) => {
+			let (sent, translation_failures) = translations::publish(id, &translations, transaction);
 			let settings_error = crate::appdata::change_settings(|settings| {
 				settings.my_workshop_local_paths.insert(id, content_path_src);
-				if let Some(key) = source_key { settings.changelogs.published(&key, id); }
+				if let Some(key) = &source_key { settings.changelogs.published(key, id); }
+				translations::forget_published(&mut settings.translations, source_key.as_deref(), id, &sent);
 				Ok(())
 			}).err();
 			app_data!().send();
-			PublishOutcome::Published { id, legal_agreement, job, warnings, settings_error }
+			PublishOutcome::Published { id, legal_agreement, job, warnings, settings_error, translation_failures }
 		}
 		Ok(StagingResult { value: None, .. }) => { job.finish(transaction, "cancelled", Vec::new()); PublishOutcome::Cancelled },
 		Err(error) if error == "ERR_PUBLISH_OUTCOME_UNKNOWN" => { job.uncertain(transaction); PublishOutcome::Unknown },
@@ -1100,8 +1132,10 @@ mod tests {
 		assert!(request.icon_path.is_none());
 		assert!(request.changes.is_none());
 		assert!(request.gma_name.is_none());
+		assert!(request.translations.is_empty());
 
 		payload["description"] = serde_json::json!("");
+		payload["translations"] = serde_json::json!({ "german": { "title": "Beispiel", "description": "" } });
 		payload["updateId"] = serde_json::json!(PublishedFileId(42));
 		payload["iconPath"] = serde_json::json!("preview.png");
 		payload["changes"] = serde_json::json!("[b]Updated[/b]");
@@ -1112,6 +1146,7 @@ mod tests {
 		assert_eq!(request.icon_path.as_deref(), Some(std::path::Path::new("preview.png")));
 		assert_eq!(request.changes.as_deref(), Some("[b]Updated[/b]"));
 		assert_eq!(request.gma_name.as_deref(), Some("example.gma"));
+		assert_eq!(request.translations["german"].title, "Beispiel");
 
 		payload.as_object_mut().unwrap().remove("title");
 		assert!(serde_json::from_value::<PublishRequest>(payload).is_err());
@@ -1168,12 +1203,16 @@ mod tests {
 	#[test]
 	fn description_update_rejects_invalid_input_before_starting() {
 		assert!(matches!(
-			publish_description(PublishedFileId(0), "a".repeat(WORKSHOP_DESCRIPTION_MAX_BYTES + 1)),
+			publish_description(PublishedFileId(0), Some("a".repeat(WORKSHOP_DESCRIPTION_MAX_BYTES + 1)), Translations::new()),
 			Err(PublishError::DescriptionTooLong)
 		));
 		assert!(matches!(
-			publish_description(PublishedFileId(0), "before\0after".to_owned()),
+			publish_description(PublishedFileId(0), Some("before\0after".to_owned()), Translations::new()),
 			Err(PublishError::DescriptionContainsNul)
+		));
+		assert!(matches!(
+			publish_description(PublishedFileId(0), None, Translations::from([("english".to_owned(), Default::default())])),
+			Err(PublishError::TranslationLanguage)
 		));
 	}
 

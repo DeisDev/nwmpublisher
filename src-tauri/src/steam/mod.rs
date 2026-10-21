@@ -23,6 +23,7 @@ pub mod item_info;
 pub mod publishing;
 pub mod publish_jobs;
 pub mod subscriptions;
+pub mod translations;
 pub mod users;
 pub mod workshop;
 pub mod workshop_management;

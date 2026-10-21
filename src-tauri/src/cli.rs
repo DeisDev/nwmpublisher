@@ -447,6 +447,7 @@ fn publish(folder: &Path, matches: &ArgMatches) -> Result<(), String> {
 		update_id: matches.get_one::<u64>("update").map(|id| PublishedFileId(*id)),
 		changes: matches.get_one::<String>("changes").cloned(),
 		gma_name: None,
+		translations: Default::default(),
 		ignore,
 	};
 
@@ -454,7 +455,7 @@ fn publish(folder: &Path, matches: &ArgMatches) -> Result<(), String> {
 	notify(Level::Info, english::text("cli.publishing").to_owned());
 	let transaction = crate::transactions::new_publish();
 	match run_publish(request, &transaction) {
-		PublishOutcome::Published { id, legal_agreement, job, warnings, settings_error } => {
+		PublishOutcome::Published { id, legal_agreement, job, warnings, settings_error, .. } => {
 			for warning in warnings.iter().chain(&settings_error) {
 				notify(Level::Warn, english::message(warning));
 			}

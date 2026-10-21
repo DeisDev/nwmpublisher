@@ -14,7 +14,7 @@ use crate::{
 	RwLockCow,
 };
 
-use crate::{APP_NAME, APP_VERSION, GMOD_APP_ID, NIGHTLY_VERSION};
+use crate::{steam::translations::Translations, APP_NAME, APP_VERSION, GMOD_APP_ID, NIGHTLY_VERSION};
 use parking_lot::{Mutex, RwLock, RwLockReadGuard};
 use serde::{Deserialize, Serialize};
 use steamworks::PublishedFileId;
@@ -205,7 +205,7 @@ pub fn changelog_key(addon_id: Option<PublishedFileId>, content_path: Option<Pat
 	Ok("new".into())
 }
 
-fn validate_changelog_key(key: &str) -> Result<(), String> {
+pub(crate) fn validate_changelog_key(key: &str) -> Result<(), String> {
 	if key == "new"
 		|| key.strip_prefix("workshop:").is_some_and(|id| id.parse::<u64>().is_ok_and(|id| id > 0))
 		|| key
@@ -282,6 +282,7 @@ pub struct Settings {
 	pub workshop_update_mode: WorkshopUpdateMode,
 	pub open_workshop_after_publish: bool,
 	pub changelogs: ChangelogSettings,
+	pub translations: HashMap<String, Translations>,
 
 	pub language: Option<String>,
 	pub theme: Theme,
@@ -346,6 +347,7 @@ impl Default for Settings {
 			workshop_update_mode: WorkshopUpdateMode::Description,
 			open_workshop_after_publish: true,
 			changelogs: ChangelogSettings::default(),
+			translations: HashMap::new(),
 
 			language: None,
 			theme: Theme::System,
@@ -668,7 +670,7 @@ fn patched_settings(settings: &Settings, patch: serde_json::Map<String, serde_js
 	let metadata_name = patch.contains_key("extract_metadata_filename");
 	let preview_split = patch.contains_key("bbcode_preview_split");
 	for (key, value) in patch {
-		if !fields.contains_key(&key) || matches!(key.as_str(), "window_size" | "window_maximized" | "changelogs" | "my_workshop_local_paths") {
+		if !fields.contains_key(&key) || matches!(key.as_str(), "window_size" | "window_maximized" | "changelogs" | "translations" | "my_workshop_local_paths") {
 			return Err(format!("ERR_SETTINGS_FIELD:{}", key));
 		}
 		fields.insert(key, value);
