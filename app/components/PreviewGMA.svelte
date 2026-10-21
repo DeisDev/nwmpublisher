@@ -300,6 +300,12 @@
 											</td>
 										</tr>
 									{/if}
+									{#if workshop.fileName}
+										<tr>
+											<th>{$_('original_file_name')}</th>
+											<td class="file-name select">{workshop.fileName}</td>
+										</tr>
+									{/if}
 								{/if}
 							</tbody>
 						</table>
@@ -424,6 +430,7 @@
 	#addon-info tr { display: flex; align-items: center; gap: .5rem; }
 	#addon-info th { color: var(--text-muted); font-weight: 400; }
 	#addon-info th, #addon-info td { padding: 0; }
+	#addon-info .file-name { overflow-wrap: anywhere; }
 	#description {
 		margin-top: 1.5rem;
 		color: var(--text);

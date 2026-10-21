@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Select many installed addons with Ctrl-click, Shift-click, the Select button, or the keyboard, then extract, unsubscribe, delete, copy links, or open folders for all of them at once.
 - Move through installed addons with the arrow keys, Page Up, Page Down, Home, and End. Right-click menus open with Shift+F10 or the Menu key and work with the keyboard.
 - Translate an addon's title and description into any Steam language. Pick a language above the description to edit it, and changed translations are sent when you publish.
+- Show the original file name of older Workshop addons in their details and in the saved workshop.txt.
 - Download nightly development builds from the website to try new changes early. They install alongside the stable app, keep their own settings, and tell you when a newer nightly is out.
 
 ### Changed

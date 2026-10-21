@@ -54,6 +54,7 @@ pub struct WorkshopItem {
 	pub subscriptions: u64,
 	pub banned: Option<bool>,
 	pub file_size: Option<u64>,
+	pub file_name: Option<String>,
 	pub upvotes: Option<u32>,
 	pub downvotes: Option<u32>,
 	pub favorites: Option<u64>,
@@ -83,6 +84,7 @@ impl From<QueryResult> for WorkshopItem {
 			subscriptions: 0,
 			banned: Some(result.banned),
 			file_size: (result.file_size > 0).then_some(u64::from(result.file_size)),
+			file_name: original_file_name(&result.file_name),
 			upvotes: Some(result.num_upvotes),
 			downvotes: Some(result.num_downvotes),
 			favorites: None,
@@ -111,6 +113,7 @@ impl From<PublishedFileId> for WorkshopItem {
 			subscriptions: 0,
 			banned: None,
 			file_size: None,
+			file_name: None,
 			upvotes: None,
 			downvotes: None,
 			favorites: None,
@@ -122,6 +125,11 @@ impl From<PublishedFileId> for WorkshopItem {
 		}
 	}
 }
+// Only legacy uploads keep the name Steam stored, under a folder such as "uploads/addons/".
+pub fn original_file_name(stored: &str) -> Option<String> {
+	stored.rsplit('/').next().filter(|name| !name.is_empty()).map(str::to_owned)
+}
+
 impl WorkshopItem {
 	pub fn read_statistics(&mut self, results: &QueryResults<'_>, index: u32) {
 		use steamworks::UGCStatisticType::*;

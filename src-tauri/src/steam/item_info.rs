@@ -66,6 +66,7 @@ fn item_details(requested: PublishedFileId, result: Option<QueryResult>, preview
 		return Err("ERR_WORKSHOP_ITEM_MISMATCH".into());
 	}
 	Ok(WorkshopItemDetails {
+		file_name: super::workshop::original_file_name(&item.file_name),
 		title: item.title,
 		description: item.description,
 		owner: item.owner,
@@ -258,7 +259,7 @@ mod tests {
 			tags_truncated: false,
 			file_type: steamworks::FileType::Community,
 			file_size: 0,
-			file_name: String::new(),
+			file_name: "uploads/addons/stacker_stool.gm".into(),
 			url: String::new(),
 			num_upvotes: 0,
 			num_downvotes: 0,
@@ -273,6 +274,10 @@ mod tests {
 		let item = item_details(PublishedFileId(7), Some(result(7, Some(4000))), Some("https://example.com/icon.jpg".into()), now).unwrap();
 		assert_eq!((item.title.as_str(), item.description.as_str(), item.retrieved), ("Addon", "[b]Description[/b]", now));
 		assert_eq!(item.preview_url.as_deref(), Some("https://example.com/icon.jpg"));
+		assert_eq!(item.file_name.as_deref(), Some("stacker_stool.gm"));
+		let mut current = result(7, Some(4000));
+		current.file_name.clear();
+		assert_eq!(item_details(PublishedFileId(7), Some(current), None, now).unwrap().file_name, None);
 		assert_eq!(item_details(PublishedFileId(7), Some(result(7, Some(4000))), Some(String::new()), now).unwrap().preview_url, None);
 		assert_eq!(item_details(PublishedFileId(7), None, None, now).unwrap_err(), "ERR_WORKSHOP_ITEM_MISSING");
 		for wrong in [result(8, Some(4000)), result(7, Some(4001)), result(7, None)] {

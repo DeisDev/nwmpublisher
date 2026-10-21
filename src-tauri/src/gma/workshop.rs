@@ -9,6 +9,7 @@ pub struct WorkshopItemDetails {
 	pub description: String,
 	pub owner: SteamId,
 	pub preview_url: Option<String>,
+	pub file_name: Option<String>,
 	pub retrieved: DateTime<Utc>,
 }
 
@@ -47,6 +48,7 @@ impl WorkshopInfo {
 		lines.push(line("workshop_export.owner", self.owner_name.as_deref()));
 		lines.push(line("workshop_export.owner_id", owner.as_deref()));
 		lines.push(line("workshop_export.owner_profile", owner.map(|owner| format!("https://steamcommunity.com/profiles/{owner}")).as_deref()));
+		lines.push(line("workshop_export.file_name", item.and_then(|item| item.file_name.as_deref())));
 		lines.push(line("workshop_export.retrieved", item.map(|item| item.retrieved.to_rfc3339_opts(SecondsFormat::Secs, true)).as_deref()));
 		lines.push(String::new());
 		match item {
@@ -73,6 +75,7 @@ mod tests {
 			description: "[h1]Hello[/h1]\n[url=https://example.com/a?b=1]Link[/url]\n[img]https://example.com/i.png[/img]".into(),
 			owner: SteamId::from_raw(76561197960287930),
 			preview_url: None,
+			file_name: Some("stacker_stool.gm".into()),
 			retrieved: Utc.with_ymd_and_hms(2026, 10, 9, 12, 34, 56).unwrap(),
 		}
 	}
@@ -88,6 +91,7 @@ mod tests {
 			Owner: Owner Name\n\
 			Owner Steam ID: 76561197960287930\n\
 			Owner profile: https://steamcommunity.com/profiles/76561197960287930\n\
+			Original file name: stacker_stool.gm\n\
 			Retrieved (UTC): 2026-10-09T12:34:56Z\n\
 			\n\
 			Description:\n\
@@ -113,6 +117,7 @@ mod tests {
 			Owner: Unavailable\n\
 			Owner Steam ID: Unavailable\n\
 			Owner profile: Unavailable\n\
+			Original file name: Unavailable\n\
 			Retrieved (UTC): Unavailable\n\
 			\n\
 			Description: Unavailable\n"

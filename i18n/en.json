@@ -351,6 +351,7 @@
 	"publish_cannot_cancel": "Submission to Steam has started and can no longer be cancelled.",
 	"ERR_TRANSACTION_NOT_FOUND": "This job is no longer available for cancellation.",
 	"size": "Size",
+	"original_file_name": "Original file name",
 	"addon_type": "Type",
 	"file_types": {
 		"folder": "Folder",
@@ -824,6 +825,7 @@
 		"owner": "Owner: {value}",
 		"owner_id": "Owner Steam ID: {value}",
 		"owner_profile": "Owner profile: {value}",
+		"file_name": "Original file name: {value}",
 		"retrieved": "Retrieved (UTC): {value}",
 		"description": "Description:",
 		"description_unavailable": "Description: Unavailable",

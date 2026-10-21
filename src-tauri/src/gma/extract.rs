@@ -521,6 +521,7 @@ mod tests {
 				description: "[b]Description[/b]".into(),
 				owner: steamworks::SteamId::from_raw(76561197960287930),
 				preview_url: None,
+				file_name: None,
 				retrieved: chrono::Utc::now(),
 			}),
 			owner_name: Some("Owner".into()),
