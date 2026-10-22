@@ -203,9 +203,7 @@
 
 <main class="scrollbar" on:scroll={infiniScroll} bind:this={scroller}>
 	{#if addons.length !== 0 && total !== 0 && addons.length !== total}
-		<h2 id="amount">
-			<span>{$_('showing_num_addons', { values: { num: addons.length.toLocaleString(), total: total.toLocaleString() }})}</span>
-		</h2>
+		<p id="amount">{$_('showing_num_addons', { values: { num: addons.length.toLocaleString(), total: total.toLocaleString() }})}</p>
 	{/if}
 
 	{#if onNewAddonClick}
@@ -254,8 +252,9 @@
 		padding: 1.5rem;
 		height: 100%;
 	}
-	main > h2 {
-		margin-top: 0;
+	#amount {
+		margin: 0 0 1rem;
+		color: var(--text-soft);
 	}
 	main #grid {
 		position: relative;

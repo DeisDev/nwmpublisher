@@ -14,6 +14,7 @@
 	import Filter from '@lucide/svelte/icons/list-filter';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import SquareCheck from '@lucide/svelte/icons/square-check';
+	import Check from '@lucide/svelte/icons/check';
 	import FolderAdd from '@lucide/svelte/icons/folder-plus';
 	import CircleMinus from '@lucide/svelte/icons/circle-minus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -295,32 +296,42 @@
 				{/each}
 			</select>
 		</label>
-		<button type="button" class="select-mode" class:active={$selection.active} aria-pressed={$selection.active} on:click={toggleSelecting}>
-			<SquareCheck size="1rem"/>
-			{$_('select')}
+		<button type="button" class="select-mode" class:active={$selection.active} on:click={toggleSelecting}>
+			{#if $selection.active}
+				<Check size="1rem"/>
+				{$_('done')}
+			{:else}
+				<SquareCheck size="1rem"/>
+				{$_('select')}
+			{/if}
 		</button>
 	</div>
 	{#if $selection.active}
-		<div class="selection-bar">
-			<span class="count">{$_('selection_count', { values: { count: selectedCount, size: formatSize(selectedSize) } })}</span>
-			<button type="button" on:click={selectAll}>{$_('select_all_count', { values: { count: total } })}</button>
-			<button type="button" disabled={!selectedCount} on:click={selection.clear}>{$_('clear_selection')}</button>
-			<span class="separator" aria-hidden="true"></span>
-			<button type="button" disabled={!selectedCount} on:click={chooseDestination}><FolderAdd size="1rem"/>{$_('extract')}</button>
-			<button type="button" bind:this={unsubscribeButton} disabled={!unsubscribePaths.length || !!$removalJob} on:click={() => removeSelected(true)}><CircleMinus size="1rem"/>{unsubscribeLabel}</button>
-			<button type="button" disabled={!deletePaths.length || !!$removalJob} on:click={() => removeSelected(false)}><Trash2 size="1rem"/>{deleteLabel}</button>
-			<button type="button" disabled={!linkIds.length} on:click={copyLinks}><LinkChain size="1rem"/>{$_('copy_links')}</button>
-			<span use:tippy={tooManyFolders ? $_('open_locations_limit', { values: { max: MAX_LOCATIONS } }) : ''}>
-				<button type="button" disabled={!folders.size || tooManyFolders} on:click={openLocations}><Folder size="1rem"/>{$_('open_locations')}</button>
-			</span>
-			<button type="button" class="done" on:click={selection.stop}>{$_('done')}</button>
-			{#if blockedCount}<span class="note">{$_('bulk_cant_remove', { values: { count: blockedCount } })}</span>{/if}
+		<div class="panel">
+			<div class="selection-summary">
+				<span class="count">{$_('selection_count', { values: { count: selectedCount } })}</span>
+				{#if selectedCount}<span class="size">{formatSize(selectedSize)}</span>{/if}
+				<button type="button" class="plain" on:click={selectAll}>{$_('select_all_count', { values: { count: total } })}</button>
+				<button type="button" class="plain" disabled={!selectedCount} on:click={selection.clear}>{$_('clear_selection')}</button>
+			</div>
+			<div class="selection-actions">
+				<button type="button" disabled={!selectedCount} on:click={chooseDestination}><FolderAdd size="1rem"/>{$_('extract')}</button>
+				<button type="button" bind:this={unsubscribeButton} disabled={!unsubscribePaths.length || !!$removalJob} on:click={() => removeSelected(true)}><CircleMinus size="1rem"/>{unsubscribeLabel}</button>
+				<button type="button" disabled={!deletePaths.length || !!$removalJob} on:click={() => removeSelected(false)}><Trash2 size="1rem"/>{deleteLabel}</button>
+				<span class="separator" aria-hidden="true"></span>
+				<button type="button" disabled={!linkIds.length} on:click={copyLinks}><LinkChain size="1rem"/>{$_('copy_links')}</button>
+				<span use:tippy={tooManyFolders ? $_('open_locations_limit', { values: { max: MAX_LOCATIONS } }) : ''}>
+					<button type="button" disabled={!folders.size || tooManyFolders} on:click={openLocations}><Folder size="1rem"/>{$_('open_locations')}</button>
+				</span>
+			</div>
+			{#if blockedCount}<p class="note">{$_('bulk_cant_remove', { values: { count: blockedCount } })}</p>{/if}
 		</div>
 	{/if}
-	<span class="sr-only" role="status">{$selection.active ? $_('selection_announce', { values: { count: selectedCount } }) : ''}</span>
+	<span class="sr-only" role="status">{$selection.active ? $_('selection_count', { values: { count: selectedCount } }) : ''}</span>
 	{#if bulkJob}
-		<div class="job">
-			<span>{$_(bulkJob.unsubscribe ? 'bulk_unsubscribing' : 'bulk_deleting', { values: { completed: bulkJob.completed, total: bulkJob.total } })}</span>
+		<div class="panel job">
+			<span id="bulk-job-status">{$_(bulkJob.unsubscribe ? 'bulk_unsubscribing' : 'bulk_deleting', { values: { completed: bulkJob.completed, total: bulkJob.total } })}</span>
+			<progress max={bulkJob.total} value={bulkJob.completed} aria-labelledby="bulk-job-status"></progress>
 			<button type="button" on:click={stopRemoval}>{$_('stop')}</button>
 		</div>
 	{/if}
@@ -349,16 +360,32 @@
 		height: 100%;
 		min-height: 0;
 	}
-	.toolbar, .selection-bar, .job {
+	.toolbar, .panel, .selection-summary, .selection-actions {
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
 		gap: .75rem;
+	}
+	.toolbar {
 		padding: 1rem 1.5rem .5rem;
 	}
-	.selection-bar, .job {
+	.panel {
+		gap: .5rem 1rem;
+		margin: .5rem 1.5rem 0;
+		padding: .5rem;
+		padding-inline-start: 1rem;
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		background: var(--bg-panel);
+	}
+	.selection-summary, .selection-actions {
 		gap: .5rem;
-		padding-top: .25rem;
+	}
+	.selection-actions {
+		margin-inline-start: auto;
+	}
+	.panel button {
+		padding: .45rem .7rem;
 	}
 	.select-mode {
 		margin-inline-start: auto;
@@ -384,13 +411,21 @@
 		opacity: .45;
 		cursor: default;
 	}
-	button.active, button.done {
+	button.active {
 		border-color: var(--neutral);
 		background: var(--neutral-dark);
 		color: #fff;
 	}
-	button.done:hover:not(:disabled) {
+	button.active:hover:not(:disabled) {
 		background: var(--neutral);
+	}
+	button.plain {
+		border-color: transparent;
+		background: none;
+		color: var(--link);
+	}
+	button.plain:hover:not(:disabled) {
+		background: var(--control);
 	}
 	button:focus-visible, select:focus-visible, input:focus-visible {
 		outline: 2px solid var(--text);
@@ -398,21 +433,31 @@
 	}
 	.count {
 		font-weight: 600;
-		margin-inline-end: .25rem;
+	}
+	.size {
+		color: var(--text-muted);
+		margin-inline-end: .5rem;
 	}
 	.separator {
 		align-self: stretch;
 		width: 1px;
-		margin: 0 .25rem;
+		margin: .25rem;
 		background: var(--border);
 	}
 	.note {
 		flex-basis: 100%;
+		margin: 0;
 		color: var(--text-muted);
 		font-size: .85rem;
 	}
 	.job span {
 		color: var(--text-soft);
+	}
+	progress {
+		flex: 1;
+		min-width: 8rem;
+		height: .5rem;
+		accent-color: var(--neutral);
 	}
 	.sr-only {
 		position: absolute;
