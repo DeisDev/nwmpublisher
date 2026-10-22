@@ -7,6 +7,7 @@
 	import { afterUpdate, onDestroy } from 'svelte';
 	import { saveSettings } from '../settings.js';
 	import Filter from '@lucide/svelte/icons/list-filter';
+	import Search from '@lucide/svelte/icons/search';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Loading from '../components/Loading.svelte';
 
@@ -20,6 +21,9 @@
 	let filtersOpen = false;
 	let filterMenu;
 	let filterButton;
+	let section;
+	let query = '';
+	let searchInput;
 	let addons = [];
 	let loading = true;
 	let loadedCount = 0;
@@ -27,13 +31,15 @@
 	let loadError = null;
 	let loadId = 0;
 
-	$: visibleAddons = selectAddons(addons, visibility, sort);
+	$: visibleAddons = selectAddons(addons, visibility, sort, query);
 	$: next = () => Promise.resolve([visibleAddons.length, visibleAddons]);
 
-	function selectAddons(items, selectedVisibility, selectedSort) {
+	function selectAddons(items, selectedVisibility, selectedSort, search) {
+		const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+		const matches = ({ workshop }) => words.every(word => workshop.title.toLowerCase().includes(word) || String(workshop.id).includes(word));
 		const [field, direction] = selectedSort.split('_');
 		const multiplier = direction === 'asc' ? 1 : -1;
-		return items.filter(addon => selectedVisibility.includes(addon.workshop.visibility)).sort((a, b) => {
+		return items.filter(addon => selectedVisibility.includes(addon.workshop.visibility) && matches(addon)).sort((a, b) => {
 			const left = a.workshop;
 			const right = b.workshop;
 			let order;
@@ -110,10 +116,22 @@
 	}
 
 	function onKeydown(event) {
+		if (event.defaultPrevented) return;
 		if (filtersOpen && event.key === 'Escape') {
 			filtersOpen = false;
 			filterButton.focus();
+		} else if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f' && (event.target === document.body || section?.contains(event.target))) {
+			event.preventDefault();
+			searchInput?.focus();
+			searchInput?.select();
 		}
+	}
+
+	function searchKeydown(event) {
+		if (event.key !== 'Escape') return;
+		event.preventDefault();
+		if (query) query = '';
+		else searchInput.blur();
 	}
 
 	let updatingAddon = writable(null);
@@ -142,7 +160,7 @@
 
 <svelte:window on:pointerdown={dismissFilters} on:keydown={onKeydown}/>
 
-<section class="workshop">
+<section class="workshop" bind:this={section}>
 	<div class="toolbar">
 		<div class="filters" bind:this={filterMenu}>
 			<button type="button" class:active={visibility.length !== visibilityOptions.length} aria-expanded={filtersOpen} aria-controls="workshop-filters" bind:this={filterButton} on:click={() => filtersOpen = !filtersOpen}>
@@ -170,6 +188,10 @@
 				{/each}
 			</select>
 		</label>
+		<div class="search">
+			<Search size="1rem"/>
+			<input type="search" bind:value={query} bind:this={searchInput} placeholder={$_('workshop_search')} aria-label={$_('workshop_search')} on:keydown={searchKeydown}/>
+		</div>
 	</div>
 	{#if saveError}
 		<p class="error" role="alert">{$_('workshop_save_error', { values: { error: saveError } })}</p>
@@ -186,7 +208,7 @@
 			{#if visibility.length === 0}
 				{$_('workshop_no_visibility')}
 			{:else if visibleAddons.length === 0}
-				{$_('workshop_no_matches')}
+				{$_(query ? 'workshop_no_search_matches' : 'workshop_no_matches')}
 			{:else}
 				{$_('showing_num_addons', { values: { num: visibleAddons.length.toLocaleString(), total: addons.length.toLocaleString() } })}
 			{/if}
@@ -274,6 +296,31 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: .5rem;
+	}
+	.search {
+		display: flex;
+		align-items: center;
+		gap: .5rem;
+		padding-inline-start: .6rem;
+		border: 1px solid var(--border-strong);
+		border-radius: 4px;
+		background: var(--control);
+		color: var(--text-muted);
+	}
+	.search input {
+		min-width: 12rem;
+		padding: .6rem .75rem .6rem 0;
+		border: 0;
+		background: none;
+		color: var(--text);
+		font: inherit;
+	}
+	.search input:focus-visible {
+		outline: none;
+	}
+	.search:focus-within {
+		outline: 2px solid var(--text);
+		outline-offset: 2px;
 	}
 	.status, .error {
 		margin: .5rem 1.5rem 0;

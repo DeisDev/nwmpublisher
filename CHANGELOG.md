@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Download nightly development builds from the website to try new changes early. They install alongside the stable app, keep their own settings, and tell you when a newer nightly is out.
 - Add a Collections page to create, edit, compare, and delete your Workshop collections, subscribe to or download everything in one, and find missing, removed, or duplicate items.
 - Add addons to your collections from their right-click menu or from the Installed Addons selection bar.
+- Search Installed Addons and My Workshop by name as you type. Press Ctrl+F to jump to the search box.
 
 ### Changed
 
@@ -34,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix extracting addons with thousands of files failing with "Too many open files".
 - Fix extraction progress staying at 0% and then jumping ahead. It now shows "Verifying" while the addon is checked.
 - Fix deleting or unsubscribing from an addon sometimes never finishing while the addon list was reloading.
+- Deleting or unsubscribing from an installed addon now removes only that addon from the list, instead of reloading the whole list and jumping back to the top.
 - Fix the Create folder option being ignored when extracting an addon to a folder you choose.
 - Fix files in symlinked or junctioned folders being left out of uploads. A broken link now shows an error instead.
 

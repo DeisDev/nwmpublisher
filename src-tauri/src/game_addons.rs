@@ -308,7 +308,7 @@ impl GameAddons {
 			let settings = app_data!().settings.read();
 			(settings.installed_addons_sort, settings.installed_addons_types.clone())
 		};
-		browse_installed_addons(1, sort, types); // Download the first page first
+		browse_installed_addons(1, sort, types, String::new()); // Download the first page first
 		steam!().fetch_workshop_items(ids); // Download the rest in the background too
 	}
 
@@ -336,15 +336,53 @@ impl GameAddons {
 		self.discover_addons();
 		self.pages.read()
 	}
+
+	/// Drops removed archives, given as discovered and canonical paths, without rescanning the game folders.
+	pub fn forget(&self, removed: &[PathBuf]) {
+		if removed.is_empty() {
+			return;
+		}
+		let removed: HashSet<&Path> = removed.iter().map(PathBuf::as_path).collect();
+		let mut pages = self.pages.write();
+		let mut paths = self.paths.write();
+		pages.retain(|addon| !removed.contains(addon.installed().path.as_path()));
+		paths.retain(|path, _| !removed.contains(path.as_path()));
+		self.external.write().clear();
+		search!().forget_installed_addons(&removed);
+	}
+}
+
+/// Every word of the query must appear in the title, extracted name, file name, or Workshop ID.
+fn matches_query(gma: &GMAFile, words: &[String]) -> bool {
+	if words.is_empty() {
+		return true;
+	}
+	let mut haystack = String::new();
+	if let Some(metadata) = &gma.metadata {
+		haystack.push_str(metadata.title());
+	}
+	haystack.push('\n');
+	haystack.push_str(&gma.extracted_name);
+	haystack.push('\n');
+	if let Some(name) = gma.path.file_name() {
+		haystack.push_str(&name.to_string_lossy());
+	}
+	if let Some(id) = gma.id {
+		haystack.push('\n');
+		haystack.push_str(&id.0.to_string());
+	}
+	let haystack = haystack.to_lowercase();
+	words.iter().all(|word| haystack.contains(word.as_str()))
 }
 
 /// Keeps the newest-first discovery order, grouping by type when sorting by type.
-fn select_installed_addons(addons: &[Arc<Addon>], sort: InstalledAddonsSort, types: &[AddonType], unsubscribed: &HashSet<PublishedFileId>) -> Vec<Arc<Addon>> {
+fn select_installed_addons(addons: &[Arc<Addon>], sort: InstalledAddonsSort, types: &[AddonType], unsubscribed: &HashSet<PublishedFileId>, query: &str) -> Vec<Arc<Addon>> {
 	let addon_type = |addon: &Arc<Addon>| AddonType::of(addon.installed().metadata.as_ref());
 	let pending_removal = |addon: &Arc<Addon>| GameAddons::workshop_content_id(&addon.installed().path).is_some_and(|id| unsubscribed.contains(&id));
+	let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
 	let mut selected: Vec<_> = addons
 		.iter()
-		.filter(|addon| types.contains(&addon_type(addon)) && !pending_removal(addon))
+		.filter(|addon| types.contains(&addon_type(addon)) && !pending_removal(addon) && matches_query(addon.installed(), &words))
 		.cloned()
 		.collect();
 	if sort == InstalledAddonsSort::Type {
@@ -354,9 +392,9 @@ fn select_installed_addons(addons: &[Arc<Addon>], sort: InstalledAddonsSort, typ
 }
 
 #[tauri::command]
-pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<AddonType>) -> (usize, Vec<Arc<Addon>>) {
+pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<AddonType>, query: String) -> (usize, Vec<Arc<Addon>>) {
 	let unsubscribed = game_addons!().unsubscribed.read().clone();
-	let selected = select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed);
+	let selected = select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &query);
 	let start = ((page.max(1) - 1) as usize) * crate::steam::RESULTS_PER_PAGE;
 	let page: Vec<_> = selected.iter().skip(start).take(crate::steam::RESULTS_PER_PAGE).cloned().collect();
 	steam!().fetch_workshop_items(page.iter().filter_map(|addon| addon.installed().id).collect());
@@ -364,9 +402,9 @@ pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<
 }
 
 #[tauri::command]
-pub fn browse_all_installed_addons(sort: InstalledAddonsSort, types: Vec<AddonType>) -> Vec<Arc<Addon>> {
+pub fn browse_all_installed_addons(sort: InstalledAddonsSort, types: Vec<AddonType>, query: String) -> Vec<Arc<Addon>> {
 	let unsubscribed = game_addons!().unsubscribed.read().clone();
-	select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed)
+	select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &query)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -457,7 +495,7 @@ pub fn stop_installed_addon_removal() {
 	REMOVAL_STOP.store(true, Ordering::Release);
 }
 
-fn unsubscribe_addon(path: &Path, gmod: Option<&Path>, permanent: bool, unsubscribed: &mut HashSet<PublishedFileId>) -> Result<(PublishedFileId, CleanResult), CleanerError> {
+fn unsubscribe_addon(path: &Path, gmod: Option<&Path>, permanent: bool, unsubscribed: &mut HashSet<PublishedFileId>, forgotten: &mut Vec<PathBuf>) -> Result<(PublishedFileId, CleanResult), CleanerError> {
 	let addon = installed_addon(path)?;
 	let gma = addon.installed();
 	let id = match (addon_removal(gma), gma.id) {
@@ -468,6 +506,15 @@ fn unsubscribe_addon(path: &Path, gmod: Option<&Path>, permanent: bool, unsubscr
 		Some(gmod) => addon_cleaner::item_archives(gmod, id, &gma.path)?,
 		None => Vec::new(),
 	};
+	// Resolved while the files still exist, so the caches can drop them after deletion.
+	let known: HashMap<PathBuf, Vec<PathBuf>> = files
+		.iter()
+		.map(|file| {
+			let mut paths = vec![dunce::canonicalize(file).unwrap_or_else(|_| file.clone())];
+			paths.extend(game_addons!().from_path(file).map(|addon| addon.installed().path.clone()));
+			(file.clone(), paths)
+		})
+		.collect();
 	// Copies of one item share its ID, and Steam still reports it as subscribed right after unsubscribing.
 	if !unsubscribed.contains(&id) {
 		let (sender, receiver) = mpsc::sync_channel(1);
@@ -481,7 +528,9 @@ fn unsubscribe_addon(path: &Path, gmod: Option<&Path>, permanent: bool, unsubscr
 		unsubscribed.insert(id);
 		game_addons!().unsubscribed.write().insert(id);
 	}
-	Ok((id, addon_cleaner::remove_archives(files, permanent)))
+	let result = addon_cleaner::remove_archives(files, permanent);
+	forgotten.extend(result.removed.iter().filter_map(|file| known.get(file)).flatten().cloned());
+	Ok((id, result))
 }
 
 #[tauri::command]
@@ -494,7 +543,8 @@ pub async fn unsubscribe_installed_addons(paths: Vec<PathBuf>, delete_files: boo
 		}
 		let gmod = if delete_files { Some(app_data!().gmod_dir().ok_or_else(|| CleanerError::new("cleaner_error_gmod"))?) } else { None };
 		let mut unsubscribed = HashSet::new();
-		let outcomes = run_removal(paths, &on_progress, |path| match unsubscribe_addon(path, gmod.as_deref(), permanent, &mut unsubscribed) {
+		let mut forgotten = Vec::new();
+		let outcomes = run_removal(paths, &on_progress, |path| match unsubscribe_addon(path, gmod.as_deref(), permanent, &mut unsubscribed, &mut forgotten) {
 			Ok((id, result)) => {
 				println!("Unsubscribed from Workshop item {}", id.0);
 				if delete_files {
@@ -510,9 +560,7 @@ pub async fn unsubscribe_installed_addons(paths: Vec<PathBuf>, delete_files: boo
 				Err(error)
 			}
 		});
-		if outcomes.iter().any(|outcome| outcome.files.as_ref().is_some_and(|files| !files.removed.is_empty())) {
-			crate::commands::free_caches();
-		}
+		game_addons!().forget(&forgotten);
 		if outcomes.iter().any(|outcome| outcome.error.is_none()) {
 			webview_emit!("InstalledAddonsRefreshed");
 		}
@@ -522,7 +570,8 @@ pub async fn unsubscribe_installed_addons(paths: Vec<PathBuf>, delete_files: boo
 	.map_err(|error| CleanerError::detail("cleaner_error_task", error))?
 }
 
-fn delete_addon(path: &Path, permanent: bool) -> Result<PathBuf, CleanerError> {
+/// Returns the deleted archive's discovered and canonical paths.
+fn delete_addon(path: &Path, permanent: bool) -> Result<[PathBuf; 2], CleanerError> {
 	let addon = installed_addon(path)?;
 	let gma = addon.installed();
 	match addon_removal(gma) {
@@ -535,13 +584,14 @@ fn delete_addon(path: &Path, permanent: bool) -> Result<PathBuf, CleanerError> {
 	if !metadata.is_file() || addon_cleaner::is_link(&metadata) {
 		return Err(CleanerError::new("addon_removal_changed"));
 	}
+	let canonical = dunce::canonicalize(&path).unwrap_or_else(|_| path.clone());
 	addon_cleaner::remove_file(&path, permanent)?;
 	if GameAddons::workshop_content_id(&path).is_some() {
 		if let Err(error) = addon_cleaner::remove_empty_folder(path.parent().unwrap()) {
 			wprintln!("Could not remove the empty Workshop folder of {}: {}", path.display(), error);
 		}
 	}
-	Ok(path)
+	Ok([path, canonical])
 }
 
 #[tauri::command]
@@ -549,9 +599,11 @@ pub async fn delete_installed_addons(paths: Vec<PathBuf>, permanent: bool, on_pr
 	tauri::async_runtime::spawn_blocking(move || {
 		let _removal = REMOVAL.try_lock().ok_or_else(|| CleanerError::new("addon_removal_busy"))?;
 		REMOVAL_STOP.store(false, Ordering::Release);
+		let mut deleted = Vec::new();
 		let outcomes = run_removal(paths, &on_progress, |path| match delete_addon(path, permanent) {
-			Ok(path) => {
-				println!("{} installed addon {}", if permanent { "Deleted" } else { "Moved to Trash" }, path.display());
+			Ok(paths) => {
+				println!("{} installed addon {}", if permanent { "Deleted" } else { "Moved to Trash" }, paths[0].display());
+				deleted.extend(paths);
 				Ok(None)
 			}
 			Err(error) => {
@@ -559,8 +611,8 @@ pub async fn delete_installed_addons(paths: Vec<PathBuf>, permanent: bool, on_pr
 				Err(error)
 			}
 		});
+		game_addons!().forget(&deleted);
 		if outcomes.iter().any(|outcome| outcome.error.is_none()) {
-			crate::commands::free_caches();
 			webview_emit!("InstalledAddonsRefreshed");
 		}
 		Ok(outcomes)
@@ -773,17 +825,50 @@ mod tests {
 		let addons = [addon("weapon1", Some("weapon")), addon("map1", Some("map")), addon("legacy", None), addon("weapon2", Some("Weapon")), addon("map2", Some("map"))];
 		let names = |selected: Vec<Arc<Addon>>| selected.iter().map(|addon| addon.installed().extracted_name.clone()).collect::<Vec<_>>();
 		let none = HashSet::new();
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none)), ["weapon1", "map1", "legacy", "weapon2", "map2"]);
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &AddonType::ALL, &none)), ["map1", "map2", "weapon1", "weapon2", "legacy"]);
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &[AddonType::Other, AddonType::Weapon], &none)), ["weapon1", "weapon2", "legacy"]);
-		assert!(select_installed_addons(&addons, InstalledAddonsSort::Modified, &[], &none).is_empty());
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, "")), ["weapon1", "map1", "legacy", "weapon2", "map2"]);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &AddonType::ALL, &none, "")), ["map1", "map2", "weapon1", "weapon2", "legacy"]);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &[AddonType::Other, AddonType::Weapon], &none, "")), ["weapon1", "weapon2", "legacy"]);
+		assert!(select_installed_addons(&addons, InstalledAddonsSort::Modified, &[], &none, "").is_empty());
 
 		let steam_copy = "steamapps/workshop/content/4000/10/item.gma";
 		let addons = [addon(steam_copy, Some("map")), addon("garrysmod/cache/workshop/10.gma", Some("map")), addon("steamapps/workshop/content/4000/20/item.gma", Some("map"))];
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none)).len(), 3);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, "")).len(), 3);
 		assert_eq!(
-			names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::from([PublishedFileId(10)]))),
+			names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::from([PublishedFileId(10)]), "")),
 			["garrysmod/cache/workshop/10.gma", "steamapps/workshop/content/4000/20/item.gma"]
 		);
+	}
+
+	#[test]
+	fn installed_addons_search_matches_every_word_against_names_and_ids() {
+		let addon = |title: &str, path: &str, id: Option<u64>| -> Arc<Addon> {
+			Arc::new(Addon::Installed(GMAFile {
+				path: PathBuf::from(path),
+				size: 0,
+				id: id.map(PublishedFileId),
+				metadata: Some(crate::gma::GMAMetadata::Standard { title: title.into(), addon_type: "map".into(), tags: Vec::new(), ignore: Vec::new() }),
+				entries: None,
+				pointers: Default::default(),
+				version: 3,
+				extracted_name: title.to_lowercase().replace(' ', "_"),
+				modified: None,
+				membuffer: None,
+				spool: None,
+			}))
+		};
+		let addons = [addon("Gm Construct Flatgrass", "addons/gm_construct_flatgrass_123.gma", Some(123)), addon("Ünicode Map", "workshop/content/4000/456/ünicode.gma", Some(456)), addon("Legacy", "addons/legacy.gma", None)];
+		let titles = |query: &str| {
+			select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::new(), query)
+				.iter()
+				.map(|addon| addon.installed().metadata.as_ref().unwrap().title().to_owned())
+				.collect::<Vec<_>>()
+		};
+		assert_eq!(titles(""), ["Gm Construct Flatgrass", "Ünicode Map", "Legacy"]);
+		assert_eq!(titles("   "), ["Gm Construct Flatgrass", "Ünicode Map", "Legacy"]);
+		assert_eq!(titles("  FLATGRASS construct "), ["Gm Construct Flatgrass"]);
+		assert_eq!(titles("ünicode"), ["Ünicode Map"]);
+		assert_eq!(titles("456"), ["Ünicode Map"]);
+		assert_eq!(titles("legacy.gma"), ["Legacy"]);
+		assert!(titles("construct legacy").is_empty());
 	}
 }

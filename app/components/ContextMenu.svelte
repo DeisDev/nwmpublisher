@@ -128,6 +128,12 @@ import { playSound } from '../sounds';
 		}
 	});
 
+	// Known before the menu shows, so the removal item does not pop in afterwards.
+	let removal = null;
+	if (!items && gma) {
+		loading = Promise.all([loading, gma.then(gma => (gma?.path ? addonRemoval(gma.path).catch(() => null) : null), () => null).then(value => (removal = value))]);
+	}
+
 	let destroyed = false;
 	function destroy() {
 		destroyed = true;
@@ -300,19 +306,17 @@ import { playSound } from '../sounds';
 							<span slot="icon"><Folder class="icon" size="1rem"/></span>
 							<span slot="label">{$_('open_addon_location')}</span>
 						</ContextMenuItem>
-						{#await addonRemoval(gma.path) then removal}
-							{#if removal === 'unsubscribe'}
-								<ContextMenuItem click={() => requestUnsubscribe(gma.path, addonName(workshopItem, gma))} disabled={!!$removalJob}>
-									<span slot="icon"><CircleMinus class="icon" size="1rem"/></span>
-									<span slot="label">{$_($settings.unsubscribe_delete_files ? 'addon_unsubscribe_delete' : 'addon_unsubscribe')}</span>
-								</ContextMenuItem>
-							{:else if removal === 'delete'}
-								<ContextMenuItem click={() => requestDelete(gma.path, addonName(workshopItem, gma))} disabled={!!$removalJob}>
-									<span slot="icon"><Trash2 class="icon" size="1rem"/></span>
-									<span slot="label">{$_('addon_delete')}</span>
-								</ContextMenuItem>
-							{/if}
-						{/await}
+						{#if removal === 'unsubscribe'}
+							<ContextMenuItem click={() => requestUnsubscribe(gma.path, addonName(workshopItem, gma))} disabled={!!$removalJob}>
+								<span slot="icon"><CircleMinus class="icon" size="1rem"/></span>
+								<span slot="label">{$_($settings.unsubscribe_delete_files ? 'addon_unsubscribe_delete' : 'addon_unsubscribe')}</span>
+							</ContextMenuItem>
+						{:else if removal === 'delete'}
+							<ContextMenuItem click={() => requestDelete(gma.path, addonName(workshopItem, gma))} disabled={!!$removalJob}>
+								<span slot="icon"><Trash2 class="icon" size="1rem"/></span>
+								<span slot="label">{$_('addon_delete')}</span>
+							</ContextMenuItem>
+						{/if}
 					{/if}
 				{/if}
 			{/await}
