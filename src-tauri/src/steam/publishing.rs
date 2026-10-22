@@ -286,7 +286,7 @@ impl WorkshopIcon {
 }
 
 // k_cchPublishedDocumentDescriptionMax is 8000, including the C string terminator.
-const WORKSHOP_DESCRIPTION_MAX_BYTES: usize = 7999;
+pub(super) const WORKSHOP_DESCRIPTION_MAX_BYTES: usize = 7999;
 // k_cchPublishedDocumentChangeDescriptionMax is also 8000, including the C string terminator.
 const WORKSHOP_CHANGELOG_MAX_BYTES: usize = 7999;
 

@@ -6,6 +6,11 @@
 			component: MyWorkshop,
 		},
 		{
+			name: 'collections',
+			component: Collections,
+			persist: true,
+		},
+		{
 			name: 'installed_addons',
 			component: InstalledAddons,
 		},
@@ -54,6 +59,7 @@
 	import Downloader, { downloaderJobs } from '../pages/Downloader.svelte';
 	import InstalledAddons from '../pages/InstalledAddons.svelte';
 	import MyWorkshop from '../pages/MyWorkshop.svelte';
+	import Collections from '../pages/Collections.svelte';
 	//import ContentGenerator from '../pages/ContentGenerator.svelte';
 	import SidebarItem from './SidebarItem.svelte';
 	import Logo from './Logo.svelte';

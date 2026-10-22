@@ -81,6 +81,8 @@
 	import CloudDownload from '@lucide/svelte/icons/cloud-download';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import CircleMinus from '@lucide/svelte/icons/circle-minus';
+	import ListPlus from '@lucide/svelte/icons/list-plus';
+	import { addToCollections } from '../collections.js';
 	import { addonName, addonRemoval, removalJob, requestDelete, requestUnsubscribe } from '../addon-removal.js';
 	import { settings } from '../settings.js';
 	import { get, writable } from 'svelte/store';
@@ -341,6 +343,10 @@ import { playSound } from '../sounds';
 							<span slot="label">{$_('download')}</span>
 						</ContextMenuItem>
 					{/if}
+					<ContextMenuItem click={() => addToCollections([workshop.id])}>
+						<span slot="icon"><ListPlus class="icon" size="1rem"/></span>
+						<span slot="label">{$_('collections_add_to')}</span>
+					</ContextMenuItem>
 					{#if workshop.previewUrl}
 						<div class="divider" role="separator"></div>
 						<a class="nostyle" href={workshop.previewUrl} target="_blank" tabindex="-1">

@@ -50,7 +50,7 @@ const LANGUAGES: [(&str, &str); 30] = [
 ];
 
 // k_cchPublishedDocumentTitleMax is 129, including the C string terminator.
-const TITLE_MAX_BYTES: usize = 128;
+pub(super) const TITLE_MAX_BYTES: usize = 128;
 const STEAM_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
