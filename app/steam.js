@@ -64,10 +64,12 @@ class Steam {
 		return this.MyWorkshop[page];
 	}
 
-	getInstalledAddons(page, sort, types) {
+	// Filtered pages are not cached, since the query changes with every keystroke.
+	getInstalledAddons(page, sort, types, query) {
+		if (query) return new DeferredPromise(invoke("browse_installed_addons", { page, sort, types, query }));
 		const key = JSON.stringify([page, sort, types]);
 		if (this.InstalledAddons[key] == null) {
-			this.InstalledAddons[key] = new DeferredPromise(invoke("browse_installed_addons", { page, sort, types }));
+			this.InstalledAddons[key] = new DeferredPromise(invoke("browse_installed_addons", { page, sort, types, query }));
 		}
 		return this.InstalledAddons[key];
 	}

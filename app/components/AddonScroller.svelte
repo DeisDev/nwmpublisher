@@ -2,6 +2,8 @@
 	import Addon from "./Addon.svelte";
 	import { _ } from "svelte-i18n";
 	import { tick } from "svelte";
+	import { fade } from "svelte/transition";
+	import { flip } from "svelte/animate";
 	import Dead from "./Dead.svelte";
 	import Loading from "./Loading.svelte";
 	import { addonName } from "../addon-removal.js";
@@ -15,29 +17,45 @@
 	export let contextItems = null;
 	export let onSelectAll = null;
 	export let onDelete = null;
+	export let emptyMessage = null;
 	export let total = 0;
+
+	// Removing more cards than this rebuilds the grid at once instead of animating each card out.
+	const ANIMATED_REMOVALS = 20;
 
 	let loading = true;
 	let loaded = false;
 	let error = null;
 	let addons = [];
+	let pages = 0;
 	let request = 0;
+	let generation = 0;
 
 	const key = addon => addon.installed?.path ?? addon.workshop?.id;
 
-	// A new `next` replaces the list once its first page arrives, so the current
-	// cards stay on screen and cards present in both lists are kept.
+	function replaceAddons(replacement, animate) {
+		const kept = new Set(replacement.map(key));
+		const removed = addons.filter(addon => !kept.has(key(addon))).length;
+		if (!animate || removed > ANIMATED_REMOVALS) generation++;
+		addons = replacement;
+	}
+
+	// A new `next` replaces the list once its first page arrives, so the current cards stay on screen.
 	function fetchNext(reset = false) {
 		const id = reset ? ++request : request;
+		const page = reset ? 1 : pages + 1;
 		loading = true;
 
-		next().then(([fetchedTotal, fetchedAddons]) => {
+		next(page).then(([fetchedTotal, fetchedAddons]) => {
 			if (id !== request) return;
 			const hadFocus = !!listbox?.contains(document.activeElement);
 			const focusedIndex = indexOf(focusKey);
 			const base = reset ? [] : addons;
 			const seen = new Set(base.map(key));
-			addons = base.concat(fetchedAddons.filter(addon => !seen.has(key(addon))));
+			const merged = base.concat(fetchedAddons.filter(addon => !seen.has(key(addon))));
+			if (reset) replaceAddons(merged, false);
+			else addons = merged;
+			pages = page;
 			total = fetchedTotal;
 			if (reset && scroller) scroller.scrollTop = 0;
 			error = null;
@@ -47,7 +65,8 @@
 		}, reason => {
 			if (id !== request) return;
 			if (reset) {
-				addons = [];
+				replaceAddons([], false);
+				pages = 0;
 				error = reason;
 				loaded = true;
 			}
@@ -55,6 +74,44 @@
 		});
 	}
 	$: next, fetchNext(true);
+
+	/** Reloads the pages already shown and swaps them in place, keeping the scroll position and focus. */
+	export async function refresh() {
+		if (!loaded || !pages) return fetchNext(true);
+		const id = request;
+		let count;
+		let fetched;
+		try {
+			do {
+				count = pages;
+				fetched = await Promise.all(Array.from({ length: count }, (item, index) => next(index + 1)));
+				if (id !== request) return;
+			} while (count !== pages);
+		} catch (reason) {
+			if (id === request) console.error(reason);
+			return;
+		}
+		const hadFocus = !!listbox?.contains(document.activeElement);
+		const focusedIndex = indexOf(focusKey);
+		const seen = new Set();
+		replaceAddons(fetched.flatMap(([, page]) => page).filter(addon => !seen.has(key(addon)) && seen.add(key(addon))), true);
+		total = fetched[fetched.length - 1][0];
+		error = null;
+		if (hadFocus) restoreFocus(focusedIndex);
+	}
+
+	/** Drops the cards of removed addons right away, before the list reloads. */
+	export function remove(keys) {
+		const gone = new Set(keys);
+		if (!addons.some(addon => gone.has(key(addon)))) return;
+		const hadFocus = !!listbox?.contains(document.activeElement);
+		const focusedIndex = indexOf(focusKey);
+		const remaining = addons.filter(addon => !gone.has(key(addon)));
+		if (gone.has(focusKey)) focusKey = remaining.length ? key(remaining[Math.min(Math.max(focusedIndex, 0), remaining.length - 1)]) : null;
+		total = Math.max(total - (addons.length - remaining.length), 0);
+		replaceAddons(remaining, true);
+		if (hadFocus) restoreFocus(focusedIndex);
+	}
 
 	let scroller;
 	function infiniScroll() {
@@ -75,8 +132,13 @@
 	$: selected = $selection?.items;
 	$: if (!selecting) anchorKey = null;
 
+	// Cards fading out stay in the DOM as inert elements until their transition ends.
+	function options() {
+		return listbox ? [...listbox.children].filter(option => !option.inert) : [];
+	}
+
 	function optionAt(index) {
-		return listbox?.children[index];
+		return options()[index];
 	}
 
 	function focusOption(index) {
@@ -89,7 +151,7 @@
 
 	async function restoreFocus(previousIndex) {
 		await tick();
-		if (!addons.length || listbox.contains(document.activeElement)) return;
+		if (!addons.length || !listbox || listbox.contains(document.activeElement)) return;
 		const index = indexOf(focusKey);
 		focusOption(index >= 0 ? index : Math.min(Math.max(previousIndex, 0), addons.length - 1));
 	}
@@ -183,7 +245,7 @@
 	}
 
 	function onFocusin(event) {
-		const index = Array.prototype.indexOf.call(listbox.children, event.target);
+		const index = options().indexOf(event.target);
 		if (addons[index]) focusKey = key(addons[index]);
 	}
 
@@ -226,15 +288,17 @@
 		<div id="error">{JSON.stringify(error)}</div>
 	{:else if addons.length === 0}
 		<Dead size="2rem"/>
-		<div id="error">{$_('ERR_NO_ADDONS_FOUND')}</div>
+		<div id="error">{emptyMessage ?? $_('ERR_NO_ADDONS_FOUND')}</div>
 	{:else if selection}
-		<div id="grid" role="listbox" aria-multiselectable="true" aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
-			{#each addons as addon, index (key(addon))}
-				<div class="option" role="option" aria-selected={!!selected?.has(key(addon))} aria-label={addonName(addon.workshop, addon.installed)} aria-setsize={total} aria-posinset={index + 1} tabindex={index === focusIndex ? 0 : -1} on:mousedown={cardMousedown} on:contextmenu={keyboardMenu}>
-					<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={true} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
-				</div>
-			{/each}
-		</div>
+		{#key generation}
+			<div id="grid" role="listbox" aria-multiselectable="true" aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
+				{#each addons as addon, index (key(addon))}
+					<div class="option" role="option" aria-selected={!!selected?.has(key(addon))} aria-label={addonName(addon.workshop, addon.installed)} aria-setsize={total} aria-posinset={index + 1} tabindex={index === focusIndex ? 0 : -1} on:mousedown={cardMousedown} on:contextmenu={keyboardMenu} animate:flip={{ duration: 200 }} out:fade={{ duration: 150 }}>
+						<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={true} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
+					</div>
+				{/each}
+			</div>
+		{/key}
 	{:else}
 		<div id="grid">
 			{#each addons as addon (key(addon))}

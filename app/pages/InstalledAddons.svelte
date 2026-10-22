@@ -12,6 +12,7 @@
 	import { addonName, addonRemoval, addonRemovals, confirmRemoval, deleteRequest, removalJob, removedPaths, stopRemoval } from '../addon-removal.js';
 	import { createSelection } from '../addon-selection.js';
 	import Filter from '@lucide/svelte/icons/list-filter';
+	import Search from '@lucide/svelte/icons/search';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import SquareCheck from '@lucide/svelte/icons/square-check';
 	import Check from '@lucide/svelte/icons/check';
@@ -37,13 +38,24 @@
 	let filtersOpen = false;
 	let filterMenu;
 	let filterButton;
+	let query = '';
+	let searchInput;
 
-	function pager(selectedSort, selectedTypes) {
-		let page = 0;
-		return () => Steam.getInstalledAddons(++page, selectedSort, selectedTypes);
+	$: next = page => Steam.getInstalledAddons(page, sort, types, query);
+
+	// Removals and rescans reload the shown pages in place instead of starting over at the top.
+	let seenRevision = $installedAddonsRevision;
+	$: if ($installedAddonsRevision !== seenRevision) {
+		seenRevision = $installedAddonsRevision;
+		scroller?.refresh();
 	}
-	let next;
-	$: $installedAddonsRevision, next = pager(sort, types);
+
+	function searchKeydown(event) {
+		if (event.key !== 'Escape') return;
+		event.preventDefault();
+		if (query) query = '';
+		else scroller?.focusCurrent();
+	}
 
 	function savePreferences(nextTypes, nextSort) {
 		const request = ++saveRequest;
@@ -81,6 +93,12 @@
 		if (filtersOpen && event.key === 'Escape') {
 			filtersOpen = false;
 			filterButton.focus();
+			return;
+		}
+		if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f' && (event.target === document.body || section?.contains(event.target))) {
+			event.preventDefault();
+			searchInput?.focus();
+			searchInput?.select();
 			return;
 		}
 		if (event.altKey || !section?.contains(event.target) || event.target.closest('input, select, textarea')) return;
@@ -127,6 +145,7 @@
 	$: selectedCount = selectedPaths.length;
 	$: selectedSize = [...$selection.items.values()].reduce((size, gma) => size + (gma.size ?? 0), 0);
 	$: selection.remove($removedPaths);
+	$: scroller?.remove($removedPaths);
 
 	let selectAllRequest = 0;
 	let selectionError = null;
@@ -134,7 +153,7 @@
 		const request = ++selectAllRequest;
 		selectionError = null;
 		try {
-			const addons = await invoke('browse_all_installed_addons', { sort, types });
+			const addons = await invoke('browse_all_installed_addons', { sort, types, query });
 			if (request === selectAllRequest) selection.setAll(addons.map(addon => [addon.installed.path, addon.installed]));
 		} catch (error) {
 			if (request === selectAllRequest) selectionError = $_('select_all_failed', { values: { error: String(error) } });
@@ -299,6 +318,10 @@
 				{/each}
 			</select>
 		</label>
+		<div class="search">
+			<Search size="1rem"/>
+			<input type="search" bind:value={query} bind:this={searchInput} placeholder={$_('installed_search')} aria-label={$_('installed_search')} on:keydown={searchKeydown}/>
+		</div>
 		<button type="button" class="select-mode" class:active={$selection.active} on:click={toggleSelecting}>
 			{#if $selection.active}
 				<Check size="1rem"/>
@@ -349,7 +372,7 @@
 		<p class="status" role="status">{$_('installed_no_types')}</p>
 	{:else}
 		<div class="results">
-			<AddonScroller bind:this={scroller} bind:total {next} {onClick} {selection} {contextItems} label={$_('installed_addons')} onSelectAll={selectAll} onDelete={deleteKey}/>
+			<AddonScroller bind:this={scroller} bind:total {next} {onClick} {selection} {contextItems} label={$_('installed_addons')} emptyMessage={query ? $_('installed_no_matches') : null} onSelectAll={selectAll} onDelete={deleteKey}/>
 		</div>
 	{/if}
 </section>
@@ -505,6 +528,31 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: .5rem;
+	}
+	.search {
+		display: flex;
+		align-items: center;
+		gap: .5rem;
+		padding-inline-start: .6rem;
+		border: 1px solid var(--border-strong);
+		border-radius: 4px;
+		background: var(--control);
+		color: var(--text-muted);
+	}
+	.search input {
+		min-width: 12rem;
+		padding: .6rem .75rem .6rem 0;
+		border: 0;
+		background: none;
+		color: var(--text);
+		font: inherit;
+	}
+	.search input:focus-visible {
+		outline: none;
+	}
+	.search:focus-within {
+		outline: 2px solid var(--text);
+		outline-offset: 2px;
 	}
 	.status, .error {
 		margin: .5rem 1.5rem 0;

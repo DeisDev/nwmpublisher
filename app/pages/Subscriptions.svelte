@@ -2,9 +2,8 @@
 	import { Steam } from '../steam';
 	import AddonScroller from '../components/AddonScroller.svelte';
 
-	let page = 0;
-	function next() {
-		return Steam.getSubscribedAddons(++page);
+	function next(page) {
+		return Steam.getSubscribedAddons(page);
 	}
 
 	function onClick(_, workshop, installed) {

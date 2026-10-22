@@ -291,6 +291,8 @@
 	"workshop_loading": "Loading Workshop addons… {num} of {total}",
 	"workshop_no_visibility": "No visibility types selected. Check a type in Filters to show addons.",
 	"workshop_no_matches": "No addons match the selected visibility filters.",
+	"workshop_search": "Search your addons",
+	"workshop_no_search_matches": "No addons match your search.",
 	"workshop_load_error": "Could not load your Workshop addons. {error}",
 	"workshop_incomplete": "Steam returned an empty page before all addons were loaded. Try loading again.",
 	"workshop_save_error": "Could not save your Workshop preferences. Your previous choices have been restored. {error}",
@@ -421,6 +423,8 @@
 	"installed_sort_modified": "Last modified (newest first)",
 	"installed_sort_type": "Type",
 	"installed_no_types": "No types selected. Check a type in Filters to show addons.",
+	"installed_search": "Search installed addons",
+	"installed_no_matches": "No installed addons match your search.",
 	"installed_save_error": "Could not save your preferences. Your previous choices have been restored. {error}",
 	"loading": "Loading...",
 	"gmod_dir": {

@@ -1,5 +1,6 @@
 use std::{
-	path::PathBuf,
+	collections::HashSet,
+	path::{Path, PathBuf},
 	sync::{
 		atomic::{AtomicBool, AtomicU32, AtomicU8},
 		Arc, OnceLock,
@@ -390,6 +391,12 @@ impl Search {
 
 	pub fn clear(&self) {
 		*self.items.write() = Vec::new();
+	}
+
+	pub fn forget_installed_addons(&self, paths: &HashSet<&Path>) {
+		let gone = |item: &Arc<SearchItem>| matches!(&item.source, SearchItemSource::InstalledAddons(path, _) if paths.contains(path.as_path()));
+		self.items.write().retain(|item| !gone(item));
+		self.installed_addons.write().retain(|item| !gone(item));
 	}
 }
 

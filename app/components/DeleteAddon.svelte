@@ -4,6 +4,7 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import CircleMinus from '@lucide/svelte/icons/circle-minus';
 	import Modal from './Modal.svelte';
+	import Loading from './Loading.svelte';
 	import { deleteAddon, deleteRequest, removeAddons, unsubscribeAddon } from '../addon-removal.js';
 	import { saveSettings, settings } from '../settings.js';
 
@@ -75,9 +76,9 @@
 			<div class="actions">
 				<button type="button" disabled={busy} on:click={cancel}>{$_('cancel')}</button>
 				{#if request.deleteFiles}
-					<button type="button" class="remove" disabled={busy} on:click={confirm}><Trash2 size="1rem"/>{$_(permanent ? 'cleaner_permanent' : 'cleaner_trash')}</button>
+					<button type="button" class="remove" disabled={busy} on:click={confirm}>{#if busy}<Loading inline size="1rem"/>{:else}<Trash2 size="1rem"/>{/if}{$_(permanent ? 'cleaner_permanent' : 'cleaner_trash')}</button>
 				{:else}
-					<button type="button" class="unsubscribe" disabled={busy} on:click={confirm}><CircleMinus size="1rem"/>{$_('addon_unsubscribe')}</button>
+					<button type="button" class="unsubscribe" disabled={busy} on:click={confirm}>{#if busy}<Loading inline size="1rem"/>{:else}<CircleMinus size="1rem"/>{/if}{$_('addon_unsubscribe')}</button>
 				{/if}
 			</div>
 		</div>
