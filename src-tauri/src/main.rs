@@ -45,7 +45,6 @@ pub mod octopus;
 pub use octopus::*;
 
 pub mod content_generator;
-pub mod search;
 pub mod webview;
 
 mod cli;

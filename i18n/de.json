@@ -250,7 +250,6 @@
 	"game": "Spiel",
 	"filesystem": "Dateisystem",
 	"github_star": "Einen Stern auf GitHub geben",
-	"search": "Suchen...",
 	"showing_num_addons": "{total} Addons von {num} angezeigt",
 	"extract_where_to": "Wohin?",
 	"extract_overwrite_warning": "Existierende Dateien werden überschrieben.",
@@ -707,7 +706,6 @@
 
 	"copy_path": "Pfad kopieren",
 	"go_up": "Einen Ordner nach oben",
-	"clear_search": "Suche leeren",
 	"remove": "Entfernen",
 	"choose_icon": "Icon auswählen",
 

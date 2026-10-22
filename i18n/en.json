@@ -451,7 +451,6 @@
 	"report_step_issue": "Open a report on GitHub and paste the log into Logs",
 	"report_bug": "Report a bug",
 	"report_crash": "Crash or display problem",
-	"search": "Search...",
 	"showing_num_addons": "Showing {num} of {total} addons",
 	"extract_where_to": "Where to?",
 	"extract_overwrite_warning": "Existing files will be overwritten.",
@@ -939,7 +938,6 @@
 
 	"copy_path": "Copy Path",
 	"go_up": "Up One Folder",
-	"clear_search": "Clear Search",
 	"remove": "Remove",
 	"choose_icon": "Choose Icon",
 

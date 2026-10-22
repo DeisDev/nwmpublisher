@@ -250,7 +250,6 @@
 	"game": "游戏",
 	"filesystem": "文件系统",
 	"github_star": "在 GitHub 上添加星标",
-	"search": "搜索...",
 	"showing_num_addons": "显示了 {num} 个物品，共 {total} 个物品",
 	"extract_where_to": "解压到哪里？",
 	"extract_overwrite_warning": "已存在的文件将会被覆写。",
@@ -707,7 +706,6 @@
 
 	"copy_path": "复制路径",
 	"go_up": "返回上级文件夹",
-	"clear_search": "清除搜索",
 	"remove": "移除",
 	"choose_icon": "选择图标",
 

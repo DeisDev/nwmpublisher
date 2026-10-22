@@ -49,7 +49,6 @@ backtrace = "0.3.56"
 steamlocate = "2.1.1"
 chrono = { version = "0.4.19", features = ["serde"] }
 bincode = "1.3.3"
-fuzzy-matcher = "0.3.7"
 clap = "4.5.4"
 trash = "5.2.9"
 ureq = { version = "3.4.2", default-features = false, features = ["gzip", "native-tls"] }

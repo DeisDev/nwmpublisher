@@ -250,7 +250,6 @@
 	"game": "게임",
 	"filesystem": "파일 시스템",
 	"github_star": "깃허브 스타",
-	"search": "검색...",
 	"showing_num_addons": "{total}개의 애드온 중 {num}개를 표시",
 	"extract_where_to": "어디로?",
 	"extract_overwrite_warning": "추출한 파일은 기존 파일을 덮어씁니다.",
@@ -707,7 +706,6 @@
 
 	"copy_path": "경로 복사",
 	"go_up": "상위 폴더로",
-	"clear_search": "검색 지우기",
 	"remove": "제거",
 	"choose_icon": "아이콘 선택",
 

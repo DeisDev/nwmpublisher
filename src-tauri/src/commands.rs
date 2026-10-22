@@ -91,9 +91,6 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 		crate::gma::preview::extract_preview_entry,
 		crate::gma::preview::extract_preview_gma,
 		crate::gma::extract::extract_gma,
-		crate::search::search,
-		crate::search::search_channel,
-		crate::search::full_search,
 	];
 
 	// This weirdness is needed because when this app was written,
@@ -122,7 +119,6 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 pub fn free_caches() {
 	crate::game_addons::free_caches();
 	crate::steam::workshop::free_caches();
-	search!().clear();
 }
 
 #[tauri::command]

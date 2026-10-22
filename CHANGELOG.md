@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The addon cleaner now lists unsubscribed addons that Steam still keeps in its cache, and tells Steam it no longer needs them when you remove them.
 - Update to Steamworks SDK 1.64.
 
+### Removed
+
+- Remove the search bar from the top of the window. Use the search box on Installed Addons or My Workshop instead.
+
 ### Fixed
 
 - Fix extracting addons with thousands of files failing with "Too many open files".
