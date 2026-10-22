@@ -37,6 +37,16 @@ impl From<steamworks::PublishedFileVisibility> for WorkshopVisibility {
 		}
 	}
 }
+impl From<WorkshopVisibility> for steamworks::PublishedFileVisibility {
+	fn from(visibility: WorkshopVisibility) -> Self {
+		match visibility {
+			WorkshopVisibility::Public => Self::Public,
+			WorkshopVisibility::FriendsOnly => Self::FriendsOnly,
+			WorkshopVisibility::Private => Self::Private,
+			WorkshopVisibility::Unlisted => Self::Unlisted,
+		}
+	}
+}
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]

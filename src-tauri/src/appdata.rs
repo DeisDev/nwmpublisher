@@ -233,6 +233,21 @@ pub enum WorkshopSort {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "snake_case")]
+pub enum CollectionsSort {
+	UpdatedDesc,
+	UpdatedAsc,
+	CreatedDesc,
+	CreatedAsc,
+	TitleAsc,
+	TitleDesc,
+	ItemsDesc,
+	ItemsAsc,
+	SubscribersDesc,
+	SubscribersAsc,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum InstalledAddonsSort {
 	Modified,
 	Type,
@@ -276,6 +291,8 @@ pub struct Settings {
 	pub my_workshop_local_paths: HashMap<PublishedFileId, PathBuf>,
 	pub my_workshop_visibility: Vec<WorkshopVisibility>,
 	pub my_workshop_sort: WorkshopSort,
+	pub collections_visibility: Vec<WorkshopVisibility>,
+	pub collections_sort: CollectionsSort,
 	pub installed_addons_sort: InstalledAddonsSort,
 	pub installed_addons_types: Vec<AddonType>,
 	pub upscale_addon_icon: bool,
@@ -341,6 +358,13 @@ impl Default for Settings {
 				WorkshopVisibility::Unlisted,
 			],
 			my_workshop_sort: WorkshopSort::UpdatedDesc,
+			collections_visibility: vec![
+				WorkshopVisibility::Public,
+				WorkshopVisibility::FriendsOnly,
+				WorkshopVisibility::Private,
+				WorkshopVisibility::Unlisted,
+			],
+			collections_sort: CollectionsSort::UpdatedDesc,
 			installed_addons_sort: InstalledAddonsSort::Modified,
 			installed_addons_types: AddonType::ALL.to_vec(),
 			upscale_addon_icon: true,
@@ -936,7 +960,7 @@ mod tests {
 		assert!(super::patched_settings(&settings, patch).is_err());
 	}
 	use super::{
-		changelog_key, validate_changelog_key, ChangelogDefaults, ChangelogMode, ChangelogSettings, InstalledAddonsSort, Settings, WorkshopSort,
+		changelog_key, validate_changelog_key, ChangelogDefaults, ChangelogMode, ChangelogSettings, CollectionsSort, InstalledAddonsSort, Settings, WorkshopSort,
 		WorkshopUpdateMode, WorkshopVisibility,
 	};
 	use crate::gma::AddonType;
@@ -947,6 +971,8 @@ mod tests {
 	fn workshop_browsing_defaults_preserve_existing_settings() {
 		let settings: Settings = serde_json::from_str(r#"{"sounds":false,"ignore_globs":["*.bak"]}"#).unwrap();
 		assert_eq!(settings.my_workshop_sort, WorkshopSort::UpdatedDesc);
+		assert_eq!(settings.collections_sort, CollectionsSort::UpdatedDesc);
+		assert_eq!(settings.collections_visibility, settings.my_workshop_visibility);
 		assert_eq!(
 			settings.my_workshop_visibility,
 			vec![
@@ -1000,6 +1026,25 @@ mod tests {
 	fn workshop_browsing_preferences_reject_invalid_values() {
 		assert!(serde_json::from_value::<Settings>(serde_json::json!({"my_workshop_sort": "invalid"})).is_err());
 		assert!(serde_json::from_value::<Settings>(serde_json::json!({"my_workshop_visibility": ["invalid"]})).is_err());
+		assert!(serde_json::from_value::<Settings>(serde_json::json!({"collections_sort": "invalid"})).is_err());
+		assert!(serde_json::from_value::<Settings>(serde_json::json!({"collections_visibility": ["invalid"]})).is_err());
+	}
+
+	#[test]
+	fn collections_preferences_round_trip() {
+		for sort in ["updated_desc", "updated_asc", "created_desc", "created_asc", "title_asc", "title_desc", "items_desc", "items_asc", "subscribers_desc", "subscribers_asc"] {
+			let settings: Settings = serde_json::from_value(serde_json::json!({
+				"collections_visibility": ["unlisted"],
+				"collections_sort": sort,
+			}))
+			.unwrap();
+			let saved = serde_json::to_value(&settings).unwrap();
+			assert_eq!(saved["collections_sort"], sort);
+			assert_eq!(saved["collections_visibility"], serde_json::json!(["unlisted"]));
+			let loaded: Settings = serde_json::from_value(saved).unwrap();
+			assert_eq!(loaded.collections_sort, settings.collections_sort);
+			assert_eq!(loaded.collections_visibility, vec![WorkshopVisibility::Unlisted]);
+		}
 	}
 
 	#[test]

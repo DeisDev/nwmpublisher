@@ -17,6 +17,7 @@ use crate::{
 	Transaction,
 };
 
+pub mod collections;
 pub mod default_icon;
 pub mod downloads;
 pub mod item_info;

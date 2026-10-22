@@ -20,6 +20,8 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import LinkChain from '@lucide/svelte/icons/link';
 	import Folder from '@lucide/svelte/icons/folder';
+	import ListPlus from '@lucide/svelte/icons/list-plus';
+	import { addToCollections } from '../collections.js';
 	import AddonScroller from '../components/AddonScroller.svelte';
 	import PreviewGMA from '../components/PreviewGMA.svelte';
 	import DestinationSelect from '../components/DestinationSelect.svelte';
@@ -261,6 +263,7 @@
 			{ icon: Trash2, label: deleteLabel, click: () => removeSelected(false), disabled: !deletePaths.length || !!$removalJob },
 			{ divider: true },
 			{ icon: LinkChain, label: $_('copy_links'), click: copyLinks, disabled: !linkIds.length },
+			{ icon: ListPlus, label: $_('collections_add_to'), click: () => addToCollections(linkIds), disabled: !linkIds.length },
 			{ icon: Folder, label: $_('open_locations'), click: openLocations, disabled: !folders.size || tooManyFolders },
 		];
 	}
@@ -320,6 +323,7 @@
 				<button type="button" disabled={!deletePaths.length || !!$removalJob} on:click={() => removeSelected(false)}><Trash2 size="1rem"/>{deleteLabel}</button>
 				<span class="separator" aria-hidden="true"></span>
 				<button type="button" disabled={!linkIds.length} on:click={copyLinks}><LinkChain size="1rem"/>{$_('copy_links')}</button>
+				<button type="button" disabled={!linkIds.length} on:click={() => addToCollections(linkIds)}><ListPlus size="1rem"/>{$_('collections_add_to')}</button>
 				<span use:tippy={tooManyFolders ? $_('open_locations_limit', { values: { max: MAX_LOCATIONS } }) : ''}>
 					<button type="button" disabled={!folders.size || tooManyFolders} on:click={openLocations}><Folder size="1rem"/>{$_('open_locations')}</button>
 				</span>

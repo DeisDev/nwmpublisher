@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Translate an addon's title and description into any Steam language. Pick a language above the description to edit it, and changed translations are sent when you publish.
 - Show the original file name of older Workshop addons in their details and in the saved workshop.txt.
 - Download nightly development builds from the website to try new changes early. They install alongside the stable app, keep their own settings, and tell you when a newer nightly is out.
+- Add a Collections page to create, edit, compare, and delete your Workshop collections, subscribe to or download everything in one, and find missing, removed, or duplicate items.
+- Add addons to your collections from their right-click menu or from the Installed Addons selection bar.
 
 ### Changed
 

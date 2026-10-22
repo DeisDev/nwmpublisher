@@ -5,7 +5,7 @@ export const publisherPresence = writable(null);
 export const settingsPresence = writable(false);
 
 const activities = [
-	'my_workshop', 'installed_addons', 'downloader', 'size_analyzer', 'addon_cleaner',
+	'my_workshop', 'collections', 'installed_addons', 'downloader', 'size_analyzer', 'addon_cleaner',
 	'preparing_addon', 'editing_addon', 'settings', 'publishing', 'packaging',
 	'downloading', 'extracting', 'cancelling',
 ];

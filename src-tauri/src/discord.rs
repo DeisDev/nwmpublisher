@@ -20,6 +20,7 @@ static STOPPED: AtomicBool = AtomicBool::new(false);
 #[serde(rename_all = "snake_case")]
 pub enum Activity {
 	MyWorkshop,
+	Collections,
 	InstalledAddons,
 	Downloader,
 	SizeAnalyzer,
@@ -34,8 +35,9 @@ pub enum Activity {
 	Cancelling,
 }
 
-const ACTIVITIES: [Activity; 13] = [
+const ACTIVITIES: [Activity; 14] = [
 	Activity::MyWorkshop,
+	Activity::Collections,
 	Activity::InstalledAddons,
 	Activity::Downloader,
 	Activity::SizeAnalyzer,

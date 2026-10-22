@@ -10,7 +10,7 @@ use steamworks::{AppIDs, FileType, PublishedFileId, QueryResult, QueryResults, S
 use super::workshop::{WorkshopItem, WorkshopVisibility};
 use crate::GMOD_APP_ID;
 
-const STEAM_TIMEOUT: Duration = Duration::from_secs(30);
+pub(super) const STEAM_TIMEOUT: Duration = Duration::from_secs(30);
 static SAVE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
 #[derive(Clone, Serialize)]
@@ -79,7 +79,7 @@ fn dependency_changes(
 // steamworks consumes even unregistered call results in its callback pump.
 // Hold the dispatch lock until this raw result is read; other callbacks remain
 // queued while Steam's periodic frame work continues, including on timeout.
-fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool) -> Result<(), String> {
+pub(super) fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool) -> Result<(), String> {
 	use steamworks::sys;
 	connected()?;
 	let dispatch = steam!().callback_dispatch.lock();
@@ -96,13 +96,13 @@ fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool)
 			sys::SteamAPI_ISteamUGC_RemoveDependency(ugc, parent.0, child.0)
 		};
 		if call == 0 {
-			return Err("Steam did not start the required-addon change.".into());
+			return Err("Steam did not start the change.".into());
 		}
 		let start = Instant::now();
 		let mut failed = false;
 		while !sys::SteamAPI_ISteamUtils_IsAPICallCompleted(utils, call, &mut failed) {
 			if start.elapsed() >= STEAM_TIMEOUT {
-				return Err("Steam timed out. The change may still complete; reload Workshop settings before retrying.".into());
+				return Err("Steam timed out. The change may still complete; reload before retrying.".into());
 			}
 			sys::SteamAPI_ManualDispatch_RunFrame(sys::SteamAPI_GetHSteamPipe());
 			std::thread::sleep(Duration::from_millis(20));
@@ -124,7 +124,7 @@ fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool)
 				&mut failed,
 			) || failed
 			{
-				return Err("Could not confirm the required-addon addition. Reload Workshop settings before retrying.".into());
+				return Err("Could not confirm the addition. Reload before retrying.".into());
 			}
 			let result = result.assume_init();
 			(result.m_eResult, result.m_nPublishedFileId, result.m_nChildPublishedFileId)
@@ -139,7 +139,7 @@ fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool)
 				&mut failed,
 			) || failed
 			{
-				return Err("Could not confirm the required-addon removal. Reload Workshop settings before retrying.".into());
+				return Err("Could not confirm the removal. Reload before retrying.".into());
 			}
 			let result = result.assume_init();
 			(result.m_eResult, result.m_nPublishedFileId, result.m_nChildPublishedFileId)
@@ -158,18 +158,12 @@ fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool)
 
 fn change_visibility(id: PublishedFileId, visibility: WorkshopVisibility) -> Result<(), String> {
 	connected()?;
-	let visibility = match visibility {
-		WorkshopVisibility::Public => steamworks::PublishedFileVisibility::Public,
-		WorkshopVisibility::FriendsOnly => steamworks::PublishedFileVisibility::FriendsOnly,
-		WorkshopVisibility::Private => steamworks::PublishedFileVisibility::Private,
-		WorkshopVisibility::Unlisted => steamworks::PublishedFileVisibility::Unlisted,
-	};
 	let (sender, receiver) = mpsc::sync_channel(1);
 	steam!()
 		.client()
 		.ugc()
 		.start_item_update(GMOD_APP_ID, id)
-		.visibility(visibility)
+		.visibility(visibility.into())
 		.submit(None, move |result| {
 			let _ = sender.send(result);
 		});
@@ -278,14 +272,16 @@ fn save_settings(request: WorkshopSettingsRequest) -> Result<WorkshopSaveResult,
 	))
 }
 
-struct ItemDetails {
-	item: WorkshopItem,
-	owner: SteamId,
+pub(super) struct ItemDetails {
+	pub(super) item: WorkshopItem,
+	pub(super) owner: SteamId,
 	is_addon: bool,
-	children: Vec<PublishedFileId>,
+	pub(super) gmod_item: bool,
+	pub(super) gmod_collection: bool,
+	pub(super) children: Vec<PublishedFileId>,
 }
 
-fn connected() -> Result<(), String> {
+pub(super) fn connected() -> Result<(), String> {
 	if steam!().connected() {
 		Ok(())
 	} else {
@@ -308,9 +304,12 @@ fn required_addon(item: &WorkshopItem) -> RequiredAddon {
 	}
 }
 
-fn read_item(results: &QueryResults<'_>, index: u32, children: bool) -> Result<Option<ItemDetails>, String> {
+pub(super) fn read_item(results: &QueryResults<'_>, index: u32, children: bool) -> Result<Option<ItemDetails>, String> {
 	let Some(result) = results.get(index) else { return Ok(None) };
 	let is_addon = is_gmod_addon(&result);
+	let gmod = result.consumer_app_id == Some(GMOD_APP_ID);
+	let gmod_item = gmod && matches!(result.file_type, FileType::Community);
+	let gmod_collection = gmod && matches!(result.file_type, FileType::Collection);
 	let owner = result.owner;
 	let children = if children && result.num_children > 0 {
 		results
@@ -329,11 +328,13 @@ fn read_item(results: &QueryResults<'_>, index: u32, children: bool) -> Result<O
 		item,
 		owner,
 		is_addon,
+		gmod_item,
+		gmod_collection,
 		children,
 	}))
 }
 
-fn query_items(ids: Vec<PublishedFileId>, children: bool) -> Result<Vec<Option<ItemDetails>>, String> {
+pub(super) fn query_items(ids: Vec<PublishedFileId>, children: bool) -> Result<Vec<Option<ItemDetails>>, String> {
 	connected()?;
 	let (sender, receiver) = mpsc::sync_channel(1);
 	steam!()
@@ -357,7 +358,7 @@ fn query_items(ids: Vec<PublishedFileId>, children: bool) -> Result<Vec<Option<I
 		.map_err(|error| format!("Waiting for Steam Workshop: {error}"))?
 }
 
-fn query_item(id: PublishedFileId) -> Result<ItemDetails, String> {
+pub(super) fn query_item(id: PublishedFileId) -> Result<ItemDetails, String> {
 	query_items(vec![id], true)?
 		.pop()
 		.flatten()
@@ -396,7 +397,7 @@ fn load_details(id: PublishedFileId) -> Result<WorkshopDetails, String> {
 	})
 }
 
-fn parse_id(value: &str) -> Result<PublishedFileId, String> {
+pub(super) fn parse_id(value: &str) -> Result<PublishedFileId, String> {
 	if value.is_empty() || !value.bytes().all(|c| c.is_ascii_digit()) {
 		return Err("Enter a valid Workshop item ID.".into());
 	}
@@ -408,7 +409,7 @@ fn parse_id(value: &str) -> Result<PublishedFileId, String> {
 		.ok_or_else(|| "Enter a valid Workshop item ID.".into())
 }
 
-fn parse_reference(value: &str) -> Result<Option<PublishedFileId>, String> {
+pub(super) fn parse_reference(value: &str) -> Result<Option<PublishedFileId>, String> {
 	let value = value.trim();
 	if !value.is_empty() && value.bytes().all(|c| c.is_ascii_digit()) {
 		return parse_id(value).map(Some);
