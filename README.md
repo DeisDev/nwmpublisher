@@ -41,11 +41,14 @@ If the window looks wrong on Wayland, start nwmpublisher with `GDK_BACKEND=x11`,
 the proprietary NVIDIA driver, start it with `WEBKIT_DISABLE_DMABUF_RENDERER=1`. If that does not help, start it
 with `WEBKIT_DISABLE_COMPOSITING_MODE=1` to turn off accelerated rendering.
 
+### Nightly builds
 
+[Nightly builds](https://github.com/DeisDev/nwmpublisher/releases/tag/nightly) are built each night from the newest
+changes, when there are any. They may have bugs. A nightly build is a separate app, nwmpublisher-nightly: it installs
+alongside the stable app, keeps its own settings, and tells you when a newer nightly is out.
 
-
-
-
+Nightly downloads are a Windows `.msi` or portable `.zip`, a universal macOS `.dmg`, and a Linux `.AppImage`.
+Choose **Nightly** when you report a problem.
 
 ### Upgrading from gmpublisher
 
