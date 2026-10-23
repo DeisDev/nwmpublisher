@@ -335,6 +335,12 @@ impl GameAddons {
 		self.pages.read()
 	}
 
+	/// Installed addons without the ones unsubscribed during this run.
+	pub fn visible_addons(&self) -> Vec<Arc<Addon>> {
+		let unsubscribed = self.unsubscribed.read().clone();
+		self.get_addons().iter().filter(|addon| !pending_removal(addon, &unsubscribed)).cloned().collect()
+	}
+
 	/// Drops removed archives, given as discovered and canonical paths, without rescanning the game folders.
 	pub fn forget(&self, removed: &[PathBuf]) {
 		if removed.is_empty() {
@@ -372,14 +378,18 @@ fn matches_query(gma: &GMAFile, words: &[String]) -> bool {
 	words.iter().all(|word| haystack.contains(word.as_str()))
 }
 
+/// Steam keeps an unsubscribed item's copy until the game closes.
+fn pending_removal(addon: &Addon, unsubscribed: &HashSet<PublishedFileId>) -> bool {
+	GameAddons::workshop_content_id(&addon.installed().path).is_some_and(|id| unsubscribed.contains(&id))
+}
+
 /// Keeps the newest-first discovery order, grouping by type when sorting by type.
 fn select_installed_addons(addons: &[Arc<Addon>], sort: InstalledAddonsSort, types: &[AddonType], unsubscribed: &HashSet<PublishedFileId>, query: &str) -> Vec<Arc<Addon>> {
 	let addon_type = |addon: &Arc<Addon>| AddonType::of(addon.installed().metadata.as_ref());
-	let pending_removal = |addon: &Arc<Addon>| GameAddons::workshop_content_id(&addon.installed().path).is_some_and(|id| unsubscribed.contains(&id));
 	let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
 	let mut selected: Vec<_> = addons
 		.iter()
-		.filter(|addon| types.contains(&addon_type(addon)) && !pending_removal(addon) && matches_query(addon.installed(), &words))
+		.filter(|addon| types.contains(&addon_type(addon)) && !pending_removal(addon, unsubscribed) && matches_query(addon.installed(), &words))
 		.cloned()
 		.collect();
 	if sort == InstalledAddonsSort::Type {

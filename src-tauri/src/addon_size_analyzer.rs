@@ -1,203 +1,161 @@
-use std::{collections::BinaryHeap, sync::Arc};
+use std::{
+	collections::BinaryHeap,
+	path::{Path, PathBuf},
+	sync::Arc,
+};
 
-use indexmap::IndexMap;
 use rayon::ThreadPool;
-use steamworks::PublishedFileId;
-
 use serde::Serialize;
 
-use crate::{transactions::Transaction, webview::Addon};
+use crate::{
+	gma::{AddonType, GMAMetadata},
+	transactions::Transaction,
+	webview::Addon,
+};
 
 static THREAD_POOL: std::sync::LazyLock<ThreadPool> = std::sync::LazyLock::new(|| thread_pool!(4));
 
-#[derive(Debug, Serialize, Clone, derive_more::Deref)]
-struct AnalyzedAddon(Arc<Addon>);
-impl PartialEq for AnalyzedAddon {
-	fn eq(&self, other: &Self) -> bool {
-		self.0.installed().size == other.0.installed().size
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct AddonFolder {
+	path: PathBuf,
+	title: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct AnalyzedItem {
+	size: u64,
+	#[serde(skip)]
+	tag: AddonType,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	archive: Option<Arc<Addon>>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	folder: Option<AddonFolder>,
+}
+impl AnalyzedItem {
+	fn archive(addon: Arc<Addon>) -> Self {
+		let gma = addon.installed();
+		Self { size: gma.size, tag: AddonType::of(gma.metadata.as_ref()), archive: Some(addon), folder: None }
 	}
 }
-impl Eq for AnalyzedAddon {}
-impl PartialOrd for AnalyzedAddon {
+impl PartialEq for AnalyzedItem {
+	fn eq(&self, other: &Self) -> bool {
+		self.size == other.size
+	}
+}
+impl Eq for AnalyzedItem {}
+impl PartialOrd for AnalyzedItem {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
 		Some(self.cmp(other))
 	}
 }
-impl Ord for AnalyzedAddon {
+impl Ord for AnalyzedItem {
 	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-		self.0.installed().size.cmp(&other.0.installed().size).reverse()
+		self.size.cmp(&other.size).reverse()
 	}
 }
 
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use crate::gma::{GMAFile, GMAFilePointers};
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AnalyzedTag {
+	tag: AddonType,
+	size: u64,
+	items: Vec<AnalyzedItem>,
+}
 
-	fn addon(size: u64, id: u64) -> AnalyzedAddon {
-		AnalyzedAddon(Arc::new(Addon::Installed(GMAFile {
-			path: format!("{id}.gma").into(),
-			size,
-			id: Some(PublishedFileId(id)),
-			metadata: None,
-			entries: None,
-			pointers: GMAFilePointers::default(),
-			version: 3,
-			extracted_name: String::new(),
-			modified: None,
-			membuffer: None,
-			spool: None,
-		})))
-	}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AddonSizeAnalysis {
+	total_size: u64,
+	tags: Vec<AnalyzedTag>,
+}
 
-	#[test]
-	fn analyzer_orders_addons_by_size_instead_of_id() {
-		let addons = BinaryHeap::from(vec![addon(25, 999), addon(900, 1), addon(100, 500)]).into_sorted_vec();
-		let sizes: Vec<_> = addons.iter().map(|addon| addon.installed().size).collect();
-		assert_eq!(sizes, [900, 100, 25]);
-		assert_eq!(addons[0].partial_cmp(&addons[1]), Some(addons[0].cmp(&addons[1])));
-	}
-
-	#[test]
-	fn equally_sized_addons_compare_equal() {
-		let first = addon(100, 1);
-		let second = addon(100, 2);
-		assert_eq!(first.cmp(&second), std::cmp::Ordering::Equal);
-		assert_eq!(first.partial_cmp(&second), Some(std::cmp::Ordering::Equal));
-		assert_eq!(first, second);
+struct ProgressRange {
+	start: f64,
+	span: f64,
+}
+impl ProgressRange {
+	fn report(&self, transaction: &Transaction, i: usize, total: usize) {
+		if i.is_multiple_of((total / 100).max(1)) {
+			transaction.progress(self.start + self.span * (i as f64 / total.max(1) as f64));
+		}
 	}
 }
 
-// https://www.win.tue.nl/~vanwijk/stm.pdf
-use treemap::{TaggedTreeMapData, TreeMap};
-mod treemap {
-	use serde::Serialize;
-	pub(super) type TaggedTreeMapData = Option<(Option<Box<dyn erased_serde::Serialize + Sync + Send + 'static>>, Option<String>)>;
+fn folder_size(folder: &Path) -> u64 {
+	walkdir::WalkDir::new(folder)
+		.into_iter()
+		.filter_map(Result::ok)
+		.filter(|entry| entry.file_type().is_file())
+		.filter_map(|entry| entry.metadata().ok())
+		.map(|metadata| metadata.len())
+		.sum()
+}
 
-	#[derive(Serialize)]
-	pub(super) struct Square {
-		pub(super) data: TaggedTreeMapData,
-		pub(super) x: f64,
-		pub(super) y: f64,
-		pub(super) w: f64,
-		pub(super) h: f64,
+/// Unpacked addons are the folders directly inside the game's addons folder.
+fn measure_addon_folders(addons_dir: &Path, transaction: &Transaction, progress: &ProgressRange) -> Vec<AnalyzedItem> {
+	let Ok(entries) = addons_dir.read_dir() else { return Vec::new() };
+	let folders: Vec<PathBuf> = entries
+		.filter_map(Result::ok)
+		.filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_dir()))
+		.map(|entry| entry.path())
+		.collect();
+
+	let total = folders.len();
+	let mut items = Vec::with_capacity(total);
+	for (i, folder) in folders.into_iter().enumerate() {
+		if transaction.aborted() {
+			break;
+		}
+		progress.report(transaction, i, total);
+
+		let metadata = std::fs::read(folder.join("addon.json")).ok().and_then(|json| serde_json::from_slice::<GMAMetadata>(&json).ok());
+		let folder_name = folder.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+		let title = metadata.as_ref().map(|metadata| metadata.title().trim()).filter(|title| !title.is_empty()).map_or(folder_name, str::to_owned);
+
+		items.push(AnalyzedItem {
+			size: folder_size(&folder),
+			tag: AddonType::of(metadata.as_ref()),
+			archive: None,
+			folder: Some(AddonFolder { path: dunce::canonicalize(&folder).unwrap_or(folder), title }),
+		});
+	}
+	items
+}
+
+fn sort_by_size(items: Vec<AnalyzedItem>, transaction: &Transaction, progress: &ProgressRange) -> (Vec<AnalyzedItem>, u64) {
+	let mut sorted = BinaryHeap::with_capacity(items.len());
+	let mut total_size = 0;
+
+	let total = items.len();
+	for (i, item) in items.into_iter().enumerate() {
+		total_size += item.size;
+		sorted.push(item);
+		progress.report(transaction, i, total);
 	}
 
-	pub(super) struct TreeMap {
-		pub(super) squares: Vec<Square>,
-		pub(super) data: Vec<TaggedTreeMapData>,
-		pub(super) x: f64,
-		pub(super) y: f64,
-		pub(super) w: f64,
-		pub(super) h: f64,
+	(sorted.into_sorted_vec(), total_size)
+}
+
+fn group_by_tag(items: Vec<AnalyzedItem>, transaction: &Transaction, progress: &ProgressRange) -> Vec<AnalyzedTag> {
+	let mut tags: Vec<AnalyzedTag> = Vec::new();
+
+	let total = items.len();
+	for (i, item) in items.into_iter().enumerate() {
+		match tags.iter_mut().find(|group| group.tag == item.tag) {
+			Some(group) => {
+				group.size += item.size;
+				group.items.push(item);
+			}
+			None => tags.push(AnalyzedTag { tag: item.tag, size: item.size, items: vec![item] }),
+		}
+		progress.report(transaction, i, total);
 	}
-	impl TreeMap {
-		pub(super) fn new(w: f64, h: f64) -> Self {
-			Self {
-				data: Vec::new(),
-				squares: Vec::new(),
-				x: 0.,
-				y: 0.,
-				w,
-				h,
-			}
-		}
 
-		pub(super) fn process(&mut self, data_sizes: Vec<f64>, total_size: f64) {
-			if data_sizes.is_empty() {
-				return;
-			}
-
-			let mut scaled: Vec<f64> = data_sizes.into_iter().map(|x| (x * self.h * self.w) / total_size).collect();
-			self.squarify(&mut scaled, &mut Vec::new(), self.min_width().0);
-		}
-
-		fn squarify(&mut self, squares: &mut Vec<f64>, row: &mut Vec<f64>, w: f64) {
-			if squares.len() == 1 {
-				return self.layout_last_row(squares, row, w);
-			}
-
-			let mut row_with_child: Vec<f64> = row.clone();
-			row_with_child.push(squares[0]);
-
-			if row.is_empty() || self.worst_ratio(row, w) >= self.worst_ratio(&row_with_child, w) {
-				squares.remove(0);
-				return self.squarify(squares, &mut row_with_child, w);
-			}
-
-			self.layout_row(row, w, self.min_width().1);
-			self.squarify(squares, &mut Vec::new(), self.min_width().0)
-		}
-
-		fn worst_ratio(&self, row: &Vec<f64>, w: f64) -> f64 {
-			let mut sum: f64 = 0.;
-			let mut max: f64 = 0.;
-			let mut min: f64 = f64::MAX;
-			for row in row {
-				sum += *row;
-				max = max.max(*row);
-				min = min.min(*row);
-			}
-
-			let sumsum = sum.powi(2);
-			let ww = w.powi(2);
-
-			f64::max((ww * max) / sumsum, sumsum / (ww * min))
-		}
-
-		fn min_width(&self) -> (f64, bool) {
-			if self.h.powi(2) > self.w.powi(2) {
-				(self.w, false)
-			} else {
-				(self.h, true)
-			}
-		}
-
-		fn layout_row(&mut self, row: &mut Vec<f64>, w: f64, vertical: bool) {
-			let row_height = row.iter().sum::<f64>() / w;
-
-			for row in row {
-				let row_width = *row / row_height;
-				self.squares.push(if vertical {
-					let data = Square {
-						x: self.x,
-						y: self.y,
-						w: row_height,
-						h: row_width,
-						data: self.data[self.squares.len()].take(),
-					};
-					self.y += row_width;
-					data
-				} else {
-					let data = Square {
-						x: self.x,
-						y: self.y,
-						w: row_width,
-						h: row_height,
-						data: self.data[self.squares.len()].take(),
-					};
-					self.x += row_width;
-					data
-				});
-			}
-
-			if vertical {
-				self.x += row_height;
-				self.y -= w;
-				self.w -= row_height;
-			} else {
-				self.x -= w;
-				self.y += row_height;
-				self.h -= row_height;
-			}
-		}
-
-		fn layout_last_row(&mut self, squares: &mut Vec<f64>, row: &mut Vec<f64>, w: f64) {
-			let vertical = self.min_width().1;
-			self.layout_row(row, w, vertical);
-			self.layout_row(squares, w, vertical);
-		}
-	}
+	// Squarified treemaps need the largest groups first.
+	tags.sort_by(|a, b| b.size.cmp(&a.size).then_with(|| a.tag.cmp(&b.tag)));
+	tags
 }
 
 pub struct AddonSizeAnalyzer;
@@ -206,158 +164,157 @@ impl AddonSizeAnalyzer {
 		Self {}
 	}
 
-	pub fn compute(&'static self, w: f64, h: f64) -> Transaction {
+	pub fn compute(&'static self, include_folders: bool, rescan: bool) -> Transaction {
 		let transaction = transaction!();
 		let transaction_ref = transaction.clone();
 
 		THREAD_POOL.spawn(move || {
 			transaction.status("FS_ANALYZER_DISCOVERING");
+			if rescan {
+				crate::game_addons::free_caches();
+			}
 
-			let addons = game_addons!().get_addons().clone();
-			if addons.is_empty() {
+			let addons = game_addons!().visible_addons();
+			let mut items: Vec<AnalyzedItem> = addons.iter().cloned().map(AnalyzedItem::archive).collect();
+			steam!().fetch_workshop_items(addons.iter().filter_map(|addon| addon.installed().id).collect());
+
+			let mut next = 0.;
+			if include_folders {
+				transaction.status("FS_ANALYZER_FOLDERS");
+				if let Some(gmod) = app_data!().gmod_dir() {
+					items.extend(measure_addon_folders(&gmod.join("GarrysMod/addons"), &transaction, &ProgressRange { start: 0., span: 0.4 }));
+				}
+				next = 0.4;
+			}
+			if transaction.aborted() {
+				return;
+			}
+
+			if items.is_empty() {
 				transaction.error("ERR_NO_ADDONS_FOUND", turbonone!());
 				return;
 			}
 
+			let span = (1. - next) / 2.;
 			transaction.status("FS_ANALYZER_COMPUTING");
-
-			let (addons, total_size) = self.count(addons, &transaction);
-
+			let (items, total_size) = sort_by_size(items, &transaction, &ProgressRange { start: next, span });
 			if transaction.aborted() {
 				return;
 			}
 
 			transaction.status("FS_ANALYZER_TAGGIFYING");
-
-			let treemap = self.taggify(addons, w, h, total_size, &transaction);
-
+			let tags = group_by_tag(items, &transaction, &ProgressRange { start: next + span, span });
 			if transaction.aborted() {
 				return;
 			}
 
 			transaction.status("FS_ANALYZER_SERIALIZING");
 			transaction.progress(1.);
-
-			transaction.finished(Some(treemap.squares));
+			transaction.finished(Some(AddonSizeAnalysis { total_size, tags }));
 		});
 
 		transaction_ref
 	}
-
-	fn count(&'static self, addons: Vec<Arc<Addon>>, transaction: &Transaction) -> (Vec<AnalyzedAddon>, u64) {
-		let mut ids: Vec<PublishedFileId> = Vec::with_capacity(addons.len());
-		let mut sorted_addons = BinaryHeap::with_capacity(addons.len());
-
-		let mut total_size = 0;
-		let total = addons.len() as f64;
-		for (i, gma) in addons.into_iter().enumerate() {
-			total_size += gma.installed().size;
-
-			if let Some(ref id) = gma.installed().id {
-				ids.push(*id);
-			}
-
-			sorted_addons.push(AnalyzedAddon(gma));
-			transaction.progress(((i as f64) / total) / 3.);
-		}
-
-		steam!().fetch_workshop_items(ids);
-
-		(sorted_addons.into_sorted_vec(), total_size)
-	}
-
-	fn taggify(&self, gma_files: Vec<AnalyzedAddon>, w: f64, h: f64, total_size: u64, transaction: &Transaction) -> TreeMap {
-		use indexmap::map::Entry::{Occupied, Vacant};
-
-		let mut master_treemap = TreeMap::new(w, h);
-
-		let total_files = gma_files.len() as f64;
-
-		let mut tag_total_sizes: IndexMap<String, f64> = IndexMap::new();
-		let mut tag_sizes: IndexMap<String, Vec<f64>> = IndexMap::new();
-		let mut tag_data: IndexMap<String, Vec<TaggedTreeMapData>> = IndexMap::new();
-		for (i, gma) in gma_files.into_iter().enumerate() {
-			let metadata = gma.installed().metadata.as_ref().unwrap();
-			let tag = metadata
-				.addon_type()
-				.or_else(|| {
-					if let Some(tags) = metadata.tags() {
-						if !tags.is_empty() {
-							return Some(tags.get(1).unwrap());
-						}
-					}
-					None
-				})
-				.unwrap_or("addon")
-				.to_lowercase();
-
-			match tag_data.entry(tag.clone()) {
-				Occupied(mut o) => {
-					let total_tag_sizes = tag_total_sizes.get_mut(&tag).unwrap();
-					*total_tag_sizes += gma.installed().size as f64;
-
-					tag_sizes.get_mut(&tag).unwrap().push(gma.installed().size as f64);
-
-					let gma_files = o.get_mut();
-					gma_files.push(Some((Some(Box::new(gma)), None)));
-				}
-				Vacant(v) => {
-					tag_total_sizes.insert(tag.clone(), gma.installed().size as f64);
-
-					tag_sizes.insert(tag, vec![gma.installed().size as f64]);
-
-					v.insert(vec![Some((Some(Box::new(gma)), None))]);
-				}
-			}
-
-			transaction.progress(0.33 + (((i as f64) / total_files) / 3.));
-		}
-
-		for tag in tag_total_sizes.keys() {
-			master_treemap.data.push(Some((None, Some(tag.clone()))));
-		}
-
-		master_treemap.process(tag_total_sizes.values().cloned().collect(), total_size as f64);
-
-		rayon::scope(|scope| {
-			let total_squares = master_treemap.squares.len() as f64;
-
-			for (i, square) in master_treemap.squares.iter_mut().enumerate() {
-				if transaction.aborted() {
-					break;
-				}
-
-				let (_, tag) = square.data.as_ref().unwrap();
-				let tag = tag.as_ref().unwrap().clone();
-
-				let tag_total_size = tag_total_sizes.swap_remove(&tag).unwrap();
-				let tag_sizes = tag_sizes.swap_remove(&tag).unwrap();
-				let tag_data = tag_data.swap_remove(&tag).unwrap();
-
-				let transaction = transaction.clone();
-				scope.spawn(move |_| {
-					if transaction.aborted() {
-						return;
-					}
-
-					let padding = (f64::min(square.w, square.h) * 0.05).ceil();
-					let mut treemap = TreeMap::new(square.w.floor() - padding, square.h.floor() - padding);
-
-					treemap.data = tag_data;
-					treemap.process(tag_sizes, tag_total_size);
-
-					square.data = Some((Some(Box::new(treemap.squares)), Some(tag.clone())));
-
-					transaction.progress(0.66 + (((i as f64) / total_squares) / 3.));
-				});
-			}
-		});
-
-		master_treemap
-	}
 }
 
 #[tauri::command]
-pub fn addon_size_analyzer(w: f64, h: f64) -> Transaction {
-	crate::ADDON_SIZE_ANALYZER.compute(w, h)
+pub fn addon_size_analyzer(include_folders: bool, rescan: bool) -> Transaction {
+	crate::ADDON_SIZE_ANALYZER.compute(include_folders, rescan)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::gma::{GMAFile, GMAFilePointers};
+	use steamworks::PublishedFileId;
+
+	const PROGRESS: ProgressRange = ProgressRange { start: 0., span: 1. };
+
+	fn gma(size: u64, id: u64, metadata: Option<GMAMetadata>) -> Arc<Addon> {
+		Arc::new(Addon::Installed(GMAFile {
+			path: format!("{id}.gma").into(),
+			size,
+			id: Some(PublishedFileId(id)),
+			metadata,
+			entries: None,
+			pointers: GMAFilePointers::default(),
+			version: 3,
+			extracted_name: String::new(),
+			modified: None,
+			membuffer: None,
+			spool: None,
+		}))
+	}
+
+	fn typed(size: u64, id: u64, addon_type: &str) -> AnalyzedItem {
+		AnalyzedItem::archive(gma(size, id, Some(GMAMetadata::Standard { title: String::new(), addon_type: addon_type.into(), tags: Vec::new(), ignore: Vec::new() })))
+	}
+
+	#[test]
+	fn analyzer_orders_items_by_size_instead_of_id() {
+		let items = BinaryHeap::from(vec![typed(25, 999, "tool"), typed(900, 1, "tool"), typed(100, 500, "tool")]).into_sorted_vec();
+		let sizes: Vec<_> = items.iter().map(|item| item.size).collect();
+		assert_eq!(sizes, [900, 100, 25]);
+		assert_eq!(items[0].partial_cmp(&items[1]), Some(items[0].cmp(&items[1])));
+	}
+
+	#[test]
+	fn equally_sized_items_compare_equal() {
+		let first = typed(100, 1, "tool");
+		let second = typed(100, 2, "map");
+		assert_eq!(first.cmp(&second), std::cmp::Ordering::Equal);
+		assert_eq!(first.partial_cmp(&second), Some(std::cmp::Ordering::Equal));
+		assert_eq!(first, second);
+	}
+
+	#[test]
+	fn tags_are_grouped_and_sorted_by_total_size() {
+		let transaction = transaction!();
+		let items = vec![typed(500, 1, "map"), typed(300, 2, "Tool"), typed(250, 3, "tool"), typed(100, 4, "weapon")];
+		let (sorted, total_size) = sort_by_size(items, &transaction, &PROGRESS);
+		assert_eq!(total_size, 1150);
+
+		let tags = group_by_tag(sorted, &transaction, &PROGRESS);
+		let summary: Vec<_> = tags.iter().map(|tag| (tag.tag, tag.size, tag.items.len())).collect();
+		assert_eq!(summary, [(AddonType::Tool, 550, 2), (AddonType::Map, 500, 1), (AddonType::Weapon, 100, 1)]);
+		assert_eq!(tags[0].items[0].size, 300);
+	}
+
+	#[test]
+	fn unreadable_or_unknown_metadata_falls_back_to_other() {
+		let transaction = transaction!();
+		let items = vec![
+			AnalyzedItem::archive(gma(10, 1, None)),
+			typed(20, 2, ""),
+			typed(30, 3, "Server Content"),
+			AnalyzedItem::archive(gma(40, 4, Some(GMAMetadata::Legacy { title: String::new(), description: String::new() }))),
+		];
+		let (sorted, _) = sort_by_size(items, &transaction, &PROGRESS);
+		let tags = group_by_tag(sorted, &transaction, &PROGRESS);
+		assert_eq!(tags.len(), 1);
+		assert_eq!(tags[0].tag, AddonType::Other);
+		assert_eq!(tags[0].size, 100);
+	}
+
+	#[test]
+	fn addon_folders_are_measured_with_their_metadata() {
+		let dir = tempfile::tempdir().unwrap();
+		let typed_folder = dir.path().join("my_map");
+		std::fs::create_dir_all(typed_folder.join("maps")).unwrap();
+		std::fs::write(typed_folder.join("addon.json"), br#"{"title":"My Map","type":"map","tags":["fun"],"ignore":[]}"#).unwrap();
+		std::fs::write(typed_folder.join("maps/a.bsp"), [0; 10]).unwrap();
+		let plain_folder = dir.path().join("plain");
+		std::fs::create_dir_all(&plain_folder).unwrap();
+		std::fs::write(plain_folder.join("x.lua"), [0; 5]).unwrap();
+		std::fs::write(dir.path().join("archive.gma"), [0; 7]).unwrap();
+
+		let transaction = transaction!();
+		let mut items = measure_addon_folders(dir.path(), &transaction, &PROGRESS);
+		items.sort();
+
+		let folder_json_size = std::fs::metadata(typed_folder.join("addon.json")).unwrap().len();
+		let summary: Vec<_> = items.iter().map(|item| (item.folder.as_ref().unwrap().title.as_str(), item.tag, item.size)).collect();
+		assert_eq!(summary, [("My Map", AddonType::Map, 10 + folder_json_size), ("plain", AddonType::Other, 5)]);
+		assert!(items.iter().all(|item| item.archive.is_none()));
+	}
 }

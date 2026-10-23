@@ -16,3 +16,8 @@ export function formatSize(bytes, selectedLocale = get(locale)) {
 export function formatRate(bytesPerSecond, selectedLocale = get(locale)) {
 	return formatSize(bytesPerSecond, selectedLocale) + '/s';
 }
+
+export function formatPercent(ratio, selectedLocale = get(locale)) {
+	const numberLocale = selectedLocale === 'kr' ? 'ko' : (selectedLocale ?? 'en');
+	return new Intl.NumberFormat(numberLocale, { style: 'percent', maximumFractionDigits: 1 }).format(ratio);
+}

@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a Collections page to create, edit, compare, and delete your Workshop collections, subscribe to or download everything in one, and find missing, removed, or duplicate items.
 - Add addons to your collections from their right-click menu or from the Installed Addons selection bar.
 - Search Installed Addons and My Workshop by name as you type. Press Ctrl+F to jump to the search box.
+- The addon size analyzer shows the total size, addon count, and each type's share. Click a type to zoom in, search to highlight addons, and press Ctrl+F to jump to the search box.
+- Move through the addon size analyzer with the arrow keys, open an addon with Enter, and open its menu with Shift+F10 or the Menu key.
+- Tiny addons in the size analyzer are grouped into one tile. Hovering shows the share of disk space, Workshop ID, and file path.
+- Add a Refresh button to the addon size analyzer and an option to include unpacked addon folders.
+- Entity and Other addon types now have their own tag colours.
 
 ### Changed
 
@@ -29,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installed Addons and My Workshop now show a scrollbar.
 - The addon cleaner now lists unsubscribed addons that Steam still keeps in its cache, and tells Steam it no longer needs them when you remove them.
 - Update to Steamworks SDK 1.64.
+- The addon size analyzer now resizes instantly, places the largest addon types first, follows the light theme, and uses less memory with many addons. It reopens instantly and only recomputes when addons change.
 
 ### Removed
 
@@ -43,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Deleting or unsubscribing from an installed addon now removes only that addon from the list, instead of reloading the whole list and jumping back to the top.
 - Fix the Create folder option being ignored when extracting an addon to a folder you choose.
 - Fix files in symlinked or junctioned folders being left out of uploads. A broken link now shows an error instead.
+- Fix the addon size analyzer never finishing when an addon's details cannot be read, and fix it breaking on addons with an empty or unusual type.
+- Fix the addon size analyzer showing a missing icon for addons installed after the page was opened.
+- Fix the addon size analyzer flashing and still showing an addon after unsubscribing from it.
+- Fix the addon size analyzer showing "No Addons Found" for every error.
+- Fix the addon size analyzer tooltip flickering, lagging behind the mouse, and drifting from the tile near the edges.
+- Fix a page error when the addon size analyzer reloaded while searching.
 
 ## [3.6.0] - 2026-10-16
 

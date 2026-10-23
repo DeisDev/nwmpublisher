@@ -372,3 +372,11 @@ body::-webkit-scrollbar, .hide-scroll::-webkit-scrollbar { /* WebKit */
 .tag.model { color: #fff !important }
 .tag.model::before { background-color: #80007c !important }
 .tag.model::after { border-left-color: #80007c !important }
+
+.tag.entity { color: #fff !important }
+.tag.entity::before { background-color: #d35400 !important }
+.tag.entity::after { border-left-color: #d35400 !important }
+
+.tag.other { color: #fff !important }
+.tag.other::before { background-color: #6b7280 !important }
+.tag.other::after { border-left-color: #6b7280 !important }

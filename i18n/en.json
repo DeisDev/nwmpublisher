@@ -540,6 +540,18 @@
 	"FS_ANALYZER_COMPUTING": "Computing...",
 	"FS_ANALYZER_TAGGIFYING": "Taggifying...",
 	"FS_ANALYZER_DISCOVERING": "Discovering...",
+	"FS_ANALYZER_FOLDERS": "Measuring addon folders...",
+
+	"analyzer_all": "All addons",
+	"analyzer_count": "{count, plural, one {# addon} other {# addons}}",
+	"analyzer_matches": "{count, plural, one {# match} other {# matches}}",
+	"analyzer_search": "Search addon sizes",
+	"analyzer_include_folders": "Include folders",
+	"analyzer_refresh": "Refresh",
+	"analyzer_small_group": "{count, plural, one {# small addon} other {# small addons}}",
+	"analyzer_share": "Share",
+	"analyzer_workshop_id": "Workshop ID",
+	"analyzer_path": "Path",
 
 	"time_just_now": "Just Now",
 	"click_to_open": "Click to open!",
