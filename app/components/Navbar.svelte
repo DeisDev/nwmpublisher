@@ -5,7 +5,6 @@
 	import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 	import { invoke } from '@tauri-apps/api/core';
 	import { listen } from '@tauri-apps/api/event';
-	import Search from './Search.svelte';
 	import Settings from './Settings.svelte';
 	import { playSound } from '../sounds';
 	import UpdateNotification from './UpdateNotification.svelte';
@@ -74,8 +73,6 @@
 		<span id="greeting">{$_('greetings.' + timeOfDay + '.anon')}</span>
 	{/await}
 
-	<Search/>
-
 	<UpdateNotification/>
 
 	{#if steamConnected}
@@ -133,6 +130,7 @@
 
 	#greeting {
 		font-size: 1.2em;
+		margin-right: auto;
 	}
 
 	@keyframes steam-connection-error {

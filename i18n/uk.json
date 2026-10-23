@@ -250,7 +250,6 @@
 	"game": "Гра",
 	"filesystem": "Файлова система",
 	"github_star": "Зірочка GitHub",
-	"search": "Пошук...",
 	"showing_num_addons": "Показати {num} кількість {total} аддонів",
 	"extract_where_to": "Куди розпакувати?",
 	"extract_overwrite_warning": "Існуючі файли буде перезаписано.",
@@ -707,7 +706,6 @@
 
 	"copy_path": "Скопіювати Шлях",
 	"go_up": "На теку вище",
-	"clear_search": "Очистити пошук",
 	"remove": "Видалити",
 	"choose_icon": "Вибрати іконку",
 

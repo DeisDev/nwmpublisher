@@ -250,7 +250,6 @@
 	"game": "Jeu",
 	"filesystem": "Système de fichiers",
 	"github_star": "Mettre une étoile sur GitHub",
-	"search": "Recherche...",
 	"showing_num_addons": "Affichage de {num} sur {total} addons",
 	"extract_where_to": "Destination",
 	"extract_overwrite_warning": "Les fichiers existants seront remplacés.",
@@ -707,7 +706,6 @@
 
 	"copy_path": "Copier le chemin",
 	"go_up": "Dossier parent",
-	"clear_search": "Effacer la recherche",
 	"remove": "Retirer",
 	"choose_icon": "Choisir une icône",
 

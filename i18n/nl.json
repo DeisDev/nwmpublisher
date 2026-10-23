@@ -250,7 +250,6 @@
 	"game": "Spel",
 	"filesystem": "Bestandssysteem",
 	"github_star": "Geef een ster op GitHub",
-	"search": "Zoeken...",
 	"showing_num_addons": "Geeft {num} van de {total} addons weer",
 	"extract_where_to": "Waarheen?",
 	"extract_overwrite_warning": "Bestaande bestanden worden overgeschreven.",
@@ -707,7 +706,6 @@
 
 	"copy_path": "Pad kopiëren",
 	"go_up": "Eén map omhoog",
-	"clear_search": "Zoekopdracht wissen",
 	"remove": "Verwijderen",
 	"choose_icon": "Icoon kiezen",
 

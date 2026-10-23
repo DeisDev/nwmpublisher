@@ -250,7 +250,6 @@
 	"game": "Oyun",
 	"filesystem": "Dosya sistemi",
 	"github_star": "GitHub'da Yıldızla",
-	"search": "Ara...",
 	"showing_num_addons": "{total} eklentinin {num} kadarı gösteriliyor",
 	"extract_where_to": "Nereye çıkarılsın?",
 	"extract_overwrite_warning": "Var olan dosyaların üzerine yazılacak.",
@@ -707,7 +706,6 @@
 
 	"copy_path": "Dosya Yolunu Kopyala",
 	"go_up": "Bir Üst Klasör",
-	"clear_search": "Aramayı Temizle",
 	"remove": "Kaldır",
 	"choose_icon": "Simge Seç",
 

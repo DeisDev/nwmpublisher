@@ -293,8 +293,6 @@ impl GameAddons {
 
 			*pages = pages_heap.into_sorted_vec();
 
-			search!().add_bulk(&pages);
-
 			println!("Discovered {} addons", paths.len());
 
 			// Set while the maps are still locked, so a concurrent free_caches cannot be overwritten.
@@ -348,7 +346,6 @@ impl GameAddons {
 		pages.retain(|addon| !removed.contains(addon.installed().path.as_path()));
 		paths.retain(|path, _| !removed.contains(path.as_path()));
 		self.external.write().clear();
-		search!().forget_installed_addons(&removed);
 	}
 }
 

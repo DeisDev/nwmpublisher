@@ -220,8 +220,6 @@ impl Steam {
 					let next = Arc::new(AtomicBool::new(false));
 					let next_ref = next.clone();
 
-					search!().reserve(queue.len());
-
 					steam!()
 						.client()
 						.ugc()
@@ -231,28 +229,12 @@ impl Steam {
 						.allow_cached_response(600)
 						.fetch(move |results: Result<QueryResults<'_>, SteamError>| {
 							if let Ok(results) = results {
-								search!().dirty();
-								let search_installed_addons = search!().installed_addons.write();
-
 								for (i, item) in results.iter().enumerate() {
 									let item = Addon::from(if let Some(item) = item {
 										let mut item: WorkshopItem = item.into();
 										item.preview_url = results.preview_url(i as u32);
 										item.read_statistics(&results, i as u32);
 										item.subscriptions = results.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions).unwrap_or(0);
-
-										if let Ok(pos) = search_installed_addons.binary_search_by(|x| match &x.source {
-											crate::search::SearchItemSource::InstalledAddons(_, id) => id.as_ref().unwrap().cmp(&item.id),
-											_ => unreachable!(),
-										}) {
-											let search_item = &search_installed_addons[pos];
-											let mut label = search_item.label.write();
-											if *label != item.title {
-												let old_label = std::mem::replace(&mut *label, item.title.to_owned());
-												search_item.terms.write().push(old_label);
-											}
-										}
-
 										item
 									} else {
 										WorkshopItem::from(queue[i])
@@ -372,7 +354,6 @@ impl Steam {
 									item.subscriptions = data
 										.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions)
 										.ok_or_else(|| format!("Missing subscriber count for Workshop item {}", item.id.0))?;
-									search!().add(&item);
 									Ok(item.into())
 								})
 								.collect::<Result<Vec<Addon>, String>>()?;

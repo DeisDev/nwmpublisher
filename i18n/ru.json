@@ -250,7 +250,6 @@
 	"game": "Игра",
 	"filesystem": "Файловая система",
 	"github_star": "Поставить звёздочку",
-	"search": "Поиск...",
 	"showing_num_addons": "Показано {num} из {total} дополнений",
 	"extract_where_to": "Куда?",
 	"extract_overwrite_warning": "Существующие файлы будут заменены.",
@@ -707,7 +706,6 @@
 
 	"copy_path": "Скопировать директорию",
 	"go_up": "На папку выше",
-	"clear_search": "Очистить поиск",
 	"remove": "Удалить",
 	"choose_icon": "Выбрать иконку",
 

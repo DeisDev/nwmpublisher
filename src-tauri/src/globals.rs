@@ -9,7 +9,6 @@ pub static ADDON_SIZE_ANALYZER: std::sync::LazyLock<crate::addon_size_analyzer::
 	std::sync::LazyLock::new(crate::addon_size_analyzer::AddonSizeAnalyzer::init);
 pub static APP_DATA: std::sync::LazyLock<crate::appdata::AppData> = std::sync::LazyLock::new(crate::appdata::AppData::init);
 pub static WEBVIEW: crate::webview::WrappedWebview = crate::webview::WrappedWebview::pending();
-pub static SEARCH: std::sync::LazyLock<crate::search::Search> = std::sync::LazyLock::new(crate::search::Search::init);
 
 #[macro_export]
 macro_rules! steam {
@@ -35,13 +34,6 @@ macro_rules! game_addons {
 macro_rules! app_data {
 	() => {
 		&$crate::APP_DATA
-	};
-}
-
-#[macro_export]
-macro_rules! search {
-	() => {
-		&$crate::SEARCH
 	};
 }
 
