@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fix extracting addons with thousands of files failing with "Too many open files".
 - Fix extraction progress staying at 0% and then jumping ahead. It now shows "Verifying" while the addon is checked.
+- Fix addons with tall icons making their card taller than the rest. Icons now fit in a square.
 - Fix deleting or unsubscribing from an addon sometimes never finishing while the addon list was reloading.
 - Deleting or unsubscribing from an installed addon now removes only that addon from the list, instead of reloading the whole list and jumping back to the top.
 - Fix the Create folder option being ignored when extracting an addon to a folder you choose.
