@@ -35,7 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The addon cleaner now lists unsubscribed addons that Steam still keeps in its cache, and tells Steam it no longer needs them when you remove them.
 - Update to Steamworks SDK 1.64.
 - The addon size analyzer now resizes instantly, places the largest addon types first, follows the light theme, and uses less memory with many addons. It reopens instantly and only recomputes when addons change.
-- Translate all new interface text into every supported language.
 
 ### Removed
 
@@ -46,16 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix extracting addons with thousands of files failing with "Too many open files".
 - Fix extraction progress staying at 0% and then jumping ahead. It now shows "Verifying" while the addon is checked.
 - Fix addons with tall icons making their card taller than the rest. Icons now fit in a square.
-- Fix deleting or unsubscribing from an addon sometimes never finishing while the addon list was reloading.
-- Deleting or unsubscribing from an installed addon now removes only that addon from the list, instead of reloading the whole list and jumping back to the top.
 - Fix the Create folder option being ignored when extracting an addon to a folder you choose.
 - Fix files in symlinked or junctioned folders being left out of uploads. A broken link now shows an error instead.
 - Fix the addon size analyzer never finishing when an addon's details cannot be read, and fix it breaking on addons with an empty or unusual type.
-- Fix the addon size analyzer showing a missing icon for addons installed after the page was opened.
-- Fix the addon size analyzer flashing and still showing an addon after unsubscribing from it.
 - Fix the addon size analyzer showing "No Addons Found" for every error.
 - Fix the addon size analyzer tooltip flickering, lagging behind the mouse, and drifting from the tile near the edges.
-- Fix a page error when the addon size analyzer reloaded while searching.
 
 ## [3.6.0] - 2026-10-16
 
