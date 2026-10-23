@@ -217,7 +217,7 @@
 				{#each dependencies as entry (entry.id)}
 					<li class:pending={additions.some(added => added.id === entry.id)}>
 						{#if entry.previewUrl}<img src={entry.previewUrl} alt="" loading="lazy"/>{:else}<div class="image-placeholder" aria-hidden="true">?</div>{/if}
-						<div class="addon-text"><a href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${entry.id}`} target="_blank" rel="noreferrer">{entry.title ?? $_('workshop_unavailable_addon')}<ExternalLink size=".75rem"/></a><small>{entry.id}{#if entry.banned} · {$_('workshop_banned')}{:else if !entry.title} · {$_('workshop_dependency_unavailable')}{/if}{#if additions.some(added => added.id === entry.id)} · <span class="pending-label">{$_('workshop_pending_addition')}</span>{/if}</small></div>
+						<div class="addon-text"><a href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${entry.id}`} target="_blank" rel="noreferrer">{entry.title ?? $_('workshop_unavailable_addon')}<ExternalLink size=".75rem"/></a><small>{entry.id}{#if entry.banned}{' · '}{$_('workshop_banned')}{:else if !entry.title}{' · '}{$_('workshop_dependency_unavailable')}{/if}{#if additions.some(added => added.id === entry.id)}{' · '}<span class="pending-label">{$_('workshop_pending_addition')}</span>{/if}</small></div>
 						<button type="button" class="icon-button" disabled={locked} on:click={() => remove(entry)} aria-label={$_('workshop_remove_dependency', { values: { title: entry.title ?? entry.id } })}><X size="1rem"/></button>
 					</li>
 				{/each}
@@ -239,7 +239,7 @@
 						{@const self = entry.id === sessionId}
 						<li>
 							{#if entry.previewUrl}<img src={entry.previewUrl} alt="" loading="lazy"/>{:else}<div class="image-placeholder" aria-hidden="true">?</div>{/if}
-							<div class="addon-text"><a href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${entry.id}`} target="_blank" rel="noreferrer">{entry.title}<ExternalLink size=".75rem"/></a><small>{entry.id}{#if entry.banned} · {$_('workshop_banned')}{/if}</small></div>
+							<div class="addon-text"><a href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${entry.id}`} target="_blank" rel="noreferrer">{entry.title}<ExternalLink size=".75rem"/></a><small>{entry.id}{#if entry.banned}{' · '}{$_('workshop_banned')}{/if}</small></div>
 							<button type="button" disabled={locked || selected || self || entry.banned} on:click={() => add(entry)} aria-label={$_('workshop_add_dependency', { values: { title: entry.title ?? entry.id } })}>{#if selected}{$_('workshop_added')}{:else if self}{$_('workshop_this_addon')}{:else}<Plus size=".85rem"/>{$_('workshop_add')}{/if}</button>
 						</li>
 					{/each}
@@ -251,7 +251,7 @@
 	{/if}
 </div>
 <footer>
-	<div class="save-status" aria-live="polite">{#if dirty}{$_('workshop_pending_summary', { values: { added: additions.length, removed: removals.length } })}{#if visibility !== originalVisibility} · {$_('workshop_visibility_changed')}{/if}{:else}{$_('workshop_no_pending_changes')}{/if}</div>
+	<div class="save-status" aria-live="polite">{#if dirty}{$_('workshop_pending_summary', { values: { added: additions.length, removed: removals.length } })}{#if visibility !== originalVisibility}{' · '}{$_('workshop_visibility_changed')}{/if}{:else}{$_('workshop_no_pending_changes')}{/if}</div>
 	<div class="save-actions"><button type="button" disabled={locked || !dirty} on:click={discard}>{$_('workshop_discard')}</button><button type="button" class="primary" disabled={locked || !dirty || needsReload} on:click={save}>{#if busy}<Loading inline size="1rem"/>{/if}{$_(busy ? 'workshop_saving' : 'workshop_save_settings')}</button></div>
 </footer>
 <span class="sr-only" role="status">{announcement}</span>

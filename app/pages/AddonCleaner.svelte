@@ -182,7 +182,7 @@
 			{#if progress.source}<small>{$_(`cleaner_source_${progress.source}`)}</small>{/if}
 			{#if progress.path}<small class="path">{progress.path}</small>{/if}
 			<small>{$_('cleaner_elapsed', { values: { seconds: elapsed } })}
-				{#if quietSeconds >= 2} · {$_(progress.stage === 'subscriptions' ? 'cleaner_waiting_steam' : 'cleaner_last_update', { values: { seconds: quietSeconds } })}{/if}
+				{#if quietSeconds >= 2}{' · '}{$_(progress.stage === 'subscriptions' ? 'cleaner_waiting_steam' : 'cleaner_last_update', { values: { seconds: quietSeconds } })}{/if}
 			</small>
 		</div>
 	{/if}
@@ -225,7 +225,7 @@
 						<div class="file-info">
 							<a class="title" href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${file.workshopId}`} target="_blank" rel="noreferrer">{details[file.workshopId]?.title ?? file.fileName}</a>
 							{#if details[file.workshopId] && !details[file.workshopId].title}<small>{$_('cleaner_details_unavailable')}</small>{/if}
-							<small>{$_(file.steamCache ? 'cleaner_source_steam_cache' : `cleaner_source_${file.source}`)} ·{$_('cleaner_workshop_id', { values: { id: file.workshopId } })}{#if file.folder} · {$_('cleaner_empty_folder')}{/if}</small>
+							<small>{$_(file.steamCache ? 'cleaner_source_steam_cache' : `cleaner_source_${file.source}`)} · {$_('cleaner_workshop_id', { values: { id: file.workshopId } })}{#if file.folder}{' · '}{$_('cleaner_empty_folder')}{/if}</small>
 							<small class="path">{file.path}</small>
 						</div>
 						<span class="size">{formatSize(file.size, $locale)}</span>
