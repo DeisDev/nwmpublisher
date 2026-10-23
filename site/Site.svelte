@@ -12,16 +12,22 @@
 	import editing from '../public/screenshots/Edit.webp';
 	import addonSettings from '../public/screenshots/Addon Settings.webp';
 	import extraction from '../public/screenshots/Addon Extract.webp';
+	import collections from '../public/screenshots/Collection Editor.webp';
+	import collectionCompare from '../public/screenshots/Collection Compare.webp';
+	import installed from '../public/screenshots/Installed Addons Selection.webp';
 	import { detectPlatform, getLatestRelease, getNightlyRelease, nightlyUrl, repositoryUrl, releasesUrl } from './downloads.js';
 
 	const screenshots = [
 		{ id: 'workshop', image: workshop },
 		{ id: 'publishing', image: publishing },
+		{ id: 'collections', image: collections },
+		{ id: 'installed', image: installed },
 		{ id: 'size', image: size }
 	];
 	const features = [
 		{ id: 'publish', image: editing, screen: 'edit' },
 		{ id: 'manage', image: addonSettings, screen: 'addon_settings' },
+		{ id: 'collections', image: collectionCompare, screen: 'collection_compare' },
 		{ id: 'clean', image: extraction, screen: 'extract' }
 	];
 	const platforms = [

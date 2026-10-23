@@ -190,7 +190,7 @@
 		</label>
 		<div class="search">
 			<Search size="1rem"/>
-			<input type="search" bind:value={query} bind:this={searchInput} placeholder={$_('workshop_search')} aria-label={$_('workshop_search')} on:keydown={searchKeydown}/>
+			<input type="search" bind:value={query} bind:this={searchInput} placeholder={$_('my_workshop_search')} aria-label={$_('my_workshop_search')} on:keydown={searchKeydown}/>
 		</div>
 	</div>
 	{#if saveError}

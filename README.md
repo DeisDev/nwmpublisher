@@ -208,7 +208,17 @@ Windows is the primary development and testing platform.
 
 ![Addon settings](public/screenshots/Addon%20Settings.webp)
 
+![Collections](public/screenshots/Collections.webp)
+
+![Edit a collection](public/screenshots/Collection%20Editor.webp)
+
+![Compare collections](public/screenshots/Collection%20Compare.webp)
+
 ![Installed addons](public/screenshots/Installed%20Addons.webp)
+
+![Select installed addons](public/screenshots/Installed%20Addons%20Selection.webp)
+
+![Addon details](public/screenshots/Addon%20Details.webp)
 
 ![Extract an addon](public/screenshots/Addon%20Extract.webp)
 
