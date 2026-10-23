@@ -17,7 +17,8 @@ use crate::{
 };
 
 pub static DOWNLOADS: std::sync::LazyLock<Downloads> = std::sync::LazyLock::new(Downloads::init);
-static THREAD_POOL: std::sync::LazyLock<ThreadPool> = std::sync::LazyLock::new(|| thread_pool!(2));
+static THREAD_POOL: std::sync::LazyLock<ThreadPool> =
+	std::sync::LazyLock::new(|| rayon::ThreadPoolBuilder::new().num_threads(app_data!().settings.read().performance().download_threads).build().unwrap());
 
 #[derive(Debug)]
 pub struct DownloadInner {

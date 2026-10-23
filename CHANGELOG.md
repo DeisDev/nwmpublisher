@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tiny addons in the size analyzer are grouped into one tile. Hovering shows the share of disk space, Workshop ID, and file path.
 - Add a Refresh button to the addon size analyzer and an option to include unpacked addon folders.
 - Entity and Other addon types now have their own tag colours.
+- Add an Advanced section in Settings for thread counts, memory use, a packing job limit, and syncing extracted files to disk.
 
 ### Changed
 
@@ -35,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The addon cleaner now lists unsubscribed addons that Steam still keeps in its cache, and tells Steam it no longer needs them when you remove them.
 - Update to Steamworks SDK 1.64.
 - The addon size analyzer now resizes instantly, places the largest addon types first, follows the light theme, and uses less memory with many addons. It reopens instantly and only recomputes when addons change.
+- Extraction now writes several files at once.
 
 ### Removed
 

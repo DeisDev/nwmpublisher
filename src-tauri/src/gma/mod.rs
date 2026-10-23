@@ -190,16 +190,18 @@ pub struct GMAEntry {
 pub(super) struct ByteProgress<'a> {
 	pub transaction: &'a crate::Transaction,
 	pub total: u64,
-	done: u64,
+	done: parking_lot::Mutex<u64>,
 }
 impl<'a> ByteProgress<'a> {
 	pub fn new(transaction: &'a crate::Transaction, total: u64) -> Self {
-		Self { transaction, total, done: 0 }
+		Self { transaction, total, done: parking_lot::Mutex::new(0) }
 	}
 
-	pub fn advance(&mut self, bytes: usize) {
-		self.done += bytes as u64;
-		self.transaction.progress(self.done as f64 / self.total.max(1) as f64);
+	pub fn advance(&self, bytes: usize) {
+		// Reporting under the lock keeps progress from going backwards when several threads write.
+		let mut done = self.done.lock();
+		*done += bytes as u64;
+		self.transaction.progress(*done as f64 / self.total.max(1) as f64);
 	}
 }
 

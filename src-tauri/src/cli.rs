@@ -247,6 +247,7 @@ fn extract(extract_path: &Path, matches: &ArgMatches) -> Result<(), String> {
 			.then(|| matches.get_one::<String>("metadata-name").cloned().unwrap_or_else(|| DEFAULT_METADATA_FILE_NAME.to_owned())),
 		icon: false,
 		workshop: None,
+		performance: app_data!().settings.read().performance(),
 	};
 	let transaction = transaction!();
 	let workshop_id = matches.get_one::<u64>("workshop-id").map(|id| PublishedFileId(*id));
@@ -393,12 +394,15 @@ fn pack(folder: &Path, matches: &ArgMatches) -> Result<(), String> {
 			_ => return Err(english::message("ERR_PACKAGE_DESTINATION")),
 		},
 	};
-	let mut ignore = app_data!().settings.read().ignore_globs.clone();
+	let (mut ignore, performance) = {
+		let settings = app_data!().settings.read();
+		(settings.ignore_globs.clone(), settings.performance())
+	};
 	ignore.extend(addon_ignore);
 
 	let transaction = crate::transactions::new_publish();
 	let request = PackageRequest { content_path: folder, destination, title, addon_type, tags };
-	match package_archive(request, ignore, &transaction) {
+	match package_archive(request, ignore, performance, &transaction) {
 		Ok(path) => {
 			transaction.finished(());
 			print_result(english::format("cli.packed", &[("path", &path.display().to_string())]))

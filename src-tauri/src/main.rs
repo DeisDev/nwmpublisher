@@ -75,7 +75,7 @@ fn deadlock_watchdog() {
 fn main() -> std::process::ExitCode {
 	std::panic::set_hook(Box::new(logging::panic));
 
-	rayon::ThreadPoolBuilder::new().num_threads(*crate::NUM_THREADS).build_global().unwrap();
+	rayon::ThreadPoolBuilder::new().num_threads(app_data!().settings.read().performance().worker_threads).build_global().unwrap();
 
 	if let Some(exit_code) = cli::stdin() {
 		return exit_code;

@@ -141,6 +141,7 @@
 	"ERR_SETTINGS_FIELD": "This settings field cannot be changed by this operation.",
 	"ERR_SETTINGS_WINDOW_SIZE": "The window size is invalid.",
 	"ERR_SETTINGS_PREVIEW_SPLIT": "The preview size is invalid.",
+	"ERR_SETTINGS_RANGE": "This value is out of range.",
 	"ERR_SETTINGS_RECOVERY_REQUIRED": "Recover the damaged settings file before saving changes.",
 	"ERR_LOG_MOVE": "The log could not be moved to this folder. Choose another folder.",
 	"ERR_OPEN_LOGS": "Could not open the logs folder.",
@@ -654,6 +655,29 @@
 			"color_error": "Error Color",
 			"color_success": "Success Color",
 			"color_neutral": "Neutral Color"
+		},
+
+		"advanced": {
+			"title": "Advanced",
+			"threads": "Threads",
+			"restart": "Restart the app to apply changes in this group.",
+			"worker_threads": "Background threads",
+			"worker_threads_tooltip": "Shared threads for previews, Workshop requests, and other background work.",
+			"extraction_jobs": "Extractions at once",
+			"download_threads": "Downloads processed at once",
+			"download_threads_tooltip": "How many finished downloads are decompressed and extracted at the same time.",
+			"files": "Extraction and packing",
+			"extraction_threads": "Threads per extraction",
+			"extraction_threads_tooltip": "How many files one extraction writes at the same time.",
+			"packing_jobs": "Packing jobs at once",
+			"packing_jobs_tooltip": "Applies to publishing and Package only. Other jobs wait until one finishes.",
+			"no_limit": "No limit",
+			"buffer_size": "Copy buffer (KiB)",
+			"buffer_size_tooltip": "Memory each extraction or packing thread uses to copy files.",
+			"lzma_memory": "Decompression memory limit (MiB)",
+			"lzma_memory_tooltip": "Downloads that need more memory than this fail to decompress.",
+			"sync_files": "Sync extracted files to disk",
+			"sync_files_tooltip": "Wait until each file is saved to disk. Turning this off is faster, but files may be lost if your computer crashes or loses power."
 		}
 	},
 

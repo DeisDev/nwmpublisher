@@ -18,18 +18,19 @@ pub(super) struct ExtractionStage {
 	parent: Directory,
 	name: PathBuf,
 	preserve: bool,
+	sync: bool,
 	pub warnings: Vec<String>,
 }
 
 impl ExtractionStage {
-	pub fn new(parent: Directory) -> Result<Self, GMAError> {
+	pub fn new(parent: Directory, sync: bool) -> Result<Self, GMAError> {
 		let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
 		for _ in 0..255 {
 			let name = PathBuf::from(format!(".nwmpublisher-extract-{}-{}-{}", std::process::id(), nonce, NEXT_STAGE.fetch_add(1, Ordering::Relaxed)));
 			match parent.mkdir(&name) {
 				Ok(()) => {
 					let directory = parent.child(&name, false).map_err(|error| GMAError::io("open extraction staging", &parent.path.join(&name), error))?;
-					return Ok(Self { directory, parent, name, preserve: false, warnings: Vec::new() });
+					return Ok(Self { directory, parent, name, preserve: false, sync, warnings: Vec::new() });
 				}
 				Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
 				Err(error) => return Err(GMAError::io("create extraction staging", &parent.path.join(&name), error)),
@@ -169,7 +170,7 @@ impl ExtractionStage {
 						Err(error) => return Err(GMAError::io("create Workshop file", &target.path.join(&leaf), error)),
 					};
 					generated_files.push(leaf);
-					io::copy(&mut source, &mut file).and_then(|_| file.sync_all()).map_err(|error| GMAError::io("write Workshop file", &target.path.join(&name), error))?;
+					io::copy(&mut source, &mut file).and_then(|_| if self.sync { file.sync_all() } else { Ok(()) }).map_err(|error| GMAError::io("write Workshop file", &target.path.join(&name), error))?;
 					names.push(name);
 					continue 'generated;
 				}
@@ -225,7 +226,7 @@ mod tests {
 		std::fs::write(root.path().join("output/a"), b"original").unwrap();
 		std::fs::create_dir(root.path().join("output/blocked")).unwrap();
 		let parent = Directory::open(&root.path().canonicalize().unwrap(), false).unwrap();
-		let mut stage = ExtractionStage::new(parent).unwrap();
+		let mut stage = ExtractionStage::new(parent, true).unwrap();
 		stage.directory.create_file(Path::new("new-0")).unwrap().write_all(b"replacement").unwrap();
 		stage.directory.create_file(Path::new("new-1")).unwrap().write_all(b"blocked").unwrap();
 		assert!(stage.commit(Path::new("output"), ExtractionOverwriteMode::Overwrite, &["a".into(), "blocked".into()], &[]).is_err());
@@ -240,7 +241,7 @@ mod tests {
 		std::fs::write(root.path().join("output/lua/autorun/a.lua"), b"original").unwrap();
 		std::fs::create_dir(root.path().join("output/blocked")).unwrap();
 		let parent = Directory::open(&root.path().canonicalize().unwrap(), false).unwrap();
-		let mut stage = ExtractionStage::new(parent).unwrap();
+		let mut stage = ExtractionStage::new(parent, true).unwrap();
 		stage.directory.create_file(Path::new("new-0")).unwrap().write_all(b"replacement").unwrap();
 		stage.directory.create_file(Path::new("new-1")).unwrap().write_all(b"added").unwrap();
 		stage.directory.create_file(Path::new("new-2")).unwrap().write_all(b"blocked").unwrap();

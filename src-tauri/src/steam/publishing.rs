@@ -805,6 +805,10 @@ pub(crate) fn run_publish(request: PublishRequest, transaction: &Transaction) ->
 		}
 		let preview = preview.map(|icon| icon.into_path(root)).transpose().map_err(|error| error.to_string())?;
 
+		let performance = app_data!().settings.read().performance();
+		let Ok(slot) = crate::gma::write::wait_for_packing_slot(transaction, performance.packing_jobs) else {
+			return Ok(None);
+		};
 		if !transaction.begin_packing() {
 			return Ok(None);
 		}
@@ -820,12 +824,13 @@ pub(crate) fn run_publish(request: PublishRequest, transaction: &Transaction) ->
 			},
 		);
 
-		if let Err(error) = gma.create(manifest, transaction.clone()) {
+		if let Err(error) = gma.create(manifest, transaction.clone(), performance.buffer_size()) {
 			if matches!(error, crate::gma::GMAError::Cancelled) {
 				return Ok(None);
 			}
 			return Err(error.to_string());
 		}
+		drop(slot);
 		if transaction.aborted() {
 			return Ok(None);
 		}

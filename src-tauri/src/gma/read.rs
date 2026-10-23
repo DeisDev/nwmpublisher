@@ -220,10 +220,9 @@ impl GMAFile {
 			Ok(Some(handle))
 		}
 	}
-	pub(super) fn validate_payloads(&self, progress: &mut ByteProgress) -> Result<(), GMAError> {
+	pub(super) fn validate_payloads(&self, progress: &mut ByteProgress, buffer: &mut [u8]) -> Result<(), GMAError> {
 		let entries = self.entries.as_ref().ok_or(GMAError::FormatError)?;
 		let mut reader = self.read()?;
-		let mut buffer = [0; 64 * 1024];
 		let mut end = self.pointers.entries;
 		for entry in entries.values() {
 			end = end.max(self.pointers.entries.checked_add(entry.index).and_then(|offset| offset.checked_add(entry.size)).ok_or(GMAError::FormatError)?);
@@ -316,15 +315,15 @@ mod tests {
 			gma.entries().unwrap();
 			let transaction = crate::transactions::new_extraction();
 			let mut progress = ByteProgress::new(&transaction, 0);
-			gma.validate_payloads(&mut progress).unwrap();
-			assert_eq!(progress.done, progress.total);
+			gma.validate_payloads(&mut progress, &mut [0; 8 * 1024]).unwrap();
+			assert_eq!(*progress.done.lock(), progress.total);
 			transaction.finished(());
 		}
 		for (crc, footer) in [(1, None), (0, Some(1))] {
 			let mut gma = archive(&[("lua/a.lua", 4, crc)], b"test", footer);
 			gma.entries().unwrap();
 			let transaction = crate::transactions::new_extraction();
-			assert!(matches!(gma.validate_payloads(&mut ByteProgress::new(&transaction, 0)), Err(GMAError::Checksum(_))));
+			assert!(matches!(gma.validate_payloads(&mut ByteProgress::new(&transaction, 0), &mut [0; 8 * 1024]), Err(GMAError::Checksum(_))));
 			transaction.finished(());
 		}
 	}
