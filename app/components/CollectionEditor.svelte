@@ -371,9 +371,9 @@
 			<h2>{creating ? $_('collections_new') : original.title}</h2>
 			{#if !creating}
 				<p>
-					{$_('workshop_visibility_' + original.visibility)} · {$_('collections_item_count', { values: { count: original.items.length } })}{#if totalSize} · {formatSize(totalSize)}{/if}
-					{#if collection.views != null} · {$_('collections_visitors', { values: { count: collection.views.toLocaleString(numberLocale) } })}{/if}
-					{#if collection.timeUpdated} · {$_('collections_updated')} <Timestamp unix={collection.timeUpdated}/>{/if}
+					{$_('workshop_visibility_' + original.visibility)} · {$_('collections_item_count', { values: { count: original.items.length } })}{#if totalSize}{' · '}{formatSize(totalSize)}{/if}
+					{#if collection.views != null}{' · '}{$_('collections_visitors', { values: { count: collection.views.toLocaleString(numberLocale) } })}{/if}
+					{#if collection.timeUpdated}{' · '}{$_('collections_updated')} <Timestamp unix={collection.timeUpdated}/>{/if}
 				</p>
 			{/if}
 		</div>
@@ -564,7 +564,7 @@
 
 	<footer>
 		<div class="save-status" aria-live="polite">
-			{#if creating}{$_('collections_create_help')}{:else if dirty}{$_('workshop_pending_summary', { values: { added: additions.length, removed: removals.length } })}{#if detailsChanged} · {$_('collections_details_changed')}{/if}{:else}{$_('collections_no_pending')}{/if}
+			{#if creating}{$_('collections_create_help')}{:else if dirty}{$_('workshop_pending_summary', { values: { added: additions.length, removed: removals.length } })}{#if detailsChanged}{' · '}{$_('collections_details_changed')}{/if}{:else}{$_('collections_no_pending')}{/if}
 		</div>
 		<div class="save-actions">
 			{#if creating}

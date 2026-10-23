@@ -85,7 +85,7 @@
 								<input type="checkbox" disabled={busy || complete} checked={complete || chosen.has(collection.id)} on:change={event => toggle(collection.id, event.currentTarget.checked)}/>
 								<span class="text">
 									<span class="title">{collection.fields.title}</span>
-									<small>{$_('collections_item_count', { values: { count: collection.fields.items.length } })} · {$_('workshop_visibility_' + collection.fields.visibility)}{#if complete} · {$_('collections_already_added')}{:else if count} · {$_('collections_some_added', { values: { count } })}{/if}</small>
+									<small>{$_('collections_item_count', { values: { count: collection.fields.items.length } })} · {$_('workshop_visibility_' + collection.fields.visibility)}{#if complete}{' · '}{$_('collections_already_added')}{:else if count}{' · '}{$_('collections_some_added', { values: { count } })}{/if}</small>
 								</span>
 							</label>
 						</li>

@@ -352,7 +352,7 @@
 						{#if collection.previewUrl}<img src={collection.previewUrl} alt="" loading="lazy"/>{:else}<span class="image-placeholder" aria-hidden="true">?</span>{/if}
 						<span class="text">
 							<span class="title">{collection.fields.title}</span>
-							<small>{$_('workshop_visibility_' + collection.fields.visibility)} · {$_('collections_item_count', { values: { count: collection.fields.items.length } })}{#if collection.views != null} · {$_('collections_visitors', { values: { count: collection.views.toLocaleString(numberLocale) } })}{/if}{#if collection.favorites != null} · {$_('collections_favorites', { values: { count: collection.favorites.toLocaleString(numberLocale) } })}{/if}</small>
+							<small>{$_('workshop_visibility_' + collection.fields.visibility)} · {$_('collections_item_count', { values: { count: collection.fields.items.length } })}{#if collection.views != null}{' · '}{$_('collections_visitors', { values: { count: collection.views.toLocaleString(numberLocale) } })}{/if}{#if collection.favorites != null}{' · '}{$_('collections_favorites', { values: { count: collection.favorites.toLocaleString(numberLocale) } })}{/if}</small>
 						</span>
 						<span class="updated">{$_('collections_updated')} <Timestamp unix={collection.timeUpdated}/></span>
 					</button>
