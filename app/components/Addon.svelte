@@ -227,9 +227,13 @@
 		margin-top: .8rem;
 		box-shadow: 0 0 2px 1px rgba(0, 0, 0, .5);
 		background-color: var(--bg-sunken-2);
+		aspect-ratio: 1;
+		overflow: hidden;
 	}
 	main #preview > img {
 		width: 100%;
+		height: 100%;
+		object-fit: contain;
 		display: block;
 	}
 	main #preview.loading > img {
@@ -238,11 +242,6 @@
 	}
 	main #preview:not(.dead):not(.loading):not(.new) > :global(svg) {
 		display: none;
-	}
-	main #preview.dead::after, main #preview.loading::after, main #preview.new::after {
-		content: "";
-		display: block;
-		padding-bottom: 100%;
 	}
 	main #preview.dead :global(svg), main #preview.loading :global(svg), main #preview.new :global(svg) {
 		position: absolute;
@@ -274,10 +273,7 @@
 		grid-row: 1 / 4;
 		margin: 0;
 		border-radius: 4px;
-		overflow: hidden;
-		aspect-ratio: 1;
 	}
-	main.previewing #preview > img { height: 100%; object-fit: contain; }
 	main.previewing #title {
 		grid-column: 2;
 		grid-row: 1;
