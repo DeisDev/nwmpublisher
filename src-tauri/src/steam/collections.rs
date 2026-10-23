@@ -54,7 +54,7 @@ pub struct Collection {
 	preview_url: Option<String>,
 	time_created: u32,
 	time_updated: u32,
-	subscriptions: u64,
+	views: Option<u64>,
 	favorites: Option<u64>,
 }
 
@@ -66,7 +66,7 @@ impl Collection {
 			preview_url: details.item.preview_url.clone(),
 			time_created: details.item.time_created,
 			time_updated: details.item.time_updated,
-			subscriptions: details.item.subscriptions,
+			views: details.item.views,
 			favorites: details.item.favorites,
 		})
 	}

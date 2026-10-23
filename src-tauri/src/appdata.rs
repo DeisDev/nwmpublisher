@@ -242,8 +242,8 @@ pub enum CollectionsSort {
 	TitleDesc,
 	ItemsDesc,
 	ItemsAsc,
-	SubscribersDesc,
-	SubscribersAsc,
+	VisitorsDesc,
+	VisitorsAsc,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
@@ -1032,7 +1032,7 @@ mod tests {
 
 	#[test]
 	fn collections_preferences_round_trip() {
-		for sort in ["updated_desc", "updated_asc", "created_desc", "created_asc", "title_asc", "title_desc", "items_desc", "items_asc", "subscribers_desc", "subscribers_asc"] {
+		for sort in ["updated_desc", "updated_asc", "created_desc", "created_asc", "title_asc", "title_desc", "items_desc", "items_asc", "visitors_desc", "visitors_asc"] {
 			let settings: Settings = serde_json::from_value(serde_json::json!({
 				"collections_visibility": ["unlisted"],
 				"collections_sort": sort,

@@ -22,7 +22,7 @@
 	import { taskMessage } from '../transactions.js';
 
 	const visibilityOptions = ['public', 'friends_only', 'private', 'unlisted'];
-	const sortOptions = ['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'title_asc', 'title_desc', 'items_desc', 'items_asc', 'subscribers_desc', 'subscribers_asc'];
+	const sortOptions = ['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'title_asc', 'title_desc', 'items_desc', 'items_asc', 'visitors_desc', 'visitors_asc'];
 	let visibility = [...AppSettings.collections_visibility];
 	let sort = AppSettings.collections_sort;
 	let saved = { visibility, sort };
@@ -58,8 +58,9 @@
 			let order;
 			if (field === 'title') order = compareTitles(a.fields.title, b.fields.title);
 			else if (field === 'items') order = a.fields.items.length - b.fields.items.length;
+			else if (field === 'visitors') order = (a.views ?? 0) - (b.views ?? 0);
 			else {
-				const property = { updated: 'timeUpdated', created: 'timeCreated', subscribers: 'subscriptions' }[field];
+				const property = { updated: 'timeUpdated', created: 'timeCreated' }[field];
 				order = a[property] - b[property];
 			}
 			return order * multiplier || a.id.length - b.id.length || a.id.localeCompare(b.id);
@@ -351,7 +352,7 @@
 						{#if collection.previewUrl}<img src={collection.previewUrl} alt="" loading="lazy"/>{:else}<span class="image-placeholder" aria-hidden="true">?</span>{/if}
 						<span class="text">
 							<span class="title">{collection.fields.title}</span>
-							<small>{$_('workshop_visibility_' + collection.fields.visibility)} · {$_('collections_item_count', { values: { count: collection.fields.items.length } })} · {$_('collections_subscribers', { values: { count: collection.subscriptions.toLocaleString(numberLocale) } })}{#if collection.favorites != null} · {$_('collections_favorites', { values: { count: collection.favorites.toLocaleString(numberLocale) } })}{/if}</small>
+							<small>{$_('workshop_visibility_' + collection.fields.visibility)} · {$_('collections_item_count', { values: { count: collection.fields.items.length } })}{#if collection.views != null} · {$_('collections_visitors', { values: { count: collection.views.toLocaleString(numberLocale) } })}{/if}{#if collection.favorites != null} · {$_('collections_favorites', { values: { count: collection.favorites.toLocaleString(numberLocale) } })}{/if}</small>
 						</span>
 						<span class="updated">{$_('collections_updated')} <Timestamp unix={collection.timeUpdated}/></span>
 					</button>

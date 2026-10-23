@@ -372,7 +372,7 @@
 			{#if !creating}
 				<p>
 					{$_('workshop_visibility_' + original.visibility)} · {$_('collections_item_count', { values: { count: original.items.length } })}{#if totalSize} · {formatSize(totalSize)}{/if}
-					· {$_('collections_subscribers', { values: { count: (collection.subscriptions ?? 0).toLocaleString(numberLocale) } })}
+					{#if collection.views != null} · {$_('collections_visitors', { values: { count: collection.views.toLocaleString(numberLocale) } })}{/if}
 					{#if collection.timeUpdated} · {$_('collections_updated')} <Timestamp unix={collection.timeUpdated}/>{/if}
 				</p>
 			{/if}
