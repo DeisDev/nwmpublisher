@@ -658,7 +658,6 @@
 	},
 
 	"gma_type_name": "已打包的 Garry's Mod 模组文件",
-	"downloading_tip": "您可以拖动 Steam 创意工坊链接到这里来下载并解压它们。",
 	"open_workshop": "打开创意工坊",
 	"bulk_extract_gmas": "手动选择 GMA 文件",
 	"error": "错误",

@@ -14,7 +14,8 @@
 	import { _ } from 'svelte-i18n';
 	import { invoke } from '@tauri-apps/api/core';
 	import { saveSettings } from '../settings.js';
-	import { listen } from '@tauri-apps/api/event';
+	import { listen, TauriEvent } from '@tauri-apps/api/event';
+	import { getCurrentWebview } from '@tauri-apps/api/webview';
 	import DestinationSelect from '../components/DestinationSelect.svelte';
 	import { Transaction } from '../transactions';
 	import * as dialog from '@tauri-apps/plugin-dialog';
@@ -239,6 +240,45 @@
 		});
 	}
 
+	const MAX_LISTED_FILES = 10;
+	function extractDroppedFiles(paths) {
+		const isGMA = path => /[^\\/]\.gma$/i.test(path);
+		const gmas = paths.filter(isGMA);
+		const unsupported = paths.filter(path => !isGMA(path));
+		if (gmas.length > 0) {
+			invoke('downloader_extract_gmas', { paths: gmas });
+		}
+		if (unsupported.length > 0) {
+			const names = unsupported.slice(0, MAX_LISTED_FILES).map(path => path.split(/[\\/]/).pop());
+			if (unsupported.length > MAX_LISTED_FILES) names.push('…');
+			dialog.message($_('extraction_drop_unsupported', { values: { count: unsupported.length, files: names.join('\n') } }), { kind: 'warning' });
+		}
+	}
+
+	function gmaDrop(node) {
+		let closed = false;
+		let unlisten;
+		getCurrentWebview().listen(TauriEvent.DRAG_DROP, ({ payload: { paths, position } }) => {
+			if (closed || destinationModal) return;
+			// Native drop positions are physical pixels; DOM hit testing uses CSS pixels.
+			const target = document.elementFromPoint(position.x / window.devicePixelRatio, position.y / window.devicePixelRatio);
+			if (node.contains(target)) extractDroppedFiles(paths);
+		}).then(stop => {
+			// Closing can precede completion of the native listener registration.
+			if (closed) stop();
+			else unlisten = stop;
+		}, error => {
+			console.error('Failed to listen for GMA drops:', error);
+			if (!closed) dialog.message($_('extraction_drop_error', { values: { error: String(error) } }), { kind: 'error' });
+		});
+		return {
+			destroy() {
+				closed = true;
+				unlisten?.();
+			},
+		};
+	}
+
 	function removeAll(jobs) {
 		for (const job of [...jobs]) {
 			if (job.transaction.finished || job.transaction.error) {
@@ -263,7 +303,7 @@
 	}
 </script>
 
-<main class="hide-scroll">
+<main class="hide-scroll" use:gmaDrop>
 	<div id="top-controls">
 		<button type="button" id="download" class="icon-button" aria-label={$_('bulk_extract_gmas')} on:click={browseGMA} use:tippyFollow={$_('bulk_extract_gmas')}>
 			<Folder class="icon" size="1.2rem"/>
@@ -301,7 +341,6 @@
 									<div>
 										<div><img src="/img/dog_sleep.gif"/></div>
 										<div>{$_('waiting')}</div>
-										<!--<div class="tip">{$_('downloading_tip')}</div>-->
 										<a href="https://steamcommunity.com/app/4000/workshop/" target="_blank"><div class="btn">{$_('open_workshop')}</div></a>
 									</div>
 								</td>
@@ -357,7 +396,7 @@
 									<div>
 										<div><img src="/img/dog_sleep.gif"/></div>
 										<div>{$_('waiting')}</div>
-										<!--<div class="tip">{$_('extraction_tip')}</div>-->
+										<div class="tip">{$_('extraction_tip')}</div>
 										<button type="button" class="btn" on:click={openDestination}>{$_('set_destination')}</button>
 									</div>
 								</td>

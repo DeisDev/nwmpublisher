@@ -658,7 +658,6 @@
 	},
 
 	"gma_type_name": "패킹된 게리모드 애드온",
-	"downloading_tip": "스팀 창작마당 링크를 가져와 다운로드 및 추출을 할수있습니다.",
 	"open_workshop": "창작마당 열기",
 	"bulk_extract_gmas": "GMA 대량 추출",
 	"error": "에러",

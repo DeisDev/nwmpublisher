@@ -658,7 +658,6 @@
 	},
 
 	"gma_type_name": "Addon Garry's Mod compressé",
-	"downloading_tip": "Vous pouvez faire glisser des liens Steam Workshop sur cet écran pour les télécharger et les extraire.",
 	"open_workshop": "Ouvrir le Workshop",
 	"bulk_extract_gmas": "Extraction en vrac des GMAs",
 	"error": "Erreur",

@@ -520,6 +520,8 @@
 	"log": "Log",
 	"waiting": "Waiting",
 	"extraction_tip": "You can drag and drop GMA files onto this screen to directly extract them.",
+	"extraction_drop_unsupported": "{count, plural, one {This file was skipped because it is not a GMA file:} other {These # files were skipped because they are not GMA files:}}\n\n{files}",
+	"extraction_drop_error": "Could not enable GMA file drops: {error}",
 	"set_destination": "Set Destination",
 
 	"addon": "Addon",
@@ -682,7 +684,6 @@
 	},
 
 	"gma_type_name": "Packed Garry's Mod Addon",
-	"downloading_tip": "You can drag Steam Workshop links onto this screen to download + extract them.",
 	"open_workshop": "Open Workshop",
 	"bulk_extract_gmas": "Bulk Extract GMAs",
 	"error": "Error",

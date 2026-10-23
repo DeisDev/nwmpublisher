@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Drop GMA files onto the Downloader to extract them. Other files are skipped with a message.
+
 ## [3.7.0] - 2026-10-23
 
 ### Added
