@@ -18,6 +18,7 @@ body:
       options:
         - Publishing or updating an addon
         - My Workshop
+        - Collections
         - Installed addons
         - Extracting or browsing GMA files
         - Downloader
