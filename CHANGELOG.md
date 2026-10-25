@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Drop GMA files onto the Downloader to extract them. Other files are skipped with a message.
+- Add a light theme to the website. It follows your system setting, or pick one with the button in the header.
 
 ## [3.7.0] - 2026-10-23
 
