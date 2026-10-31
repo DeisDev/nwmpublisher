@@ -48,7 +48,7 @@
 		failures = [];
 		progress = { completed: 0, total: targets.length * items.length };
 		try {
-			const outcomes = await invoke('change_collection_items', { collections: targets, items, add: true, onProgress: new Channel(update => progress = update) });
+			const { outcomes } = await invoke('apply_collection_changes', { changes: targets.map(collectionId => ({ collectionId, add: items })), onProgress: new Channel(update => progress = update) });
 			const titles = new Map($collections.items.map(collection => [collection.id, collection.fields.title]));
 			failures = outcomes.filter(outcome => outcome.error).map(outcome => ({ title: titles.get(outcome.id) ?? outcome.id, error: outcome.error }));
 			const added = outcomes.reduce((count, outcome) => count + outcome.changed.length, 0);

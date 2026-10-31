@@ -12,12 +12,14 @@
 	import GitCompare from '@lucide/svelte/icons/git-compare';
 	import ListMinus from '@lucide/svelte/icons/list-minus';
 	import Search from '@lucide/svelte/icons/search';
+	import ListX from '@lucide/svelte/icons/list-x';
+	import CircleStop from '@lucide/svelte/icons/circle-stop';
 	import Loading from '../components/Loading.svelte';
 	import Modal from '../components/Modal.svelte';
 	import Timestamp from '../components/Timestamp.svelte';
 	import CollectionEditor from '../components/CollectionEditor.svelte';
 	import CollectionCompare from '../components/CollectionCompare.svelte';
-	import { collections, compareTitles, ensureCollections, loadCollections } from '../collections.js';
+	import { collections, compareTitles, ensureCollections, includeExtras, loadCollections, loadSnapshot, mirrors, planSync, setIncludeExtras, subscriptionSnapshot } from '../collections.js';
 	import { saveSettings } from '../settings.js';
 	import { taskMessage } from '../transactions.js';
 
@@ -223,10 +225,8 @@
 		const { entry, targets } = removing;
 		removing = { ...removing, busy: true, error: null, failures: [], progress: { completed: 0, total: targets.size } };
 		try {
-			const outcomes = await invoke('change_collection_items', {
-				collections: [...targets],
-				items: [entry.id],
-				add: false,
+			const { outcomes } = await invoke('apply_collection_changes', {
+				changes: [...targets].map(collectionId => ({ collectionId, remove: [entry.id] })),
 				onProgress: new Channel(progress => { if (removing) removing = { ...removing, progress }; }),
 			});
 			const failures = failureList(outcomes);
@@ -245,6 +245,81 @@
 	}
 
 	$: removalChoices = removing?.entry ? all.filter(collection => collection.fields.items.includes(removing.entry.id)) : [];
+
+	let pruning = null;
+
+	async function openPrune() {
+		actionErrors = [];
+		const ids = selectedList;
+		pruning = { ids, loading: true, error: null, entries: new Map(), unticked: new Set(), busy: false, stopping: false, progress: null, failures: [], notice: null };
+		await loadSnapshot();
+		const state = get(subscriptionSnapshot);
+		if (!pruning) return;
+		if (state.error) {
+			pruning = { ...pruning, loading: false, error: state.error };
+			return;
+		}
+		const subscribed = new Set(state.data.items.map(entry => entry.id));
+		const missing = [...new Set(ids.flatMap(id => byId.get(id)?.fields.items ?? []))].filter(item => !subscribed.has(item));
+		try {
+			const lookup = missing.length ? await invoke('collection_entries', { references: missing }) : { entries: [] };
+			if (pruning) pruning = { ...pruning, loading: false, entries: new Map(lookup.entries.map(entry => [entry.id, entry])) };
+		} catch (error) {
+			if (pruning) pruning = { ...pruning, loading: false, error: String(error) };
+		}
+	}
+
+	function togglePrune(id, checked) {
+		const unticked = new Set(pruning.unticked);
+		if (checked) unticked.delete(id);
+		else unticked.add(id);
+		pruning = { ...pruning, unticked };
+	}
+
+	async function prune() {
+		const chosen = pruneChoices.filter(choice => choice.items.length && !pruning.unticked.has(choice.id));
+		pruning = { ...pruning, busy: true, stopping: false, error: null, failures: [], notice: null, progress: { completed: 0, total: pruneCount } };
+		try {
+			const local = new Set(await invoke('local_subscribed_ids'));
+			const changes = chosen.map(choice => ({ collectionId: choice.id, remove: choice.items.filter(item => !local.has(item)) })).filter(change => change.remove.length);
+			const resubscribed = chosen.reduce((count, choice) => count + choice.items.length, 0) - changes.reduce((count, change) => count + change.remove.length, 0);
+			const notice = resubscribed ? $_('collections_sync_resubscribed', { values: { count: resubscribed } }) : null;
+			if (!changes.length) {
+				pruning = { ...pruning, busy: false, progress: null, notice };
+				return;
+			}
+			const result = await invoke('apply_collection_changes', {
+				changes,
+				onProgress: new Channel(progress => { if (pruning) pruning = { ...pruning, progress }; }),
+			});
+			const failures = failureList(result.outcomes);
+			const changed = result.outcomes.filter(outcome => outcome.changed.length);
+			const removed = changed.reduce((count, outcome) => count + outcome.changed.length, 0);
+			if (removed) taskMessage($_('collections_sync_pruned', { values: { items: removed, collections: changed.length } }));
+			const stopped = result.stopped ? $_('collections_sync_prune_stopped', { values: { count: removed } }) : null;
+			const messages = [notice, stopped].filter(Boolean).join(' ') || null;
+			pruning = failures.length || messages ? { ...pruning, busy: false, progress: null, failures, notice: messages } : null;
+		} catch (error) {
+			pruning = { ...pruning, busy: false, progress: null, error: String(error) };
+		} finally {
+			loadCollections();
+		}
+	}
+
+	function stopPrune() {
+		pruning = { ...pruning, stopping: true };
+		invoke('stop_collection_change');
+	}
+
+	function cancelPrune() {
+		if (!pruning?.busy) pruning = null;
+	}
+
+	$: pruneChoices = pruning && !pruning.loading && !pruning.error && $subscriptionSnapshot.data
+		? pruning.ids.filter(id => byId.has(id)).map(id => ({ id, title: byId.get(id).fields.title, items: planSync(id, byId.get(id).fields.items, pruning.entries, $subscriptionSnapshot.data.items, $includeExtras).remove }))
+		: [];
+	$: pruneTargets = pruneChoices.filter(choice => choice.items.length && !pruning.unticked.has(choice.id));
+	$: pruneCount = pruneTargets.reduce((count, choice) => count + choice.items.length, 0);
 </script>
 
 <svelte:window on:pointerdown={dismissFilters} on:keydown={onKeydown}/>
@@ -309,6 +384,7 @@
 						{#each visibilityOptions as option}<option value={option}>{$_('workshop_visibility_' + option)}</option>{/each}
 					</select>
 					<button type="button" disabled={selectedList.length !== 2 || actionBusy} title={$_('collections_compare_help')} on:click={() => view = { kind: 'compare', ids: selectedList }}><GitCompare size="1rem"/>{$_('collections_compare')}</button>
+					<button type="button" disabled={!selectedList.length || actionBusy} on:click={openPrune}><ListX size="1rem"/>{$_('collections_sync_prune')}</button>
 					<button type="button" disabled={!selectedList.length || actionBusy} on:click={() => confirmDelete(selectedList)}><Trash2 size="1rem"/>{$_('collections_delete', { values: { count: selectedList.length } })}</button>
 					{#if actionBusy}<Loading inline size="1rem"/>{/if}
 				</div>
@@ -352,7 +428,7 @@
 						{#if collection.previewUrl}<img src={collection.previewUrl} alt="" loading="lazy"/>{:else}<span class="image-placeholder" aria-hidden="true">?</span>{/if}
 						<span class="text">
 							<span class="title">{collection.fields.title}</span>
-							<small>{$_('workshop_visibility_' + collection.fields.visibility)} · {$_('collections_item_count', { values: { count: collection.fields.items.length } })}{#if collection.views != null}{' · '}{$_('collections_visitors', { values: { count: collection.views.toLocaleString(numberLocale) } })}{/if}{#if collection.favorites != null}{' · '}{$_('collections_favorites', { values: { count: collection.favorites.toLocaleString(numberLocale) } })}{/if}</small>
+							<small>{$_('workshop_visibility_' + collection.fields.visibility)} · {$_('collections_item_count', { values: { count: collection.fields.items.length } })}{#if collection.views != null}{' · '}{$_('collections_visitors', { values: { count: collection.views.toLocaleString(numberLocale) } })}{/if}{#if collection.favorites != null}{' · '}{$_('collections_favorites', { values: { count: collection.favorites.toLocaleString(numberLocale) } })}{/if}{#if $mirrors.has(collection.id)}{' · '}<span class="chip">{$_('collections_sync_mirror_chip')}</span>{/if}</small>
 						</span>
 						<span class="updated">{$_('collections_updated')} <Timestamp unix={collection.timeUpdated}/></span>
 					</button>
@@ -405,6 +481,41 @@
 			<div class="actions">
 				<button type="button" disabled={removing.busy} on:click={cancelRemove}>{$_(removing.failures.length ? 'close' : 'cancel')}</button>
 				<button type="button" class="danger" disabled={removing.busy || !removing.entry || !removing.targets.size} on:click={removeEverywhere}>{#if removing.busy}<Loading inline size="1rem"/>{:else}<ListMinus size="1rem"/>{/if}{$_('collections_remove_from', { values: { count: removing.targets.size } })}</button>
+			</div>
+		</div>
+	</Modal>
+{/if}
+
+{#if pruning}
+	<Modal active={true} cancel={cancelPrune} padding="1.5rem">
+		<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="prune-title">
+			<h2 id="prune-title">{$_('collections_sync_prune_title')}</h2>
+			<p>{$_('collections_sync_prune_help')}</p>
+			<label class="option"><input type="checkbox" checked={$includeExtras} disabled={pruning.busy} on:change={event => setIncludeExtras(event.currentTarget.checked).catch(error => pruning = pruning && { ...pruning, error: String(error) })}/>{$_('collections_sync_include_extras')}</label>
+			{#if pruning.loading}
+				{@const progress = $subscriptionSnapshot.progress}
+				<p class="status-line" role="status"><Loading inline size="1rem"/> {progress?.total ? $_('collections_sync_loading_count', { values: { completed: progress.completed, total: progress.total } }) : $_('collections_sync_loading')}</p>
+			{:else if pruneChoices.length}
+				<ul class="choices">
+					{#each pruneChoices as choice (choice.id)}
+						<li class:muted={!choice.items.length}><label><input type="checkbox" checked={choice.items.length > 0 && !pruning.unticked.has(choice.id)} disabled={pruning.busy || !choice.items.length} on:change={event => togglePrune(choice.id, event.currentTarget.checked)}/>{$_('collections_sync_prune_choice', { values: { title: choice.title, count: choice.items.length } })}</label></li>
+					{/each}
+				</ul>
+				<p class="warning">{$_('collections_sync_prune_warning')}</p>
+			{/if}
+			{#if pruning.progress}
+				<div class="progress-row">
+					<progress max={pruning.progress.total || 1} value={pruning.progress.completed} aria-label={$_('collections_saving')}></progress>
+					<button type="button" disabled={pruning.stopping} on:click={stopPrune}><CircleStop size="1rem"/>{$_('collections_stop')}</button>
+				</div>
+				{#if pruning.progress.retryIn}<p class="muted" role="status">{$_('collections_save_throttled', { values: { seconds: pruning.progress.retryIn } })}</p>{/if}
+			{/if}
+			{#if pruning.notice}<p role="status">{pruning.notice}</p>{/if}
+			{#if pruning.error}<p class="error-text" role="alert">{pruning.error}</p>{/if}
+			{#each pruning.failures as failure}<p class="error-text" role="alert"><strong>{failure.title}</strong>: {failure.error}</p>{/each}
+			<div class="actions">
+				<button type="button" disabled={pruning.busy} on:click={cancelPrune}>{$_(pruning.failures.length || pruning.notice ? 'close' : 'cancel')}</button>
+				<button type="button" class="danger" disabled={pruning.busy || pruning.loading || !pruneCount} on:click={prune}>{#if pruning.busy}<Loading inline size="1rem"/>{:else}<ListX size="1rem"/>{/if}{$_('collections_sync_prune_button', { values: { items: pruneCount, collections: pruneTargets.length } })}</button>
 			</div>
 		</div>
 	</Modal>
@@ -479,5 +590,12 @@
 	.find input { flex: 1; min-width: 0; }
 	.dialog progress { width: 100%; height: .5rem; accent-color: var(--neutral); margin-bottom: 1rem; }
 	.error-text { color: var(--text-error-soft); }
+	.chip { padding: .05rem .4rem; border-radius: 4px; background: var(--control); }
+	.option { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; cursor: pointer; }
+	.status-line { display: flex; align-items: center; gap: .5rem; color: var(--text-soft); }
+	.choices li.muted { color: var(--text-muted); }
+	.progress-row { display: flex; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+	.progress-row progress { flex: 1; margin: 0; }
+	.progress-row button { padding: .4rem .65rem; }
 	.actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .75rem; margin-top: 1rem; }
 </style>

@@ -80,6 +80,8 @@ pub struct GameAddons {
 	external: RwLock<HashMap<PathBuf, Option<Arc<Addon>>>>,
 	/// Steam removes an unsubscribed item's copy only after the game closes, so it is hidden for the rest of this run.
 	unsubscribed: RwLock<HashSet<PublishedFileId>>,
+	/// Steam's subscription query can lag behind subscriptions made during this run.
+	subscribed: RwLock<HashSet<PublishedFileId>>,
 }
 
 impl GameAddons {
@@ -91,7 +93,29 @@ impl GameAddons {
 			pages: RwLock::new(Vec::new()),
 			external: RwLock::new(HashMap::new()),
 			unsubscribed: RwLock::new(HashSet::new()),
+			subscribed: RwLock::new(HashSet::new()),
 		}
+	}
+
+	pub fn note_subscribed(&self, id: PublishedFileId) {
+		self.unsubscribed.write().remove(&id);
+		self.subscribed.write().insert(id);
+		crate::steam::subscriptions::invalidate();
+	}
+
+	pub fn note_unsubscribed(&self, id: PublishedFileId) {
+		self.subscribed.write().remove(&id);
+		self.unsubscribed.write().insert(id);
+		crate::steam::subscriptions::invalidate();
+	}
+
+	pub fn unsubscribed_this_session(&self, id: PublishedFileId) -> bool {
+		self.unsubscribed.read().contains(&id)
+	}
+
+	/// Items unsubscribed and subscribed through the app during this run.
+	pub fn session_subscriptions(&self) -> (HashSet<PublishedFileId>, HashSet<PublishedFileId>) {
+		(self.unsubscribed.read().clone(), self.subscribed.read().clone())
 	}
 
 	fn gma_check(entry: Result<DirEntry, std::io::Error>) -> Option<(PathBuf, String)> {
@@ -533,7 +557,7 @@ fn unsubscribe_addon(path: &Path, gmod: Option<&Path>, permanent: bool, unsubscr
 			.map_err(|_| CleanerError::new("addon_unsubscribe_timeout"))?
 			.map_err(|error| CleanerError::detail("addon_unsubscribe_error", error))?;
 		unsubscribed.insert(id);
-		game_addons!().unsubscribed.write().insert(id);
+		game_addons!().note_unsubscribed(id);
 	}
 	let result = addon_cleaner::remove_archives(files, permanent);
 	forgotten.extend(result.removed.iter().filter_map(|file| known.get(file)).flatten().cloned());
@@ -544,6 +568,9 @@ fn unsubscribe_addon(path: &Path, gmod: Option<&Path>, permanent: bool, unsubscr
 pub async fn unsubscribe_installed_addons(paths: Vec<PathBuf>, delete_files: bool, permanent: bool, on_progress: Channel<RemovalProgress>) -> Result<Vec<RemovalOutcome>, CleanerError> {
 	tauri::async_runtime::spawn_blocking(move || {
 		let _removal = REMOVAL.try_lock().ok_or_else(|| CleanerError::new("addon_removal_busy"))?;
+		if crate::steam::collections::saving() {
+			return Err(CleanerError::new("collections_saving_busy"));
+		}
 		REMOVAL_STOP.store(false, Ordering::Release);
 		if !steam!().connected() {
 			return Err(CleanerError::new("addon_unsubscribe_offline"));
@@ -626,6 +653,213 @@ pub async fn delete_installed_addons(paths: Vec<PathBuf>, permanent: bool, on_pr
 	})
 	.await
 	.map_err(|error| CleanerError::detail("cleaner_error_task", error))?
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionSyncPreview {
+	subscribe: Vec<String>,
+	unsubscribe: Vec<String>,
+	skipped: usize,
+	files: Option<usize>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionSyncProgress {
+	stage: &'static str,
+	completed: usize,
+	total: usize,
+	retry_in: Option<u64>,
+}
+
+#[derive(Serialize)]
+pub struct SyncFailure {
+	id: String,
+	error: CleanerError,
+}
+
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionSyncOutcome {
+	subscribed: usize,
+	unsubscribed: usize,
+	skipped: usize,
+	files_removed: usize,
+	failures: Vec<SyncFailure>,
+	file_failures: Vec<addon_cleaner::FileFailure>,
+	stopped: bool,
+	error: Option<CleanerError>,
+}
+
+fn subscription_changes(collection_id: &str, include_extras: bool) -> Result<crate::steam::subscriptions::SubscriptionChanges, CleanerError> {
+	let id = collection_id.parse().ok().filter(|id| *id != 0).map(PublishedFileId).ok_or_else(|| CleanerError::new("collections_sync_error_id"))?;
+	crate::steam::subscriptions::subscription_changes(id, include_extras).map_err(|error| CleanerError::detail("collections_sync_error", error))
+}
+
+fn sync_preview(collection_id: String, include_extras: bool) -> Result<SubscriptionSyncPreview, CleanerError> {
+	let changes = subscription_changes(&collection_id, include_extras)?;
+	let files = match app_data!().gmod_dir() {
+		Some(gmod) => Some(addon_cleaner::item_archives_by_id(&gmod, &changes.unsubscribe.iter().copied().collect())?.values().map(Vec::len).sum()),
+		None => None,
+	};
+	let ids = |ids: Vec<PublishedFileId>| ids.into_iter().map(|id| id.0.to_string()).collect();
+	Ok(SubscriptionSyncPreview {
+		subscribe: ids(changes.subscribe),
+		unsubscribe: ids(changes.unsubscribe),
+		skipped: changes.skipped,
+		files,
+	})
+}
+
+#[tauri::command]
+pub async fn preview_subscription_sync(collection_id: String, include_extras: bool) -> Result<SubscriptionSyncPreview, CleanerError> {
+	tauri::async_runtime::spawn_blocking(move || sync_preview(collection_id, include_extras))
+		.await
+		.map_err(|error| CleanerError::detail("cleaner_error_task", error))?
+}
+
+struct SyncRequest {
+	collection_id: String,
+	subscribe: Vec<String>,
+	unsubscribe: Vec<String>,
+	include_extras: bool,
+	delete_files: bool,
+	permanent: bool,
+}
+
+fn sync(request: SyncRequest, on_progress: &Channel<SubscriptionSyncProgress>) -> Result<SubscriptionSyncOutcome, CleanerError> {
+	use crate::steam::workshop_management::{change_subscription, paced, Paced, WriteFailure};
+	let _subscribing = crate::steam::collections::subscribe_lock().ok_or_else(|| CleanerError::new("addon_removal_busy"))?;
+	let _removal = REMOVAL.try_lock().ok_or_else(|| CleanerError::new("addon_removal_busy"))?;
+	if crate::steam::collections::saving() {
+		return Err(CleanerError::new("collections_saving_busy"));
+	}
+	REMOVAL_STOP.store(false, Ordering::Release);
+	if !steam!().connected() {
+		return Err(CleanerError::new("addon_unsubscribe_offline"));
+	}
+	let gmod = if request.delete_files && !request.unsubscribe.is_empty() { Some(app_data!().gmod_dir().ok_or_else(|| CleanerError::new("cleaner_error_gmod"))?) } else { None };
+	// Only what is still true on Steam is changed, in case the collection or subscriptions changed after the preview.
+	let changes = subscription_changes(&request.collection_id, request.include_extras)?;
+	let requested = |ids: &[String]| -> HashSet<String> { ids.iter().cloned().collect() };
+	let (wanted_subscribe, wanted_unsubscribe) = (requested(&request.subscribe), requested(&request.unsubscribe));
+	let subscribe: Vec<_> = changes.subscribe.into_iter().filter(|id| wanted_subscribe.contains(&id.0.to_string())).collect();
+	let unsubscribe: Vec<_> = changes.unsubscribe.into_iter().filter(|id| wanted_unsubscribe.contains(&id.0.to_string())).collect();
+	let mut outcome = SubscriptionSyncOutcome {
+		skipped: wanted_subscribe.len() + wanted_unsubscribe.len() - subscribe.len() - unsubscribe.len(),
+		..Default::default()
+	};
+	let archives = match &gmod {
+		Some(gmod) => addon_cleaner::item_archives_by_id(gmod, &unsubscribe.iter().copied().collect())?,
+		None => HashMap::new(),
+	};
+	let mut forgotten = Vec::new();
+	let mut progress = Some(on_progress);
+	let mut send = |stage, completed, total, retry_in| {
+		if let Some(channel) = progress {
+			if let Err(error) = channel.send(SubscriptionSyncProgress { stage, completed, total, retry_in }) {
+				eprintln!("Subscription sync progress delivery failed: {error}");
+				progress = None;
+			}
+		}
+	};
+	'stages: for (stage, ids, subscribing) in [("subscribing", &subscribe, true), ("unsubscribing", &unsubscribe, false)] {
+		let total = ids.len();
+		if total > 0 {
+			send(stage, 0, total, None);
+		}
+		for (index, id) in ids.iter().enumerate() {
+			let write = paced(&REMOVAL_STOP, || change_subscription(*id, subscribing), |delay| send(stage, index, total, Some(delay.as_secs())));
+			match write {
+				Ok(Paced::Written) if subscribing => {
+					game_addons!().note_subscribed(*id);
+					outcome.subscribed += 1;
+					println!("Subscribed to Workshop item {}", id.0);
+				}
+				Ok(Paced::Written) => {
+					game_addons!().note_unsubscribed(*id);
+					outcome.unsubscribed += 1;
+					println!("Unsubscribed from Workshop item {}", id.0);
+					let files = archives.get(id).cloned().unwrap_or_default();
+					// Resolved while the files still exist, so the caches can drop them after deletion.
+					let known: HashMap<PathBuf, Vec<PathBuf>> = files
+						.iter()
+						.map(|file| {
+							let mut paths = vec![dunce::canonicalize(file).unwrap_or_else(|_| file.clone())];
+							paths.extend(game_addons!().from_path(file).map(|addon| addon.installed().path.clone()));
+							(file.clone(), paths)
+						})
+						.collect();
+					let result = addon_cleaner::remove_archives(files, request.permanent);
+					for failure in &result.failed {
+						wprintln!("Kept {} after unsubscribing: {}", failure.path.display(), failure.error);
+					}
+					forgotten.extend(result.removed.iter().filter_map(|file| known.get(file)).flatten().cloned());
+					outcome.files_removed += result.removed.len();
+					outcome.file_failures.extend(result.failed);
+				}
+				Ok(Paced::Stopped) => {
+					outcome.stopped = true;
+					break 'stages;
+				}
+				Err(error) if error.kind() == WriteFailure::Stop => {
+					outcome.error = Some(CleanerError::detail("collections_sync_error_steam", error));
+					break 'stages;
+				}
+				Err(error) => {
+					eprintln!("Could not change the subscription to Workshop item {}: {}", id.0, error);
+					outcome.failures.push(SyncFailure {
+						id: id.0.to_string(),
+						error: CleanerError::detail("collections_sync_error_steam", error),
+					});
+				}
+			}
+			send(stage, index + 1, total, None);
+		}
+	}
+	game_addons!().forget(&forgotten);
+	if outcome.unsubscribed > 0 {
+		webview_emit!("InstalledAddonsRefreshed");
+	}
+	Ok(outcome)
+}
+
+#[tauri::command]
+pub async fn sync_subscriptions(
+	collection_id: String,
+	subscribe: Vec<String>,
+	unsubscribe: Vec<String>,
+	include_extras: bool,
+	delete_files: bool,
+	permanent: bool,
+	on_progress: Channel<SubscriptionSyncProgress>,
+) -> Result<SubscriptionSyncOutcome, CleanerError> {
+	let request = SyncRequest {
+		collection_id: collection_id.clone(),
+		subscribe,
+		unsubscribe,
+		include_extras,
+		delete_files,
+		permanent,
+	};
+	let result = tauri::async_runtime::spawn_blocking(move || sync(request, &on_progress))
+		.await
+		.map_err(|error| CleanerError::detail("cleaner_error_task", error))
+		.and_then(std::convert::identity);
+	match &result {
+		Ok(outcome) => println!(
+			"Matched subscriptions to collection {}: {} subscribed, {} unsubscribed, {} files removed, {} failed{}",
+			collection_id,
+			outcome.subscribed,
+			outcome.unsubscribed,
+			outcome.files_removed,
+			outcome.failures.len(),
+			if outcome.stopped { ", stopped" } else { "" }
+		),
+		Err(error) => eprintln!("Could not change subscriptions to match collection {}: {}", collection_id, error),
+	}
+	result
 }
 
 #[tauri::command]

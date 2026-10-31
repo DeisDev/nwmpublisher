@@ -1,7 +1,7 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::{
 	cell::Cell,
-	collections::HashMap,
+	collections::{HashMap, HashSet},
 	fs::{self, File, OpenOptions},
 	io::{Seek, SeekFrom, Write},
 	path::{Path, PathBuf},
@@ -342,6 +342,8 @@ pub struct Settings {
 	pub my_workshop_sort: WorkshopSort,
 	pub collections_visibility: Vec<WorkshopVisibility>,
 	pub collections_sort: CollectionsSort,
+	pub collections_sync_include_extras: bool,
+	pub collections_mirrors: Vec<String>,
 	pub installed_addons_sort: InstalledAddonsSort,
 	pub installed_addons_types: Vec<AddonType>,
 	pub upscale_addon_icon: bool,
@@ -423,6 +425,8 @@ impl Default for Settings {
 				WorkshopVisibility::Unlisted,
 			],
 			collections_sort: CollectionsSort::UpdatedDesc,
+			collections_sync_include_extras: false,
+			collections_mirrors: Vec::new(),
 			installed_addons_sort: InstalledAddonsSort::Modified,
 			installed_addons_types: AddonType::ALL.to_vec(),
 			upscale_addon_icon: true,
@@ -545,6 +549,8 @@ impl Settings {
 	pub fn sanitize(&mut self) {
 		self.destinations.retain(|dir| dir.is_absolute() && dir.is_dir());
 		self.my_workshop_local_paths.retain(|_, dir| dir.is_absolute() && dir.is_dir());
+		let mut mirrors = HashSet::new();
+		self.collections_mirrors.retain(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) && mirrors.insert(id.clone()));
 
 		match &self.extract_destination {
 			ExtractDestination::Directory(path) => {
@@ -1134,6 +1140,20 @@ mod tests {
 			assert_eq!(loaded.collections_sort, settings.collections_sort);
 			assert_eq!(loaded.collections_visibility, vec![WorkshopVisibility::Unlisted]);
 		}
+	}
+
+	#[test]
+	fn collection_sync_preferences_default_round_trip_and_drop_invalid_mirrors() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
+		assert!(!defaults.collections_sync_include_extras);
+		assert!(defaults.collections_mirrors.is_empty());
+		let patch = serde_json::json!({"collections_sync_include_extras": true, "collections_mirrors": ["123", "abc", "", "123", "456"]});
+		let mut settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+		settings.sanitize();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert!(loaded.collections_sync_include_extras);
+		assert_eq!(loaded.collections_mirrors, ["123", "456"]);
+		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"collections_mirrors": [123]})).unwrap()).is_err());
 	}
 
 	#[test]

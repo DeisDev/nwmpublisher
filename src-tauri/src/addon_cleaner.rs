@@ -211,7 +211,7 @@ fn account() -> Result<SteamId, CleanerError> {
 	Ok(steam!().client().user().steam_id())
 }
 
-fn append_page(ids: &mut HashSet<PublishedFileId>, total: u32, expected: &mut Option<u32>, page: Vec<PublishedFileId>) -> Result<bool, CleanerError> {
+pub(crate) fn append_page(ids:&mut HashSet<PublishedFileId>, total: u32, expected: &mut Option<u32>, page: Vec<PublishedFileId>) -> Result<bool, CleanerError> {
 	if expected.is_some_and(|previous| previous != total) || (page.is_empty() && ids.len() < total as usize) {
 		return Err(CleanerError::new("cleaner_error_subscriptions"));
 	}
@@ -519,20 +519,34 @@ pub(crate) fn remove_file(path: &Path, permanent: bool) -> Result<(), CleanerErr
 /// Garry's Mod's copies of one Workshop item. Steam removes its own copy once the game closes, and still reports
 /// the item as subscribed right after unsubscribing, so its content folder is left alone.
 pub(crate) fn item_archives(gmod: &Path, id: PublishedFileId, selected: &Path) -> Result<Vec<PathBuf>, CleanerError> {
-	check_ancestors(gmod)?;
-	let mut files = Vec::new();
-	for (folder, legacy) in [(gmod.join("garrysmod/addons"), true), (gmod.join("garrysmod/cache/workshop"), false)] {
-		files.extend(entries(&folder)?.into_iter().filter(|path| archive_id(path, legacy) == Some(id.0)));
-	}
+	let mut files = item_archives_by_id(gmod, &HashSet::from([id]))?.remove(&id).unwrap_or_default();
 	if crate::game_addons::GameAddons::workshop_content_id(selected).is_none() {
 		files.push(selected.to_owned());
 	}
+	Ok(regular_files(files))
+}
+
+/// Like `item_archives`, for many items that may never have been installed, reading each folder once.
+pub(crate) fn item_archives_by_id(gmod: &Path, ids: &HashSet<PublishedFileId>) -> Result<HashMap<PublishedFileId, Vec<PathBuf>>, CleanerError> {
+	check_ancestors(gmod)?;
+	let mut found: HashMap<PublishedFileId, Vec<PathBuf>> = HashMap::new();
+	for (folder, legacy) in [(gmod.join("garrysmod/addons"), true), (gmod.join("garrysmod/cache/workshop"), false)] {
+		for path in entries(&folder)? {
+			if let Some(id) = archive_id(&path, legacy).map(PublishedFileId).filter(|id| ids.contains(id)) {
+				found.entry(id).or_default().push(path);
+			}
+		}
+	}
+	Ok(found.into_iter().map(|(id, files)| (id, regular_files(files))).filter(|(_, files)| !files.is_empty()).collect())
+}
+
+fn regular_files(mut files: Vec<PathBuf>) -> Vec<PathBuf> {
 	let mut seen = HashSet::new();
 	files.retain(|path| {
 		fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file() && !is_link(&metadata))
 			&& seen.insert(dunce::canonicalize(path).unwrap_or_else(|_| path.clone()))
 	});
-	Ok(files)
+	files
 }
 
 pub(crate) fn remove_archives(files: Vec<PathBuf>, permanent: bool) -> CleanResult {
@@ -967,6 +981,10 @@ mod tests {
 		assert_eq!(item_archives(&gmod, PublishedFileId(10), &gmod.join("garrysmod/addons/name_10.gma")).unwrap().len(), 3);
 		let steam_copy = root_path.join("steamapps/workshop/content/4000/10/content.gma");
 		assert_eq!(item_archives(&gmod, PublishedFileId(10), &steam_copy).unwrap().len(), 3);
+		let by_id = item_archives_by_id(&gmod, &HashSet::from([PublishedFileId(10), PublishedFileId(20), PublishedFileId(30)])).unwrap();
+		assert_eq!(by_id[&PublishedFileId(10)].len(), 3);
+		assert_eq!(by_id[&PublishedFileId(20)], vec![gmod.join("garrysmod/cache/workshop/20.gma")]);
+		assert!(!by_id.contains_key(&PublishedFileId(30)));
 
 		let result = remove_archives(found, true);
 		assert_eq!(result.removed.len(), 4);
