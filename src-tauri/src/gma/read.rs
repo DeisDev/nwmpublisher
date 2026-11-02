@@ -233,7 +233,9 @@ impl GMAFile {
 			reader.seek(SeekFrom::Start(end)).map_err(|error| GMAError::io("seek archive footer", &self.path, error))?;
 			reader.read_u32::<LittleEndian>().map_err(|error| GMAError::io("read archive footer", &self.path, error))?
 		} else { 0 };
-		progress.total += entries.values().map(|entry| entry.size).sum::<u64>() + if footer == 0 { 0 } else { end };
+		// Workshop archives often carry a footer that matches nothing while every entry checksum is intact, and the game ignores the footer, so it only counts when an entry has no checksum of its own.
+		let verify_footer = footer != 0 && entries.values().any(|entry| entry.crc == 0);
+		progress.total += entries.values().map(|entry| entry.size).sum::<u64>() + if verify_footer { end } else { 0 };
 		for entry in entries.values() {
 			reader.seek(SeekFrom::Start(self.pointers.entries + entry.index)).map_err(|error| GMAError::io("seek archive entry", &self.path, error))?;
 			let mut remaining = entry.size;
@@ -250,7 +252,7 @@ impl GMAFile {
 		}
 		if actual_size == end { return Ok(()); } // Legacy archives may omit the footer.
 		if actual_size.checked_sub(end) != Some(4) { return Err(GMAError::FormatError); }
-		if footer == 0 { return Ok(()); } // Facepunch gmad -nocrc explicitly writes zero CRCs.
+		if !verify_footer { return Ok(()); } // Facepunch gmad -nocrc explicitly writes zero CRCs.
 		let checksummed = end;
 		reader.seek(SeekFrom::Start(0)).map_err(|error| GMAError::io("seek archive", &self.path, error))?;
 		let mut hash = crc32fast::Hasher::new();
@@ -326,6 +328,24 @@ mod tests {
 			assert!(matches!(gma.validate_payloads(&mut ByteProgress::new(&transaction, 0), &mut [0; 8 * 1024]), Err(GMAError::Checksum(_))));
 			transaction.finished(());
 		}
+	}
+
+	#[test]
+	fn wrong_footer_is_ignored_when_every_entry_checksum_passes() {
+		let mut gma = archive(&[("lua/a.lua", 2, crc32fast::hash(b"te")), ("lua/b.lua", 2, crc32fast::hash(b"st"))], b"test", Some(1));
+		gma.entries().unwrap();
+		let transaction = crate::transactions::new_extraction();
+		let mut progress = ByteProgress::new(&transaction, 0);
+		gma.validate_payloads(&mut progress, &mut [0; 8 * 1024]).unwrap();
+		assert_eq!(*progress.done.lock(), 4);
+		assert_eq!(progress.total, 4);
+		transaction.finished(());
+
+		let mut gma = archive(&[("lua/a.lua", 2, crc32fast::hash(b"te")), ("lua/b.lua", 2, 0)], b"test", Some(1));
+		gma.entries().unwrap();
+		let transaction = crate::transactions::new_extraction();
+		assert!(matches!(gma.validate_payloads(&mut ByteProgress::new(&transaction, 0), &mut [0; 8 * 1024]), Err(GMAError::Checksum(_))));
+		transaction.finished(());
 	}
 
 	#[test]

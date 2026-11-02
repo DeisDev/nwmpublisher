@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The addon cleaner no longer keeps unsubscribed files with the message that Steam could not mark them as unused.
+- Extracting an addon no longer fails with a checksum error when its files are intact but the archive's trailing checksum is wrong.
 
 ## [3.7.0] - 2026-10-23
 
