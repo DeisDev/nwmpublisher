@@ -53,8 +53,6 @@
 	"cleaner_error_gmod": "Garry’s Mod est introuvable. Définissez son dossier dans les Paramètres et relancez l’analyse.",
 	"cleaner_error_task": "Le nettoyeur n’a pas pu terminer : {detail}",
 	"cleaner_error_subscribed": "Cet addon est abonné ou en cours de téléchargement. Son fichier a été conservé.",
-	"cleaner_error_steam": "Steam gère encore cet addon et le téléchargerait de nouveau. Son fichier a été conservé.",
-	"cleaner_error_unused": "Steam n’a pas pu marquer cet addon comme inutilisé. Son fichier a été conservé.",
 	"cleaner_error_retained": "Le fichier n’a pas été déplacé vers la Corbeille. Il se trouve toujours à son emplacement d’origine.",
 	"addon_delete": "Supprimer",
 	"addon_unsubscribe": "Se désabonner",

@@ -335,6 +335,16 @@ fn mark_unused(id: PublishedFileId) -> bool {
 	}
 }
 
+/// Steam restores the files of items it still needs, so it has to let go of the item first.
+/// It refuses items it no longer needs, which it leaves on disk without restoring them.
+pub(crate) fn release_item(id: PublishedFileId, state: ItemState) -> bool {
+	let released = mark_unused(id);
+	if !released {
+		wprintln!("Steam would not mark Workshop item {} as unused (state {:?}); deleting its files", id.0, state);
+	}
+	released
+}
+
 pub(crate) fn is_link(metadata: &Metadata) -> bool {
 	#[cfg(windows)]
 	{
@@ -754,10 +764,9 @@ pub async fn clean_addons(
 			if file.source != Source::Workshop || state.is_empty() {
 				return Ok(Removal::Delete);
 			}
-			// Steam restores the files of items it still tracks, so it has to let go of the item first.
 			unchanged(file)?;
-			if !*marked.entry(id).or_insert_with(|| mark_unused(id)) {
-				return Err(CleanerError::new("cleaner_error_unused"));
+			if !*marked.entry(id).or_insert_with(|| release_item(id, state)) {
+				return Ok(Removal::Delete);
 			}
 			if fs::symlink_metadata(&file.path).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound) {
 				return Ok(Removal::Gone);

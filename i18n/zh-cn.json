@@ -53,8 +53,6 @@
 	"cleaner_error_gmod": "未找到 Garry’s Mod。请在设置中指定其文件夹后重新扫描。",
 	"cleaner_error_task": "清理器无法完成：{detail}",
 	"cleaner_error_subscribed": "此模组已订阅或正在下载。其文件已保留。",
-	"cleaner_error_steam": "Steam 仍在管理此模组，并会重新下载它。其文件已保留。",
-	"cleaner_error_unused": "Steam 无法将此模组标记为未使用。其文件已保留。",
 	"cleaner_error_retained": "文件未被移至回收站，仍在原位置。",
 	"addon_delete": "删除",
 	"addon_unsubscribe": "取消订阅",

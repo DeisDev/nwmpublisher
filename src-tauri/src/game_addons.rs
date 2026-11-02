@@ -445,23 +445,26 @@ pub enum Removal {
 	Delete,
 }
 
-/// Steam downloads subscribed items again and restores the files of items it still tracks, so those are not deleted.
+/// Steam downloads subscribed items again, and Steam's own copies cannot be checked while it is offline.
 fn removal(steam_managed: bool, state: Option<ItemState>) -> Option<Removal> {
 	match state {
 		Some(state) if state.contains(ItemState::SUBSCRIBED) => Some(Removal::Unsubscribe),
-		Some(state) if state.intersects(ItemState::DOWNLOADING | ItemState::DOWNLOAD_PENDING) || (steam_managed && !state.is_empty()) => None,
+		Some(state) if state.intersects(ItemState::DOWNLOADING | ItemState::DOWNLOAD_PENDING) => None,
 		None if steam_managed => None,
 		_ => Some(Removal::Delete),
 	}
 }
 
-fn addon_removal(gma: &GMAFile) -> Option<Removal> {
-	let state = match gma.id {
+fn item_state(gma: &GMAFile) -> Option<ItemState> {
+	match gma.id {
 		Some(id) if steam!().connected() => Some(steam!().client().ugc().item_state(id)),
 		Some(_) => None,
 		None => Some(ItemState::empty()),
-	};
-	removal(GameAddons::workshop_content_id(&gma.path).is_some(), state)
+	}
+}
+
+fn addon_removal(gma: &GMAFile) -> Option<Removal> {
+	removal(GameAddons::workshop_content_id(&gma.path).is_some(), item_state(gma))
 }
 
 fn installed_addon(path: &Path) -> Result<Arc<Addon>, CleanerError> {
@@ -608,10 +611,13 @@ pub async fn unsubscribe_installed_addons(paths: Vec<PathBuf>, delete_files: boo
 fn delete_addon(path: &Path, permanent: bool) -> Result<[PathBuf; 2], CleanerError> {
 	let addon = installed_addon(path)?;
 	let gma = addon.installed();
-	match addon_removal(gma) {
+	let steam_managed = GameAddons::workshop_content_id(&gma.path).is_some();
+	let state = item_state(gma);
+	match removal(steam_managed, state) {
 		Some(Removal::Delete) => {}
 		Some(Removal::Unsubscribe) => return Err(CleanerError::new("cleaner_error_subscribed")),
-		None => return Err(CleanerError::new("cleaner_error_steam")),
+		None if state.is_none() => return Err(CleanerError::new("addon_unsubscribe_offline")),
+		None => return Err(CleanerError::new("cleaner_error_subscribed")),
 	}
 	let path = gma.path.clone();
 	let metadata = std::fs::symlink_metadata(&path).map_err(|error| CleanerError::io(&path, error))?;
@@ -619,6 +625,16 @@ fn delete_addon(path: &Path, permanent: bool) -> Result<[PathBuf; 2], CleanerErr
 		return Err(CleanerError::new("addon_removal_changed"));
 	}
 	let canonical = dunce::canonicalize(&path).unwrap_or_else(|_| path.clone());
+	if let (true, Some(id), Some(state)) = (steam_managed, gma.id, state.filter(|state| !state.is_empty())) {
+		if addon_cleaner::release_item(id, state) {
+			if std::fs::symlink_metadata(&path).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound) {
+				return Ok([path, canonical]);
+			}
+			if !steam!().client().ugc().item_state(id).is_empty() {
+				return Err(CleanerError::new("addon_delete_steam_cache"));
+			}
+		}
+	}
 	addon_cleaner::remove_file(&path, permanent)?;
 	if GameAddons::workshop_content_id(&path).is_some() {
 		if let Err(error) = addon_cleaner::remove_empty_folder(path.parent().unwrap()) {
@@ -1033,14 +1049,16 @@ mod tests {
 	}
 
 	#[test]
-	fn removal_is_offered_only_when_steam_would_not_restore_the_file() {
+	fn removal_is_offered_unless_steam_is_downloading_or_offline() {
 		assert_eq!(removal(false, Some(ItemState::SUBSCRIBED | ItemState::INSTALLED)), Some(Removal::Unsubscribe));
 		assert_eq!(removal(true, Some(ItemState::SUBSCRIBED)), Some(Removal::Unsubscribe));
 		assert_eq!(removal(false, Some(ItemState::empty())), Some(Removal::Delete));
 		assert_eq!(removal(true, Some(ItemState::empty())), Some(Removal::Delete));
 		assert_eq!(removal(false, Some(ItemState::INSTALLED)), Some(Removal::Delete));
-		assert_eq!(removal(true, Some(ItemState::INSTALLED)), None);
+		assert_eq!(removal(true, Some(ItemState::INSTALLED)), Some(Removal::Delete));
+		assert_eq!(removal(true, Some(ItemState::INSTALLED | ItemState::NEEDS_UPDATE)), Some(Removal::Delete));
 		assert_eq!(removal(false, Some(ItemState::DOWNLOADING)), None);
+		assert_eq!(removal(true, Some(ItemState::INSTALLED | ItemState::DOWNLOADING)), None);
 		assert_eq!(removal(false, Some(ItemState::DOWNLOAD_PENDING)), None);
 		assert_eq!(removal(false, None), Some(Removal::Delete));
 		assert_eq!(removal(true, None), None);

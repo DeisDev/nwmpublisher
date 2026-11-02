@@ -53,8 +53,6 @@
 	"cleaner_error_gmod": "Garry’s Mod is niet gevonden. Stel de map in bij Instellingen en scan opnieuw.",
 	"cleaner_error_task": "De opschoner kon niet worden voltooid: {detail}",
 	"cleaner_error_subscribed": "Je bent geabonneerd op deze addon of hij wordt gedownload. Het bestand is behouden.",
-	"cleaner_error_steam": "Steam beheert deze addon nog en zou hem opnieuw downloaden. Het bestand is behouden.",
-	"cleaner_error_unused": "Steam kon deze addon niet als ongebruikt markeren. Het bestand is behouden.",
 	"cleaner_error_retained": "Het bestand is niet naar de Prullenbak verplaatst. Het staat nog op de oorspronkelijke locatie.",
 	"addon_delete": "Verwijderen",
 	"addon_unsubscribe": "Afmelden",

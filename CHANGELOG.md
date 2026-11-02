@@ -14,10 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a Sync tab to collections that compares a collection with your subscriptions, so you can add what you subscribe to and remove what you don't. Mark a collection as mirroring your subscriptions to see the differences as soon as you open it.
 - Change your subscriptions to match a collection from its Sync tab.
 - Remove unsubscribed items from several collections at once from the Collections selection bar.
+- Delete Steam's copies of unsubscribed addons from Installed Addons.
 
 ### Changed
 
 - Saving a collection shows progress and can be stopped. Large changes are sent to Steam at a steady pace and wait when Steam asks to slow down.
+
+### Fixed
+
+- The addon cleaner no longer keeps unsubscribed files with the message that Steam could not mark them as unused.
 
 ## [3.7.0] - 2026-10-23
 

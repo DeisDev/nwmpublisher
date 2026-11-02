@@ -53,8 +53,6 @@
 	"cleaner_error_gmod": "O Garry’s Mod não foi encontrado. Defina a pasta dele em Configurações e verifique novamente.",
 	"cleaner_error_task": "O limpador não pôde terminar: {detail}",
 	"cleaner_error_subscribed": "Este addon está inscrito ou sendo baixado. Seu arquivo foi mantido.",
-	"cleaner_error_steam": "O Steam ainda gerencia este addon e o baixaria novamente. Seu arquivo foi mantido.",
-	"cleaner_error_unused": "O Steam não conseguiu marcar este addon como não usado. Seu arquivo foi mantido.",
 	"cleaner_error_retained": "O arquivo não foi movido para a Lixeira. Ele continua no local original.",
 	"addon_delete": "Excluir",
 	"addon_unsubscribe": "Cancelar inscrição",

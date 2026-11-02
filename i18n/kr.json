@@ -53,8 +53,6 @@
 	"cleaner_error_gmod": "게리모드를 찾지 못했습니다. 설정에서 게리모드 폴더를 지정한 후 다시 검사하세요.",
 	"cleaner_error_task": "정리를 완료하지 못했습니다: {detail}",
 	"cleaner_error_subscribed": "이 애드온은 구독 중이거나 다운로드 중입니다. 파일은 그대로 유지되었습니다.",
-	"cleaner_error_steam": "스팀이 이 애드온을 여전히 관리하며 다시 다운로드할 수 있습니다. 파일은 그대로 유지되었습니다.",
-	"cleaner_error_unused": "스팀이 이 애드온을 사용하지 않음으로 표시하지 못했습니다. 파일은 그대로 유지되었습니다.",
 	"cleaner_error_retained": "파일이 휴지통으로 이동되지 않았습니다. 원래 위치에 그대로 있습니다.",
 	"addon_delete": "삭제",
 	"addon_unsubscribe": "구독 취소",

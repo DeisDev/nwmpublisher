@@ -53,8 +53,6 @@
 	"cleaner_error_gmod": "Garry’s Mod bulunamadı. Klasörünü Ayarlar'dan belirleyin ve yeniden tarayın.",
 	"cleaner_error_task": "Temizleyici işlemi tamamlayamadı: {detail}",
 	"cleaner_error_subscribed": "Bu eklentiye abonesiniz veya indiriliyor. Dosyası korundu.",
-	"cleaner_error_steam": "Steam bu eklentiyi hâlâ yönetiyor ve yeniden indirirdi. Dosyası korundu.",
-	"cleaner_error_unused": "Steam bu eklentiyi kullanılmıyor olarak işaretleyemedi. Dosyası korundu.",
 	"cleaner_error_retained": "Dosya Çöp Sepeti'ne taşınmadı. Hâlâ özgün konumunda.",
 	"addon_delete": "Sil",
 	"addon_unsubscribe": "Abonelikten çık",

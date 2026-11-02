@@ -53,8 +53,6 @@
 	"cleaner_error_gmod": "Nie znaleziono Garry’s Mod. Ustaw jego folder w Ustawieniach i skanuj ponownie.",
 	"cleaner_error_task": "Czyszczenie nie mogło zostać ukończone: {detail}",
 	"cleaner_error_subscribed": "Ten dodatek jest obserwowany lub pobierany. Jego plik został zachowany.",
-	"cleaner_error_steam": "Steam nadal zarządza tym dodatkiem i pobrałby go ponownie. Jego plik został zachowany.",
-	"cleaner_error_unused": "Steam nie mógł oznaczyć tego dodatku jako nieużywanego. Jego plik został zachowany.",
 	"cleaner_error_retained": "Plik nie został przeniesiony do Kosza. Nadal znajduje się w pierwotnej lokalizacji.",
 	"addon_delete": "Usuń",
 	"addon_unsubscribe": "Przestań obserwować",
