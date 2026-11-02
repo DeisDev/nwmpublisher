@@ -64,6 +64,7 @@ enum Message {
 static CHANNEL: std::sync::LazyLock<(Sender<Message>, Receiver<Message>)> = std::sync::LazyLock::new(crossbeam::channel::unbounded);
 static STARTED: AtomicBool = AtomicBool::new(false);
 static CURRENT: std::sync::LazyLock<Mutex<Option<PathBuf>>> = std::sync::LazyLock::new(|| Mutex::new(None));
+static DESKTOP_THREAD: std::sync::OnceLock<std::thread::ThreadId> = std::sync::OnceLock::new();
 
 /// Records a line in the log. The desktop app also prints it; the CLI keeps its terminal for results and messages it prints itself.
 pub fn write(level: Level, message: String) {
@@ -260,6 +261,9 @@ fn run(mut log: Option<LogFile>, mode: Mode, started: DateTime<Local>, receiver:
 }
 
 pub fn init(mode: Mode) {
+	if let Mode::Desktop = mode {
+		DESKTOP_THREAD.set(std::thread::current().id()).ok();
+	}
 	let started = Local::now();
 	let directory = app_data!().logs_dir();
 	let log = match LogFile::create(mode, &directory, started) {
@@ -315,6 +319,34 @@ pub fn panic(panic: &PanicHookInfo<'_>) {
 		std::eprintln!("{panic}");
 		crate::cli::print_log_location();
 	}
+	#[cfg(target_os = "windows")]
+	if DESKTOP_THREAD.get() == Some(&std::thread::current().id()) {
+		show_fatal_error(panic);
+	}
+}
+
+/// A panic on the desktop app's main thread closes the app, and release builds have no console to show it.
+#[cfg(target_os = "windows")]
+fn show_fatal_error(panic: &PanicHookInfo<'_>) {
+	#[link(name = "user32")]
+	unsafe extern "system" {
+		fn MessageBoxW(owner: *mut std::ffi::c_void, text: *const u16, caption: *const u16, kind: u32) -> i32;
+	}
+	const MB_ICONERROR: u32 = 0x10;
+	const MB_SETFOREGROUND: u32 = 0x10000;
+
+	let error = panic.payload_as_str().map_or_else(|| panic.to_string(), str::to_owned);
+	let mut message = crate::util::english::format("fatal_error.message", &[("app", APP_NAME), ("error", &error)]);
+	if let Some(path) = current() {
+		message += "\n\n";
+		message += &crate::util::english::format("fatal_error.log", &[("path", &path.display().to_string())]);
+	}
+	let wide = |text: &str| text.encode_utf16().chain([0]).collect::<Vec<u16>>();
+	let (text, caption) = (wide(&message), wide(APP_NAME));
+	// A dialog on this thread would run its message loop inside the event loop that is panicking.
+	std::thread::spawn(move || unsafe { MessageBoxW(std::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), MB_ICONERROR | MB_SETFOREGROUND) })
+		.join()
+		.ok();
 }
 
 #[tauri::command]

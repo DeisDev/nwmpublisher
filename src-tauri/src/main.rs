@@ -93,6 +93,11 @@ fn main() -> std::process::ExitCode {
 	println!("Starting GUI...");
 
 	tauri::Builder::default()
+		.plugin(tauri_plugin_single_instance::init(|app, _, _| {
+			let Some(window) = app.get_webview_window("nwmpublisher") else { return };
+			window.unminimize().ok();
+			window.set_focus().ok();
+		}))
 		.plugin(tauri_plugin_dialog::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.setup(|app| {
