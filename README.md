@@ -112,7 +112,8 @@ nwmpublisher --publish "my_addon" --update 123456789 --changes "Fixed a bug"
 `-e` and `-o` are aliases for `--extract` and `--out`. Output goes directly into
 `--out`, creating the directory if needed and overwriting matching files. Without
 `--out`, extraction uses an addon-named folder in the application's configured
-temporary directory (by default, `nwmpublisher` inside the system temporary directory).
+temporary directory (by default, `nwmpublisher` inside the system temporary directory, or
+inside `~/.cache` on Linux).
 This default destination follows the application's overwrite/recycle setting.
 `--out-parent PATH` creates the addon folder inside `PATH` instead. `--out` can't be
 combined with `--out-parent` or `--workshop-title`.

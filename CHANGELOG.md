@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Saving a collection shows progress and can be stopped. Large changes are sent to Steam at a steady pace and wait when Steam asks to slow down.
+- On Linux, temporary files now go in `~/.cache/nwmpublisher` instead of `/tmp`, so Steam installed through Nix can read uploads.
+- Temporary files left over for more than a day, such as after a crash, are deleted when nwmpublisher starts.
 
 ### Fixed
 
@@ -26,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extracting an addon no longer fails with a checksum error when its files are intact but the archive's trailing checksum is wrong.
 - Opening nwmpublisher while it is already running now switches to the open window instead of starting a second copy.
 - On Windows, nwmpublisher now shows a message when an error closes it.
+- On Linux, uploads that Steam cannot read now explain how to fix it instead of showing "a file was not found".
 
 ## [3.7.0] - 2026-10-23
 

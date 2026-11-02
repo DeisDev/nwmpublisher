@@ -35,7 +35,7 @@ static LEGACY_APP_SETTINGS_PATH: std::sync::LazyLock<PathBuf> = std::sync::LazyL
 		.unwrap_or_else(|| dirs::data_dir().unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir())))
 		.join("gmpublisher/settings.json")
 });
-static TEMP_DIR: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| std::env::temp_dir().join(APP_NAME));
+static TEMP_DIR: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| temp_base_dir().join(APP_NAME));
 static DOWNLOADS_DIR: std::sync::LazyLock<Option<PathBuf>> = std::sync::LazyLock::new(dirs::download_dir);
 /// Whether nwmpublisher already had settings of its own when it started.
 /// Evaluated before anything can write settings, so it stays true for the whole run.
@@ -47,6 +47,20 @@ static SETTINGS_RECOVERY: std::sync::LazyLock<RwLock<Option<String>>> = std::syn
 /// Importing reloads the webview rather than restarting the process, so without this the
 /// offer would keep coming back until the app was closed and opened again.
 static MIGRATION_RESOLVED: AtomicBool = AtomicBool::new(false);
+
+// Sandboxed Steam builds (Flatpak, Nix) have a private /tmp, so they cannot read uploads staged there.
+#[cfg(target_os = "linux")]
+pub(crate) fn temp_base_dir() -> PathBuf {
+	dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+}
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn temp_base_dir() -> PathBuf {
+	std::env::temp_dir()
+}
+
+pub(crate) fn default_temp_dir() -> &'static Path {
+	&TEMP_DIR
+}
 
 #[derive(Debug)]
 pub struct OpenCount(Cell<u32>);

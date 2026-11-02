@@ -13,6 +13,8 @@ use rayon::ThreadPool;
 use super::{output::Directory, staging::{ExtractionStage, StagedFile, ICON_LEAF, METADATA_LEAF}};
 use serde::{Deserialize, Serialize};
 
+pub const ENTRY_PREVIEW_DIR: &str = "nwmpublisher";
+
 pub static THREAD_POOL: std::sync::LazyLock<ThreadPool> =
 	std::sync::LazyLock::new(|| rayon::ThreadPoolBuilder::new().num_threads(app_data!().settings.read().performance().extraction_jobs).build().unwrap());
 
@@ -73,9 +75,9 @@ fn extraction_temp_dir() -> Result<PathBuf, GMAError> {
 	if let Some(path) = app_data!().settings.read().temp.clone() { return Ok(path); }
 	// Resolve the OS-provided base (notably /var on macOS), then enforce no-follow
 	// traversal for the application directory and every extraction beneath it.
-	let base = std::env::temp_dir();
-	base.canonicalize().map(|base| base.join(crate::APP_NAME))
-		.map_err(|error| GMAError::io("resolve system temporary directory", &base, error))
+	let base = crate::appdata::temp_base_dir();
+	fs::create_dir_all(&base).and_then(|()| base.canonicalize()).map(|base| base.join(crate::APP_NAME))
+		.map_err(|error| GMAError::io("resolve temporary directory", &base, error))
 }
 
 fn sync_file(file: &File, sync: bool) -> std::io::Result<()> {
@@ -358,7 +360,7 @@ impl ExtractGMAImmut for GMAFile {
 		open_after_extract: bool,
 		_handle: Option<GMAReader>,
 	) -> Result<PathBuf, GMAError> {
-		let parent = extraction_temp_dir()?.join("nwmpublisher").join(&self.extracted_name);
+		let parent = extraction_temp_dir()?.join(ENTRY_PREVIEW_DIR).join(&self.extracted_name);
 		let options = ExtractOptions { performance: app_data!().settings.read().performance(), ..Default::default() };
 		self.extract_staged(ExtractDestination::Directory(parent), transaction, open_after_extract, true, Some(entry_path), &options)
 			.map(|extracted| extracted.path)

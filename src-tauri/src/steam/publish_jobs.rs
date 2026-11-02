@@ -187,8 +187,48 @@ pub async fn review_publish(key: String, workshop_id: String) -> Result<(), Stri
 	}).await.map_err(|error| error.to_string())?
 }
 
+const STALE_TEMP_AGE: Duration = Duration::from_secs(24 * 60 * 60);
+
+fn is_link(metadata: &fs::Metadata) -> bool {
+	#[cfg(windows)] {
+		use std::os::windows::fs::MetadataExt;
+		if metadata.file_attributes() & 0x400 != 0 { return true; }
+	}
+	metadata.file_type().is_symlink()
+}
+
+// Only the app's own temp folder is swept; a custom Temp Path may hold the user's files.
+fn remove_stale_temp_files() {
+	let kept: HashSet<PathBuf> = {
+		let _guard = JOBS_LOCK.lock();
+		match records() {
+			Ok(records) => records.into_iter().filter(|record| matches!(record.outcome.as_str(), "pending" | "unknown") && !record.reviewed).filter_map(|record| record.staging).collect(),
+			Err(error) => { eprintln!("Temp cleanup: {}", error); return; }
+		}
+	};
+	let cutoff = SystemTime::now() - STALE_TEMP_AGE;
+	let directory = crate::appdata::default_temp_dir();
+	remove_stale_entries(&directory.join(crate::gma::ENTRY_PREVIEW_DIR), cutoff, &kept);
+	remove_stale_entries(directory, cutoff, &kept);
+}
+
+fn remove_stale_entries(directory: &Path, cutoff: SystemTime, kept: &HashSet<PathBuf>) {
+	let entries = match fs::read_dir(directory) {
+		Ok(entries) => entries, Err(error) if error.kind() == std::io::ErrorKind::NotFound => return, Err(error) => { eprintln!("Temp cleanup {}: {}", directory.display(), error); return; }
+	};
+	for entry in entries {
+		let path = match entry { Ok(entry) => entry.path(), Err(error) => { eprintln!("Temp cleanup {}: {}", directory.display(), error); continue; } };
+		if kept.contains(&path) { continue; }
+		let metadata = match fs::symlink_metadata(&path) { Ok(metadata) => metadata, Err(error) => { eprintln!("Temp cleanup {}: {}", path.display(), error); continue; } };
+		if is_link(&metadata) || !metadata.modified().is_ok_and(|modified| modified < cutoff) { continue; }
+		let removed = if metadata.is_dir() { fs::remove_dir_all(&path) } else { fs::remove_file(&path) };
+		if let Err(error) = removed { eprintln!("Temp cleanup {}: {}", path.display(), error); }
+	}
+}
+
 // Cleanup only finalized, application-owned jobs. Unknown operations retain their files.
 pub fn janitor() {
+	std::thread::spawn(remove_stale_temp_files);
 	std::thread::spawn(|| loop {
 		std::thread::sleep(Duration::from_secs(30));
 		let _guard = JOBS_LOCK.lock();
@@ -212,11 +252,7 @@ pub fn janitor() {
 				}
 				Err(error) => { eprintln!("Publishing cleanup {}: {}", root.display(), error); continue; }
 			};
-			if !metadata.is_dir() || metadata.file_type().is_symlink() { continue; }
-			#[cfg(windows)] {
-				use std::os::windows::fs::MetadataExt;
-				if metadata.file_attributes() & 0x400 != 0 { continue; }
-			}
+			if !metadata.is_dir() || is_link(&metadata) { continue; }
 			if fs::read_to_string(root.join("operation-id")).ok().as_deref() != Some(record.key.as_str()) { continue; }
 			match fs::remove_dir_all(root) {
 				Ok(()) => { record.staging = None; record.cleanup_warnings.clear(); if let Err(error) = save(&record) { eprintln!("Publishing cleanup: {}", error); } }
@@ -224,4 +260,29 @@ pub fn janitor() {
 			}
 		}
 	});
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn stale_temp_cleanup_keeps_recent_and_retained_entries() {
+		let directory = tempfile::tempdir().unwrap();
+		let spool = directory.path().join(".tmp123");
+		let extracted = directory.path().join("addon");
+		let retained = directory.path().join("nwmpublisher-publishing-retained");
+		fs::write(&spool, b"data").unwrap();
+		fs::create_dir_all(extracted.join("lua")).unwrap();
+		fs::write(extracted.join("lua/init.lua"), b"data").unwrap();
+		fs::create_dir(&retained).unwrap();
+		let kept = HashSet::from([retained.clone()]);
+
+		remove_stale_entries(&directory.path().join("missing"), SystemTime::now(), &kept);
+		remove_stale_entries(directory.path(), SystemTime::now() - Duration::from_secs(3600), &kept);
+		assert!(spool.exists() && extracted.exists() && retained.exists());
+
+		remove_stale_entries(directory.path(), SystemTime::now() + Duration::from_secs(3600), &kept);
+		assert!(!spool.exists() && !extracted.exists() && retained.exists());
+	}
 }

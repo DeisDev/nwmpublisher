@@ -755,6 +755,7 @@
 	"ERR_UNKNOWN": "Unknown Error",
 	"ERR_NO_ADDONS_FOUND": "No Addons Found",
 	"ERR_STEAM_ERROR": "Steam Error: {data}",
+	"ERR_STEAM_FILES_UNREADABLE": "Steam reported a missing file. If Steam runs in a sandbox, such as Flatpak, it may not be able to read {data}. Give Steam access to that folder or choose another Temp Path in Settings.",
 	"ERR_WHITELIST": "These entries do not pass the file type/location whitelist. If this was unexpected, your addon probably has an incorrect file structure.\n\nIf you want to filter these file types from your GMAs, add them to the Ignored File Patterns.\n\n{data}",
 	"ERR_IO_ERROR": "I/O Error",
 	"copy_diagnostics": "Copy diagnostics",
