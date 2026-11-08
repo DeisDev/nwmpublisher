@@ -35,7 +35,8 @@ It does not add shortcuts or `.gma` file associations.
 It requires [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section),
 which is already present on most Windows PCs.
 
-On Linux, if the window stays blank, install the package for your distribution instead of the AppImage.
+On Linux, the AppImage uses your system's WebKitGTK when it is installed. Set `NWMPUBLISHER_BUNDLED_WEBKIT=1` to use
+the copy inside the AppImage instead. If the window stays blank, install the package for your distribution instead of the AppImage.
 If the window looks wrong on Wayland, start nwmpublisher with `GDK_BACKEND=x11`, for example
 `GDK_BACKEND=x11 nwmpublisher`. If the window is blank or parts of it do not draw, which mostly happens with
 the proprietary NVIDIA driver, start it with `WEBKIT_DISABLE_DMABUF_RENDERER=1`. If that does not help, start it

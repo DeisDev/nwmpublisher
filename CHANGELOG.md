@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Opening nwmpublisher while it is already running now switches to the open window instead of starting a second copy.
 - On Windows, nwmpublisher now shows a message when an error closes it.
 - On Linux, uploads that Steam cannot read now explain how to fix it instead of showing "a file was not found".
+- The Linux packages no longer require libxdo, which they never used. The Fedora package installs again on Fedora 45.
+- The Linux AppImage uses your system's WebKitGTK when it is installed, which fixes it crashing on Fedora 45 and other recent distributions. Set `NWMPUBLISHER_BUNDLED_WEBKIT=1` to use the copy inside the AppImage.
 
 ## [3.7.0] - 2026-10-23
 

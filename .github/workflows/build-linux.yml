@@ -51,6 +51,10 @@ jobs:
       env:
         APPIMAGE_EXTRACT_AND_RUN: "1"
 
+    - name: Use the system WebKitGTK in the AppImage when it is installed
+      shell: bash
+      run: .github/scripts/appimage-host-webkit.sh src-tauri/target/release/bundle/appimage/*.AppImage
+
     - name: Verify .deb and .rpm packages
       if: ${{ !inputs.nightly }}
       shell: bash
@@ -112,7 +116,9 @@ jobs:
           test -n "$(find "$appdir/usr" -type f -name "$helper" -executable -print)"
         done
         test -n "$(find "$appdir/usr" -name libwebkit2gtkinjectedbundle.so -print)"
+        grep -Fq NWMPUBLISHER_BUNDLED_WEBKIT "$appdir/AppRun"
         env -u LD_LIBRARY_PATH "$appdir/AppRun" --help
+        env -u LD_LIBRARY_PATH NWMPUBLISHER_BUNDLED_WEBKIT=1 "$appdir/AppRun" --help
 
         export LD_LIBRARY_PATH="$appdir/usr/lib:$appdir/usr/lib/nwmpublisher"
         while IFS= read -r -d '' binary; do

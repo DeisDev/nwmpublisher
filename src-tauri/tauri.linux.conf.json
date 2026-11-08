@@ -12,7 +12,7 @@
 			},
 			"deb": {
 				"depends": [
-					"libc6 (>= 2.35)", "libssl3", "libxdo3", "liblzma5",
+					"libc6 (>= 2.35)", "libssl3", "liblzma5",
 					"ca-certificates", "dbus", "xdg-utils",
 					"gstreamer1.0-plugins-base", "gstreamer1.0-plugins-good",
 					"gstreamer1.0-plugins-bad", "gstreamer1.0-libav"
@@ -29,7 +29,6 @@
 					"libc.so.6(GLIBC_2.35)(64bit)",
 					"libssl.so.3()(64bit)",
 					"libcrypto.so.3()(64bit)",
-					"libxdo.so.3()(64bit)",
 					"liblzma.so.5()(64bit)",
 					"ca-certificates", "dbus-tools", "xdg-utils",
 					"gstreamer1-plugins-base", "gstreamer1-plugins-good",
