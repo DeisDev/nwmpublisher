@@ -7,7 +7,11 @@ use std::{
 	time::{Duration, Instant, SystemTime},
 };
 
-use crate::{webview::Addon, WorkshopItem, GMOD_APP_ID};
+use crate::{
+	addon_cleaner::{missing_explained, SubscriptionPages},
+	webview::Addon,
+	WorkshopItem, GMOD_APP_ID,
+};
 use parking_lot::Mutex;
 use serde::Serialize;
 use steamworks::{AppIDs, PublishedFileId, QueryResults, SteamError, SteamId, UGCType, UserList, UserListOrder};
@@ -20,6 +24,7 @@ use super::{
 };
 
 const PAGES_IN_FLIGHT: usize = 4;
+const INCOMPLETE: &str = "Steam returned an incomplete list of subscriptions. Try again.";
 const SNAPSHOT_MAX_AGE: Duration = Duration::from_secs(5 * 60);
 static FETCH: Mutex<()> = Mutex::new(());
 static CACHE: Mutex<Option<Cached>> = Mutex::new(None);
@@ -65,10 +70,8 @@ fn request_page(account: SteamId, page: u32, sender: mpsc::Sender<(u32, Page)>) 
 		.fetch(move |result| {
 			let result = result.map_err(failed).and_then(|results| {
 				let entries = (0..results.returned_results())
-					.map(|index| {
-						let details = read_item(&results, index, true)?.ok_or_else(|| "Steam returned an incomplete page of subscriptions. Try again.".to_string())?;
-						Ok(CollectionEntry::read(details.item.id, Some(&details)))
-					})
+					.filter_map(|index| read_item(&results, index, true).transpose())
+					.map(|details| details.map(|details| CollectionEntry::read(details.item.id, Some(&details))))
 					.collect::<Result<Vec<_>, String>>()?;
 				Ok((results.total_results(), entries))
 			});
@@ -77,14 +80,14 @@ fn request_page(account: SteamId, page: u32, sender: mpsc::Sender<(u32, Page)>) 
 	Ok(())
 }
 
-fn server_subscriptions(account: SteamId, progress: Option<&Channel<CollectionProgress>>) -> Result<Vec<CollectionEntry>, String> {
+/// Also returns how many subscriptions Steam counted but left out of the pages.
+fn server_subscriptions(account: SteamId, progress: Option<&Channel<CollectionProgress>>) -> Result<(Vec<CollectionEntry>, usize), String> {
 	let (sender, receiver) = mpsc::channel();
 	let mut pending = HashMap::from([(1, Instant::now())]);
 	request_page(account, 1, sender.clone())?;
 	let mut next_page = 2;
 	let mut pages = HashMap::new();
-	let mut ids = HashSet::new();
-	let mut expected = None;
+	let mut subscriptions = SubscriptionPages::default();
 	while !pending.is_empty() {
 		let remaining = pending.values().map(|started| STEAM_TIMEOUT.saturating_sub(started.elapsed())).min().unwrap();
 		let (page, response) = receiver
@@ -94,28 +97,24 @@ fn server_subscriptions(account: SteamId, progress: Option<&Channel<CollectionPr
 			return Err("Steam returned an unexpected page of subscriptions. Try again.".into());
 		}
 		let (total, entries) = response?;
-		let page_size = RESULTS_PER_PAGE as u32;
-		if entries.len() != total.saturating_sub((page - 1) * page_size).min(page_size) as usize {
-			return Err("Steam returned an incomplete page of subscriptions. Try again.".into());
-		}
 		let page_ids = entries.iter().map(|entry| entry.id.parse().map(PublishedFileId)).collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?;
-		crate::addon_cleaner::append_page(&mut ids, total, &mut expected, page_ids).map_err(|error| error.to_string())?;
+		subscriptions.append(page, total, page_ids).map_err(|error| error.to_string())?;
 		pages.insert(page, entries);
 		if let Some(channel) = progress {
-			report(channel, ids.len(), total as usize);
+			report(channel, subscriptions.received(), total as usize);
 		}
-		while pending.len() < PAGES_IN_FLIGHT && next_page <= total.div_ceil(page_size) {
+		while pending.len() < PAGES_IN_FLIGHT && next_page <= total.div_ceil(RESULTS_PER_PAGE as u32) {
 			pending.insert(next_page, Instant::now());
 			request_page(account, next_page, sender.clone())?;
 			next_page += 1;
 		}
 	}
-	if expected.is_some_and(|total| total as usize != ids.len()) {
-		return Err("Steam returned an incomplete list of subscriptions. Try again.".into());
+	if !subscriptions.complete() {
+		return Err(INCOMPLETE.into());
 	}
 	let mut pages: Vec<_> = pages.into_iter().collect();
 	pages.sort_by_key(|(page, _)| *page);
-	Ok(pages.into_iter().flat_map(|(_, entries)| entries).collect())
+	Ok((pages.into_iter().flat_map(|(_, entries)| entries).collect(), subscriptions.missing()))
 }
 
 /// Items Steam reports locally or that the app subscribed to, but that the server query did not return yet.
@@ -136,21 +135,28 @@ fn without_unsubscribed(entries: &mut Vec<CollectionEntry>, unsubscribed: &HashS
 
 fn fetch(account: SteamId, progress: Option<&Channel<CollectionProgress>>) -> Result<SubscriptionSnapshot, String> {
 	let fetched_at = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_err(|error| error.to_string())?.as_secs();
-	let mut items = server_subscriptions(account, progress)?;
+	let (mut items, missing) = server_subscriptions(account, progress)?;
 	if steam!().client().steam_id != account {
 		return Err("The Steam account changed. Try again.".into());
 	}
 	let (unsubscribed, subscribed) = game_addons!().session_subscriptions();
 	let server: HashSet<String> = items.iter().map(|entry| entry.id.clone()).collect();
+	let mut local = Vec::new();
 	for chunk in local_only(&server, steam!().client().ugc().subscribed_items(true), &subscribed).chunks(RESULTS_PER_PAGE) {
 		let results = query_items(chunk.to_vec(), true)?;
-		items.extend(
+		local.extend(
 			chunk
 				.iter()
 				.map(|id| CollectionEntry::read(*id, results.iter().flatten().find(|details| details.item.id == *id))),
 		);
 	}
 	without_unsubscribed(&mut items, &unsubscribed);
+	without_unsubscribed(&mut local, &unsubscribed);
+	let unavailable = local.iter().filter(|entry| entry.status == EntryStatus::Unavailable).count();
+	if !missing_explained(missing, unavailable) {
+		return Err(INCOMPLETE.into());
+	}
+	items.extend(local);
 	Ok(SubscriptionSnapshot { fetched_at, items })
 }
 
