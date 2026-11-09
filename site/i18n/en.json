@@ -1,5 +1,6 @@
 {
 	"website": {
+		"title": "nwmpublisher: Garry's Mod Workshop publisher and downloader",
 		"description": "nwmpublisher is a fork of gmpublisher for publishing, updating, downloading and extracting Garry's Mod addons on Windows, macOS and Linux.",
 		"skip": "Skip to content",
 		"navigation": "Main navigation",
@@ -37,6 +38,7 @@
 		"alt_addon_settings": "Workshop settings with visibility controls and required-addon search.",
 		"alt_extract": "An installed addon's files with a VTF texture preview and an Extract button.",
 		"alt_collection_compare": "Two Workshop collections side by side, with the items only in each and the items in both.",
+		"alt_social_card": "The nwmpublisher logo and name over a blurred grid of addons, with Windows, macOS and Linux logos.",
 		"caption_workshop": "Workshop items with filtering, sorting and search.",
 		"caption_publishing": "File selection for a new addon.",
 		"caption_collections": "Editing a collection's items.",

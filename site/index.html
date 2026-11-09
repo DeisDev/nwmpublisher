@@ -6,6 +6,8 @@
 		<meta name="color-scheme" content="light dark"/>
 		<meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)"/>
 		<meta name="theme-color" content="#1a1a1a" media="(prefers-color-scheme: dark)"/>
+		<!-- Browsers use the first matching theme-color; Discord uses the last one for its link preview accent. -->
+		<meta name="theme-color" content="#006cc7"/>
 		<script>
 			try {
 				document.documentElement.dataset.theme = localStorage.getItem('nwmpublisher.theme') ?? 'system';
@@ -14,7 +16,6 @@
 			}
 		</script>
 		<link rel="icon" type="image/png" href="../public/favicon.png"/>
-		<title>nwmpublisher</title>
 	</head>
 	<body>
 		<div id="app"></div>

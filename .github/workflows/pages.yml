@@ -12,6 +12,7 @@ on:
       - 'public/img/linux.svg'
       - 'public/fonts/**'
       - 'public/favicon.png'
+      - 'public/img/social-card.png'
       - 'package.json'
       - 'package-lock.json'
       - '.node-version'

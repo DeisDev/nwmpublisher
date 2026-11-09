@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Drop GMA files onto the Downloader to extract them. Other files are skipped with a message.
 - Add a light theme to the website. It follows your system setting, or pick one with the button in the header.
+- Links to the website now show a preview with a title, description and image in Discord and other apps.
 - Add a Sync tab to collections that compares a collection with your subscriptions, so you can add what you subscribe to and remove what you don't. Mark a collection as mirroring your subscriptions to see the differences as soon as you open it.
 - Change your subscriptions to match a collection from its Sync tab.
 - Remove unsubscribed items from several collections at once from the Collections selection bar.
