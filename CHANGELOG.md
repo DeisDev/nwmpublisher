@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Change your subscriptions to match a collection from its Sync tab.
 - Remove unsubscribed items from several collections at once from the Collections selection bar.
 - Delete Steam's copies of unsubscribed addons from Installed Addons.
+- Translate all new interface text into every supported language.
 
 ### Changed
 

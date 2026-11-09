@@ -472,7 +472,7 @@
 
 	function skippedList(skipped, listLocale) {
 		const parts = Object.entries(skipped).filter(([, count]) => count).map(([kind, count]) => $_('collections_sync_skipped_' + kind, { values: { count } }));
-		return new Intl.ListFormat(listLocale, { type: 'unit' }).format(parts);
+		return new Intl.ListFormat(listLocale).format(parts);
 	}
 
 	function errorText(err) {
