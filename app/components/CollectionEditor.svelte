@@ -27,7 +27,7 @@
 	import { playSound } from '../sounds';
 	import { settings } from '../settings.js';
 	import { stopRemoval } from '../addon-removal.js';
-	import { collections, compareTitles, ensureSnapshot, includeExtras, loadCollections, loadSnapshot, mirrors, planSync, setIncludeExtras, setMirror, subscriptionSnapshot, workshopUrl } from '../collections.js';
+	import { collections, compareTitles, ensureSnapshot, includeExtras, loadCollections, loadSnapshot, mirrors, planSync, setIncludeExtras, setMirror, setSubscribeOnAdd, subscribeOnAdd, subscriptionSnapshot, workshopUrl } from '../collections.js';
 
 	export let collection = null;
 	export let others = [];
@@ -68,8 +68,8 @@
 	let entriesError = null;
 	const requested = new Set();
 
-	async function loadEntries(ids) {
-		const missing = [...new Set(ids)].filter(item => !entries.has(item) && !requested.has(item));
+	async function loadEntries(ids, refresh = false) {
+		const missing = [...new Set(ids)].filter(item => (refresh || !entries.has(item)) && !requested.has(item));
 		if (!missing.length) return;
 		missing.forEach(item => requested.add(item));
 		entriesLoading++;
@@ -107,7 +107,9 @@
 	$: additions = items.filter(item => !originalSet.has(item));
 	$: removals = original.items.filter(item => !itemSet.has(item));
 	$: detailsChanged = title !== original.title || description !== original.description || visibility !== original.visibility || !!preview;
-	$: dirty = creating || additions.length > 0 || removals.length > 0 || detailsChanged;
+	$: collectionDirty = additions.length > 0 || removals.length > 0 || detailsChanged;
+	$: pendingSubscribe = items.filter(item => toSubscribe.has(item));
+	$: dirty = creating || collectionDirty || pendingSubscribe.length > 0;
 	$: titleBytes = encoder.encode(title).length;
 	$: descriptionBytes = encoder.encode(description).length;
 	$: titleError = !title.trim() ? $_('collections_title_required') : titleBytes > titleMaxBytes ? $_('collections_title_too_long', { values: { max: titleMaxBytes } }) : null;
@@ -162,11 +164,31 @@
 		const remove = new Set(list);
 		items = items.filter(item => !remove.has(item));
 		selectedItems = new Set([...selectedItems].filter(item => !remove.has(item)));
+		toSubscribe = new Set([...toSubscribe].filter(item => !remove.has(item)));
 		saved = false;
 	}
 
 	function restoreItem(item) {
 		items = [...items, item];
+	}
+
+	let toSubscribe = new Set();
+	// Split around the names so each one can be a button, wherever a translation puts them.
+	$: neededByParts = $_('collections_needed_by', { values: { names: '' } }).split('').map(part => part.trim());
+
+	function addMissing(list) {
+		if (addItems(list) && $subscribeOnAdd) toSubscribe = new Set([...toSubscribe, ...list.map(entry => entry.id)]);
+	}
+
+	function toggleSubscribeOnAdd(checked) {
+		setSubscribeOnAdd(checked).catch(err => { error = $_('workshop_save_error', { values: { error: String(err) } }); });
+	}
+
+	async function showProblems(problems, title) {
+		playSound('error');
+		const shown = problems.slice(0, problemsShown);
+		if (problems.length > problemsShown) shown.push($_('bulk_removal_more', { values: { count: problems.length - problemsShown } }));
+		await dialog.message(shown.join('\n'), { title, kind: 'warning' });
 	}
 
 	let query = '';
@@ -266,6 +288,7 @@
 		items = [...original.items];
 		preview = null;
 		selectedItems = new Set();
+		toSubscribe = new Set();
 		historyKey++;
 	}
 
@@ -287,7 +310,7 @@
 	}
 
 	async function save() {
-		if (locked || !dirty || invalid) return;
+		if (locked || !dirty || invalid || subscribeBusy) return;
 		saving = true;
 		stopping = false;
 		error = null;
@@ -299,41 +322,7 @@
 				dispatch('created', created);
 				return;
 			}
-			try {
-				await keepResubscribed();
-			} catch (err) {
-				error = String(err);
-				return;
-			}
-			const before = original.items;
-			saveProgress = { completed: 0, total: countChanges(before, items), retryIn: null };
-			const result = await invoke('save_collection', {
-				request: {
-					collectionId: id,
-					original,
-					desired: { title, description, visibility, items },
-					preview: preview?.path ?? null,
-				},
-				onProgress: new Channel(update => { if (saving) saveProgress = update; }),
-			});
-			original = result.saved;
-			if (result.previewSaved) {
-				previewUrl = preview.dataUrl;
-				preview = null;
-			}
-			if (result.error) {
-				error = result.error;
-				needsReload = true;
-			} else if (result.stopped) {
-				taskMessage($_('collections_save_stopped', { values: { saved: countChanges(before, original.items), pending: countChanges(original.items, items) } }));
-			} else {
-				title = original.title;
-				description = original.description;
-				visibility = original.visibility;
-				items = [...original.items];
-				saved = true;
-			}
-			dispatch('saved');
+			saved = (!collectionDirty || await saveCollection()) && await subscribePending();
 		} catch (err) {
 			error = String(err);
 			needsReload = !creating;
@@ -341,6 +330,69 @@
 			saving = false;
 			saveProgress = null;
 		}
+	}
+
+	async function saveCollection() {
+		try {
+			await keepResubscribed();
+		} catch (err) {
+			error = String(err);
+			return false;
+		}
+		const before = original.items;
+		saveProgress = { completed: 0, total: countChanges(before, items), retryIn: null };
+		const result = await invoke('save_collection', {
+			request: {
+				collectionId: id,
+				original,
+				desired: { title, description, visibility, items },
+				preview: preview?.path ?? null,
+			},
+			onProgress: new Channel(update => { if (saving) saveProgress = update; }),
+		});
+		original = result.saved;
+		if (result.previewSaved) {
+			previewUrl = preview.dataUrl;
+			preview = null;
+		}
+		if (result.error) {
+			error = result.error;
+			needsReload = true;
+		} else if (result.stopped) {
+			taskMessage($_('collections_save_stopped', { values: { saved: countChanges(before, original.items), pending: countChanges(original.items, items) } }));
+		} else {
+			title = original.title;
+			description = original.description;
+			visibility = original.visibility;
+			items = [...original.items];
+		}
+		dispatch('saved');
+		return !result.error && !result.stopped;
+	}
+
+	/** Runs once the collection is saved, so every marked item is in it. Unfinished items stay marked for the next save. */
+	async function subscribePending() {
+		const ids = items.filter(item => toSubscribe.has(item));
+		if (!ids.length) return true;
+		saveProgress = { subscribing: true, completed: 0, total: ids.length, retryIn: null };
+		let result;
+		try {
+			result = await invoke('subscribe_workshop_items', { ids, onProgress: new Channel(update => { if (saving) saveProgress = { subscribing: true, ...update }; }) });
+		} catch (err) {
+			error = String(err);
+			return false;
+		}
+		if ($subscriptionSnapshot.data) loadSnapshot();
+		const failed = new Set(result.failures.map(failure => failure.id));
+		const finished = !result.error && !result.stopped;
+		if (finished) {
+			const done = new Set(ids.filter(item => !failed.has(item)));
+			toSubscribe = new Set([...toSubscribe].filter(item => !done.has(item)));
+		}
+		if (result.subscribed || result.alreadySubscribed || result.skipped) taskMessage($_('collections_subscribe_result', { values: { subscribed: result.subscribed, already: result.alreadySubscribed, skipped: result.skipped } }));
+		const problems = [...(result.error ? [result.error] : []), ...result.failures.map(failure => `${entries.get(failure.id)?.title ?? failure.id}: ${failure.error}`)];
+		if (problems.length) showProblems(problems, $_('collections'));
+		return finished && !failed.size;
 	}
 
 	function stopSaving() {
@@ -374,7 +426,7 @@
 		if (!keepDescription) { description = original.description; historyKey++; }
 		if (!keepVisibility) visibility = original.visibility;
 		needsReload = false;
-		loadEntries(items);
+		loadEntries([...items, ...entries.keys()], true);
 	}
 
 	async function back() {
@@ -481,6 +533,7 @@
 
 	let reverse = null;
 	let reverseRun = null;
+	$: subscribeBusy = pendingSubscribe.length > 0 && (!!subscribing || !!reverseRun);
 
 	async function openReverse() {
 		reverse = { loading: true, error: null, preview: null, subscribe: false, unsubscribe: false, deleteFiles: !!$settings.unsubscribe_delete_files, permanent: $settings.addon_delete_mode === 'permanent' };
@@ -523,14 +576,8 @@
 			...result.failures.map(failure => `${entryOf(failure.id)?.title ?? failure.id}: ${errorText(failure.error)}`),
 			...result.fileFailures.map(failure => `${failure.path}: ${errorText(failure.error)}`),
 		];
-		if (!problems.length) {
-			if (result.subscribed || result.unsubscribed) playSound('success');
-			return;
-		}
-		playSound('error');
-		const shown = problems.slice(0, problemsShown);
-		if (problems.length > problemsShown) shown.push($_('bulk_removal_more', { values: { count: problems.length - problemsShown } }));
-		await dialog.message(shown.join('\n'), { title: $_('collections_sync_reverse_title'), kind: 'warning' });
+		if (problems.length) await showProblems(problems, $_('collections_sync_reverse_title'));
+		else if (result.subscribed || result.unsubscribed) playSound('success');
 	}
 </script>
 
@@ -617,7 +664,7 @@
 			{/if}
 			<ul class="items">
 				{#each shownItems as item (item)}
-					<CollectionItemRow id={item} entry={entries.get(item)} pending={!originalSet.has(item)} note={duplicates.has(item) ? $_('collections_also_in', { values: { names: otherNames(item) } }) : ''}>
+					<CollectionItemRow id={item} entry={entries.get(item)} pending={!originalSet.has(item)} willSubscribe={toSubscribe.has(item)} note={duplicates.has(item) ? $_('collections_also_in', { values: { names: otherNames(item) } }) : ''}>
 						<input slot="start" type="checkbox" checked={selectedItems.has(item)} disabled={locked} on:change={event => toggleItem(item, event.currentTarget.checked)} aria-label={$_('collections_select_item', { values: { title: entries.get(item)?.title ?? item } })}/>
 						<button type="button" class="icon-button" disabled={locked} on:click={() => removeItems([item])} aria-label={$_('collections_remove_item', { values: { title: entries.get(item)?.title ?? item } })}><X size="1rem"/></button>
 					</CollectionItemRow>
@@ -706,17 +753,34 @@
 				{#if missingRequirements.size}
 					{@const addable = [...missingRequirements.keys()].map(item => entries.get(item)).filter(entry => entry?.status === 'available')}
 					<section>
-						<div class="group-heading"><h3>{$_('collections_problem_missing')} <span class="count">{missingRequirements.size}</span></h3><button type="button" disabled={locked || !addable.length} on:click={() => addItems(addable)}><Plus size="1rem"/>{$_('collections_add_all', { values: { count: addable.length } })}</button></div>
+						<div class="group-heading">
+							<h3>{$_('collections_problem_missing')} <span class="count">{missingRequirements.size}</span></h3>
+							<div class="group-actions">
+								<label class="toggle"><input type="checkbox" checked={$subscribeOnAdd} on:change={event => toggleSubscribeOnAdd(event.currentTarget.checked)}/>{$_('collections_subscribe_on_add')}</label>
+								<button type="button" disabled={locked || !addable.length} on:click={() => addMissing(addable)}><Plus size="1rem"/>{$_('collections_add_all', { values: { count: addable.length } })}</button>
+							</div>
+						</div>
 						<p class="hint">{$_('collections_problem_missing_help')}</p>
 						<ul class="items">
 							{#each [...missingRequirements] as [item, neededBy] (item)}
 								{@const entry = entries.get(item)}
-								<CollectionItemRow id={item} {entry} note={$_('collections_needed_by', { values: { names: neededBy.map(parent => entries.get(parent)?.title ?? parent).join(', ') } })}>
-									<button type="button" disabled={locked || entry?.status !== 'available'} on:click={() => addItems([entry])}><Plus size=".85rem"/>{$_('workshop_add')}</button>
+								<CollectionItemRow id={item} {entry}>
+									<div slot="detail" class="needed-by">
+										{#if neededByParts[0]}<span>{neededByParts[0]}</span>{/if}
+										{#each neededBy as parent (parent)}
+											{@const removeLabel = $_('collections_remove_item', { values: { title: entries.get(parent)?.title ?? parent } })}
+											<button type="button" class="chip" disabled={locked} on:click={() => removeItems([parent])} aria-label={removeLabel} title={removeLabel}><span>{entries.get(parent)?.title ?? parent}</span><X size=".8rem"/></button>
+										{/each}
+										{#if neededByParts[1]}<span>{neededByParts[1]}</span>{/if}
+									</div>
+									<button type="button" disabled={locked || entry?.status !== 'available'} on:click={() => addMissing([entry])}><Plus size=".85rem"/>{$_('workshop_add')}</button>
 								</CollectionItemRow>
 							{/each}
 						</ul>
 					</section>
+				{/if}
+				{#if removals.length}
+					<div class="removed"><span>{$_('workshop_pending_removals')}</span>{#each removals as item (item)}<button type="button" disabled={locked} on:click={() => restoreItem(item)}>{entries.get(item)?.title ?? item} · {$_('workshop_undo')}</button>{/each}</div>
 				{/if}
 				{#if duplicates.size}
 					<section>
@@ -834,11 +898,11 @@
 		<div class="save-status" aria-live="polite">
 			{#if saveProgress?.total}
 				<div class="panel footer-progress">
-					<span>{saveProgress.retryIn ? $_('collections_save_throttled', { values: { seconds: saveProgress.retryIn } }) : $_('collections_save_progress', { values: { completed: saveProgress.completed, total: saveProgress.total } })}</span>
+					<span>{saveProgress.retryIn ? $_('collections_save_throttled', { values: { seconds: saveProgress.retryIn } }) : $_(saveProgress.subscribing ? 'collections_subscribing' : 'collections_save_progress', { values: { completed: saveProgress.completed, total: saveProgress.total } })}</span>
 					<progress max={saveProgress.total} value={saveProgress.completed}></progress>
 					<button type="button" disabled={stopping} on:click={stopSaving}><CircleStop size="1rem"/>{$_('collections_stop')}</button>
 				</div>
-			{:else if creating}{$_('collections_create_help')}{:else if dirty}{$_('workshop_pending_summary', { values: { added: additions.length, removed: removals.length } })}{#if detailsChanged}{' · '}{$_('collections_details_changed')}{/if}{:else}{$_('collections_no_pending')}{/if}
+			{:else if creating}{$_('collections_create_help')}{:else if dirty}{$_('workshop_pending_summary', { values: { added: additions.length, removed: removals.length } })}{#if pendingSubscribe.length}{' · '}{$_('collections_pending_subscribe', { values: { count: pendingSubscribe.length } })}{/if}{#if detailsChanged}{' · '}{$_('collections_details_changed')}{/if}{:else}{$_('collections_no_pending')}{/if}
 		</div>
 		<div class="save-actions">
 			{#if creating}
@@ -846,7 +910,7 @@
 			{:else}
 				<button type="button" disabled={locked || !dirty} on:click={discard}>{$_('workshop_discard')}</button>
 			{/if}
-			<button type="button" class="primary" disabled={locked || !dirty || invalid} on:click={save}>{#if saving}<Loading inline size="1rem"/>{/if}{$_(saving ? 'workshop_saving' : creating ? 'collections_create' : 'collections_save')}</button>
+			<button type="button" class="primary" disabled={locked || !dirty || invalid || subscribeBusy} on:click={save}>{#if saving}<Loading inline size="1rem"/>{/if}{$_(saving ? 'workshop_saving' : creating ? 'collections_create' : 'collections_save')}</button>
 		</div>
 	</footer>
 </section>
@@ -981,6 +1045,12 @@
 	.danger { background: var(--error); border-color: var(--error); color: #fff; }
 	.danger:hover:not(:disabled) { background: var(--error-dark); }
 	.group-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+	.group-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; }
+	.needed-by { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; margin-top: .4rem; color: var(--text-muted); font-size: .8em; }
+	.chip { flex-shrink: 1; min-width: 0; max-width: 100%; gap: .3rem; padding: .2rem .45rem; border-color: var(--border); color: var(--text-soft); font-size: 1em; }
+	.chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.chip :global(svg) { flex-shrink: 0; }
+	.chip:hover:not(:disabled) { background: var(--error); border-color: var(--error); color: #fff; }
 	h3 { margin: 0; font-size: .95em; }
 	.count { color: var(--text-muted); background: var(--control); border-radius: 4px; padding: .1rem .4rem; font-size: .85em; margin-inline-start: .3rem; }
 	footer { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; border-top: 1px solid var(--border); padding: .75rem 1.5rem; }

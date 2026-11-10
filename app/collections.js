@@ -7,6 +7,7 @@ export const collectionPicker = writable(null);
 export const subscriptionSnapshot = writable({ loading: false, progress: null, error: null, data: null });
 export const mirrors = derived(settings, $settings => new Set($settings.collections_mirrors ?? []));
 export const includeExtras = derived(settings, $settings => !!$settings.collections_sync_include_extras);
+export const subscribeOnAdd = derived(settings, $settings => !!$settings.collections_subscribe_on_add);
 
 const SNAPSHOT_MAX_AGE = 5 * 60;
 let loadRequest = 0;
@@ -57,6 +58,10 @@ export function setMirror(id, mirrored) {
 
 export function setIncludeExtras(value) {
 	return saveSettings({ collections_sync_include_extras: value });
+}
+
+export function setSubscribeOnAdd(value) {
+	return saveSettings({ collections_subscribe_on_add: value });
 }
 
 /** Keep in step with `plan_sync` in src-tauri/src/steam/subscriptions.rs. */

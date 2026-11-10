@@ -30,6 +30,7 @@ const LEGAL_AGREEMENT: &str = "https://steamcommunity.com/workshop/workshoplegal
 static CHANGE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 static CHANGE_STOP: AtomicBool = AtomicBool::new(false);
 static SUBSCRIBE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+static SUBSCRIBE_STOP: AtomicBool = AtomicBool::new(false);
 
 /// Collection writes hold Steam's callback dispatch for each round trip, so other Steam work would stall.
 pub(crate) fn saving() -> bool {
@@ -271,6 +272,7 @@ pub struct SubscribeOutcome {
 	already_subscribed: usize,
 	skipped: usize,
 	failures: Vec<ItemFailure>,
+	stopped: bool,
 	error: Option<String>,
 }
 
@@ -828,9 +830,20 @@ fn subscribe(collection: PublishedFileId, on_progress: &Channel<CollectionProgre
 	if !details.gmod_collection {
 		return Err(format!("{} is not a Garry's Mod collection.", details.item.title));
 	}
-	let mut items = Vec::with_capacity(details.children.len());
+	subscribe_to(&details.children, &AtomicBool::new(false), on_progress)
+}
+
+fn subscribe_items(ids: Vec<String>, on_progress: &Channel<CollectionProgress>) -> Result<SubscribeOutcome, String> {
+	let ids = unique_ids(&ids)?;
+	let _subscribing = SUBSCRIBE_LOCK.try_lock().ok_or("Already changing subscriptions. Try again when that finishes.")?;
+	SUBSCRIBE_STOP.store(false, Ordering::Release);
+	subscribe_to(&ids, &SUBSCRIBE_STOP, on_progress)
+}
+
+fn subscribe_to(ids: &[PublishedFileId], stop: &AtomicBool, on_progress: &Channel<CollectionProgress>) -> Result<SubscribeOutcome, String> {
+	let mut items = Vec::with_capacity(ids.len());
 	let mut skipped = 0;
-	for chunk in details.children.chunks(RESULTS_PER_PAGE) {
+	for chunk in ids.chunks(RESULTS_PER_PAGE) {
 		let results = query_items(chunk.to_vec(), false)?;
 		for id in chunk {
 			match find(&results, *id) {
@@ -844,10 +857,10 @@ fn subscribe(collection: PublishedFileId, on_progress: &Channel<CollectionProgre
 		already_subscribed: 0,
 		skipped,
 		failures: Vec::new(),
+		stopped: false,
 		error: None,
 	};
 	let total = items.len();
-	let never = AtomicBool::new(false);
 	for (index, id) in items.into_iter().enumerate() {
 		if !steam!().connected() {
 			outcome.error = Some("Steam went offline. Connect Steam and try again.".into());
@@ -856,10 +869,14 @@ fn subscribe(collection: PublishedFileId, on_progress: &Channel<CollectionProgre
 		if steam!().client().ugc().item_state(id).contains(ItemState::SUBSCRIBED) && !game_addons!().unsubscribed_this_session(id) {
 			outcome.already_subscribed += 1;
 		} else {
-			match paced(&never, || change_subscription(id, true), |delay| report_retry(on_progress, index, total, delay)) {
-				Ok(_) => {
+			match paced(stop, || change_subscription(id, true), |delay| report_retry(on_progress, index, total, delay)) {
+				Ok(Paced::Written) => {
 					outcome.subscribed += 1;
 					game_addons!().note_subscribed(id);
+				}
+				Ok(Paced::Stopped) => {
+					outcome.stopped = true;
+					break;
 				}
 				Err(error) if error.kind() == WriteFailure::Stop => {
 					outcome.error = Some(error.to_string());
@@ -931,6 +948,7 @@ pub async fn save_collection(request: CollectionSaveRequest, on_progress: Channe
 #[tauri::command]
 pub fn stop_collection_change() {
 	CHANGE_STOP.store(true, Ordering::Release);
+	SUBSCRIBE_STOP.store(true, Ordering::Release);
 }
 
 #[tauri::command]
@@ -971,6 +989,23 @@ pub async fn subscribe_collection(collection_id: String, on_progress: Channel<Co
 			outcome.failures.len()
 		),
 		Err(error) => eprintln!("Could not subscribe to collection {}: {}", collection_id, error),
+	}
+	result
+}
+
+#[tauri::command]
+pub async fn subscribe_workshop_items(ids: Vec<String>, on_progress: Channel<CollectionProgress>) -> Result<SubscribeOutcome, String> {
+	let result = blocking(move || subscribe_items(ids, &on_progress)).await;
+	match &result {
+		Ok(outcome) => println!(
+			"Subscribed to {} Workshop items ({} already subscribed, {} skipped, {} failed{})",
+			outcome.subscribed,
+			outcome.already_subscribed,
+			outcome.skipped,
+			outcome.failures.len(),
+			if outcome.stopped { ", stopped" } else { "" }
+		),
+		Err(error) => eprintln!("Could not subscribe to Workshop items: {}", error),
 	}
 	result
 }

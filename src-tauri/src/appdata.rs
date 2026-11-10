@@ -357,6 +357,7 @@ pub struct Settings {
 	pub collections_visibility: Vec<WorkshopVisibility>,
 	pub collections_sort: CollectionsSort,
 	pub collections_sync_include_extras: bool,
+	pub collections_subscribe_on_add: bool,
 	pub collections_mirrors: Vec<String>,
 	pub installed_addons_sort: InstalledAddonsSort,
 	pub installed_addons_types: Vec<AddonType>,
@@ -440,6 +441,7 @@ impl Default for Settings {
 			],
 			collections_sort: CollectionsSort::UpdatedDesc,
 			collections_sync_include_extras: false,
+			collections_subscribe_on_add: false,
 			collections_mirrors: Vec::new(),
 			installed_addons_sort: InstalledAddonsSort::Modified,
 			installed_addons_types: AddonType::ALL.to_vec(),
@@ -1160,12 +1162,14 @@ mod tests {
 	fn collection_sync_preferences_default_round_trip_and_drop_invalid_mirrors() {
 		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
 		assert!(!defaults.collections_sync_include_extras);
+		assert!(!defaults.collections_subscribe_on_add);
 		assert!(defaults.collections_mirrors.is_empty());
-		let patch = serde_json::json!({"collections_sync_include_extras": true, "collections_mirrors": ["123", "abc", "", "123", "456"]});
+		let patch = serde_json::json!({"collections_sync_include_extras": true, "collections_subscribe_on_add": true, "collections_mirrors": ["123", "abc", "", "123", "456"]});
 		let mut settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
 		settings.sanitize();
 		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
 		assert!(loaded.collections_sync_include_extras);
+		assert!(loaded.collections_subscribe_on_add);
 		assert_eq!(loaded.collections_mirrors, ["123", "456"]);
 		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"collections_mirrors": [123]})).unwrap()).is_err());
 	}

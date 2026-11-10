@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Remove the items that need a missing required addon from a collection's Problems tab.
+- Subscribe to missing required addons when you add them to a collection. They are subscribed when you save, and the choice is remembered.
+
+### Fixed
+
+- Fixed Reload from Steam not updating a collection's item details and missing required addons.
+
 ## [3.8.1] - 2026-11-10
 
 ### Fixed

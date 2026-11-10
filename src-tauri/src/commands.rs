@@ -67,6 +67,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 		crate::steam::collections::set_collections_visibility,
 		crate::steam::collections::delete_collections,
 		crate::steam::collections::subscribe_collection,
+		crate::steam::collections::subscribe_workshop_items,
 		crate::steam::downloads::workshop_download,
 		crate::steam::publishing::verify_whitelist,
 		crate::steam::publishing::read_addon_document,
