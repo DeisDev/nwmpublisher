@@ -1,7 +1,7 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::{
 	cell::Cell,
-	collections::HashMap,
+	collections::{HashMap, HashSet},
 	fs::{self, File, OpenOptions},
 	io::{Seek, SeekFrom, Write},
 	path::{Path, PathBuf},
@@ -35,7 +35,7 @@ static LEGACY_APP_SETTINGS_PATH: std::sync::LazyLock<PathBuf> = std::sync::LazyL
 		.unwrap_or_else(|| dirs::data_dir().unwrap_or_else(|| std::env::current_exe().unwrap_or_else(|_| std::env::temp_dir())))
 		.join("gmpublisher/settings.json")
 });
-static TEMP_DIR: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| std::env::temp_dir().join(APP_NAME));
+static TEMP_DIR: std::sync::LazyLock<PathBuf> = std::sync::LazyLock::new(|| temp_base_dir().join(APP_NAME));
 static DOWNLOADS_DIR: std::sync::LazyLock<Option<PathBuf>> = std::sync::LazyLock::new(dirs::download_dir);
 /// Whether nwmpublisher already had settings of its own when it started.
 /// Evaluated before anything can write settings, so it stays true for the whole run.
@@ -47,6 +47,20 @@ static SETTINGS_RECOVERY: std::sync::LazyLock<RwLock<Option<String>>> = std::syn
 /// Importing reloads the webview rather than restarting the process, so without this the
 /// offer would keep coming back until the app was closed and opened again.
 static MIGRATION_RESOLVED: AtomicBool = AtomicBool::new(false);
+
+// Sandboxed Steam builds (Flatpak, Nix) have a private /tmp, so they cannot read uploads staged there.
+#[cfg(target_os = "linux")]
+pub(crate) fn temp_base_dir() -> PathBuf {
+	dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+}
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn temp_base_dir() -> PathBuf {
+	std::env::temp_dir()
+}
+
+pub(crate) fn default_temp_dir() -> &'static Path {
+	&TEMP_DIR
+}
 
 #[derive(Debug)]
 pub struct OpenCount(Cell<u32>);
@@ -102,6 +116,55 @@ pub enum PreviewLayout {
 }
 
 const PREVIEW_SPLIT_RANGE: std::ops::RangeInclusive<f64> = 0.1..=0.9;
+
+const THREAD_RANGE: std::ops::RangeInclusive<usize> = 1..=64;
+const BUFFER_SIZE_KIB_RANGE: std::ops::RangeInclusive<usize> = 8..=16384;
+const LZMA_MEMORY_MIB_RANGE: std::ops::RangeInclusive<usize> = 16..=4096;
+
+fn performance_range(key: &str) -> Option<std::ops::RangeInclusive<usize>> {
+	match key {
+		"worker_threads" | "extraction_jobs" | "extraction_threads" | "download_threads" | "packing_jobs" => Some(THREAD_RANGE),
+		"buffer_size_kib" => Some(BUFFER_SIZE_KIB_RANGE),
+		"lzma_memory_mib" => Some(LZMA_MEMORY_MIB_RANGE),
+		_ => None,
+	}
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Performance {
+	pub worker_threads: usize,
+	pub extraction_jobs: usize,
+	pub extraction_threads: usize,
+	pub download_threads: usize,
+	pub packing_jobs: Option<usize>,
+	pub buffer_size_kib: usize,
+	pub lzma_memory_mib: usize,
+	pub sync_extracted_files: bool,
+}
+impl Default for Performance {
+	fn default() -> Self {
+		let cpus = std::thread::available_parallelism().map_or(1, |n| n.get());
+		Self {
+			worker_threads: cpus.saturating_sub(2).max(2),
+			extraction_jobs: 2,
+			extraction_threads: (cpus / 2).clamp(1, 8),
+			download_threads: 2,
+			packing_jobs: None,
+			buffer_size_kib: 64,
+			lzma_memory_mib: 256,
+			sync_extracted_files: true,
+		}
+	}
+}
+impl Performance {
+	pub fn buffer_size(&self) -> usize {
+		self.buffer_size_kib * 1024
+	}
+
+	pub fn lzma_memory_limit(&self) -> u64 {
+		self.lzma_memory_mib as u64 * 1024 * 1024
+	}
+}
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -293,6 +356,9 @@ pub struct Settings {
 	pub my_workshop_sort: WorkshopSort,
 	pub collections_visibility: Vec<WorkshopVisibility>,
 	pub collections_sort: CollectionsSort,
+	pub collections_sync_include_extras: bool,
+	pub collections_subscribe_on_add: bool,
+	pub collections_mirrors: Vec<String>,
 	pub installed_addons_sort: InstalledAddonsSort,
 	pub installed_addons_types: Vec<AddonType>,
 	pub upscale_addon_icon: bool,
@@ -320,6 +386,15 @@ pub struct Settings {
 	pub bbcode_wrap_selection: bool,
 	pub bbcode_convert_pasted_changelogs: bool,
 	pub bbcode_convert_pasted_markdown: bool,
+
+	pub worker_threads: Option<usize>,
+	pub extraction_jobs: Option<usize>,
+	pub extraction_threads: Option<usize>,
+	pub download_threads: Option<usize>,
+	pub packing_jobs: Option<usize>,
+	pub buffer_size_kib: Option<usize>,
+	pub lzma_memory_mib: Option<usize>,
+	pub sync_extracted_files: bool,
 
 	pub color_neutral: u32,
 	pub color_error: u32,
@@ -365,6 +440,9 @@ impl Default for Settings {
 				WorkshopVisibility::Unlisted,
 			],
 			collections_sort: CollectionsSort::UpdatedDesc,
+			collections_sync_include_extras: false,
+			collections_subscribe_on_add: false,
+			collections_mirrors: Vec::new(),
 			installed_addons_sort: InstalledAddonsSort::Modified,
 			installed_addons_types: AddonType::ALL.to_vec(),
 			upscale_addon_icon: true,
@@ -393,6 +471,15 @@ impl Default for Settings {
 			bbcode_convert_pasted_changelogs: true,
 			bbcode_convert_pasted_markdown: true,
 
+			worker_threads: None,
+			extraction_jobs: None,
+			extraction_threads: None,
+			download_threads: None,
+			packing_jobs: None,
+			buffer_size_kib: None,
+			lzma_memory_mib: None,
+			sync_extracted_files: true,
+
 			color_neutral: 28103,
 			color_error: 11010048,
 			color_success: 3188321,
@@ -416,6 +503,21 @@ impl Settings {
 				*SETTINGS_RECOVERY.write() = Some(format!("{}: {}", APP_SETTINGS_PATH.display(), error));
 				Settings::default()
 			}
+		}
+	}
+
+	pub fn performance(&self) -> Performance {
+		let default = Performance::default();
+		let threads = |value: Option<usize>| value.filter(|n| THREAD_RANGE.contains(n));
+		Performance {
+			worker_threads: threads(self.worker_threads).unwrap_or(default.worker_threads),
+			extraction_jobs: threads(self.extraction_jobs).unwrap_or(default.extraction_jobs),
+			extraction_threads: threads(self.extraction_threads).unwrap_or(default.extraction_threads),
+			download_threads: threads(self.download_threads).unwrap_or(default.download_threads),
+			packing_jobs: threads(self.packing_jobs),
+			buffer_size_kib: self.buffer_size_kib.filter(|n| BUFFER_SIZE_KIB_RANGE.contains(n)).unwrap_or(default.buffer_size_kib),
+			lzma_memory_mib: self.lzma_memory_mib.filter(|n| LZMA_MEMORY_MIB_RANGE.contains(n)).unwrap_or(default.lzma_memory_mib),
+			sync_extracted_files: self.sync_extracted_files,
 		}
 	}
 
@@ -463,6 +565,8 @@ impl Settings {
 	pub fn sanitize(&mut self) {
 		self.destinations.retain(|dir| dir.is_absolute() && dir.is_dir());
 		self.my_workshop_local_paths.retain(|_, dir| dir.is_absolute() && dir.is_dir());
+		let mut mirrors = HashSet::new();
+		self.collections_mirrors.retain(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) && mirrors.insert(id.clone()));
 
 		match &self.extract_destination {
 			ExtractDestination::Directory(path) => {
@@ -503,6 +607,7 @@ pub struct AppData {
 	pub version: &'static str,
 	pub nightly_version: Option<&'static str>,
 	pub open_count: OpenCount,
+	performance_defaults: Performance,
 
 	#[serde(serialize_with = "serde_temp_dir")]
 	temp_dir: PathBuf,
@@ -524,6 +629,7 @@ impl AppData {
 			version: APP_VERSION,
 			nightly_version: NIGHTLY_VERSION,
 			open_count: OpenCount::init(),
+			performance_defaults: Performance::default(),
 
 			// Placeholders
 			temp_dir: PathBuf::new(),
@@ -696,6 +802,11 @@ fn patched_settings(settings: &Settings, patch: serde_json::Map<String, serde_js
 	for (key, value) in patch {
 		if !fields.contains_key(&key) || matches!(key.as_str(), "window_size" | "window_maximized" | "changelogs" | "translations" | "my_workshop_local_paths") {
 			return Err(format!("ERR_SETTINGS_FIELD:{}", key));
+		}
+		if let Some(range) = performance_range(&key) {
+			if !value.is_null() && !value.as_u64().and_then(|n| usize::try_from(n).ok()).is_some_and(|n| range.contains(&n)) {
+				return Err("ERR_SETTINGS_RANGE".into());
+			}
 		}
 		fields.insert(key, value);
 	}
@@ -1048,6 +1159,22 @@ mod tests {
 	}
 
 	#[test]
+	fn collection_sync_preferences_default_round_trip_and_drop_invalid_mirrors() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
+		assert!(!defaults.collections_sync_include_extras);
+		assert!(!defaults.collections_subscribe_on_add);
+		assert!(defaults.collections_mirrors.is_empty());
+		let patch = serde_json::json!({"collections_sync_include_extras": true, "collections_subscribe_on_add": true, "collections_mirrors": ["123", "abc", "", "123", "456"]});
+		let mut settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+		settings.sanitize();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert!(loaded.collections_sync_include_extras);
+		assert!(loaded.collections_subscribe_on_add);
+		assert_eq!(loaded.collections_mirrors, ["123", "456"]);
+		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"collections_mirrors": [123]})).unwrap()).is_err());
+	}
+
+	#[test]
 	fn installed_addons_preferences_default_round_trip_and_reject_invalid_values() {
 		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
 		assert_eq!(defaults.installed_addons_sort, InstalledAddonsSort::Modified);
@@ -1097,6 +1224,44 @@ mod tests {
 			assert_eq!(loaded.addon_delete_mode, mode);
 		}
 		assert!(super::patched_settings(&defaults, serde_json::from_value(serde_json::json!({"addon_delete_mode": "Trash"})).unwrap()).is_err());
+	}
+
+	#[test]
+	fn performance_settings_default_validate_and_round_trip() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
+		let automatic = super::Performance::default();
+		let performance = defaults.performance();
+		assert_eq!((performance.worker_threads, performance.extraction_jobs, performance.download_threads), (automatic.worker_threads, 2, 2));
+		assert_eq!(performance.extraction_threads, automatic.extraction_threads);
+		assert_eq!(performance.packing_jobs, None);
+		assert_eq!((performance.buffer_size(), performance.lzma_memory_limit()), (64 * 1024, 256 * 1024 * 1024));
+		assert!(performance.sync_extracted_files);
+
+		let patch = serde_json::json!({"extraction_threads": 3, "packing_jobs": 1, "buffer_size_kib": 1024, "lzma_memory_mib": 512, "sync_extracted_files": false});
+		let settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		let performance = loaded.performance();
+		assert_eq!((performance.extraction_threads, performance.packing_jobs, performance.buffer_size(), performance.lzma_memory_mib), (3, Some(1), 1024 * 1024, 512));
+		assert!(!performance.sync_extracted_files);
+		assert!(!loaded.sounds);
+		let reset = super::patched_settings(&loaded, serde_json::from_value(serde_json::json!({"packing_jobs": null})).unwrap()).unwrap();
+		assert_eq!(reset.performance().packing_jobs, None);
+
+		for (key, value) in [
+			("worker_threads", serde_json::json!(0)),
+			("download_threads", serde_json::json!(65)),
+			("extraction_jobs", serde_json::json!(-1)),
+			("packing_jobs", serde_json::json!(1.5)),
+			("extraction_threads", serde_json::json!("2")),
+			("buffer_size_kib", serde_json::json!(4)),
+			("lzma_memory_mib", serde_json::json!(8)),
+		] {
+			let patch = serde_json::Map::from_iter([(key.to_owned(), value)]);
+			assert_eq!(super::patched_settings(&defaults, patch).unwrap_err(), "ERR_SETTINGS_RANGE", "{key}");
+		}
+		let damaged: Settings = serde_json::from_str(r#"{"worker_threads":1000,"buffer_size_kib":1}"#).unwrap();
+		assert_eq!((damaged.performance().worker_threads, damaged.performance().buffer_size_kib), (automatic.worker_threads, 64));
+		assert!(super::patched_settings(&damaged, serde_json::from_value(serde_json::json!({"sounds": true})).unwrap()).is_ok());
 	}
 
 	#[test]

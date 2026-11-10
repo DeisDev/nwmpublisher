@@ -220,10 +220,9 @@ impl GMAFile {
 			Ok(Some(handle))
 		}
 	}
-	pub(super) fn validate_payloads(&self, progress: &mut ByteProgress) -> Result<(), GMAError> {
+	pub(super) fn validate_payloads(&self, progress: &mut ByteProgress, buffer: &mut [u8]) -> Result<(), GMAError> {
 		let entries = self.entries.as_ref().ok_or(GMAError::FormatError)?;
 		let mut reader = self.read()?;
-		let mut buffer = [0; 64 * 1024];
 		let mut end = self.pointers.entries;
 		for entry in entries.values() {
 			end = end.max(self.pointers.entries.checked_add(entry.index).and_then(|offset| offset.checked_add(entry.size)).ok_or(GMAError::FormatError)?);
@@ -234,7 +233,9 @@ impl GMAFile {
 			reader.seek(SeekFrom::Start(end)).map_err(|error| GMAError::io("seek archive footer", &self.path, error))?;
 			reader.read_u32::<LittleEndian>().map_err(|error| GMAError::io("read archive footer", &self.path, error))?
 		} else { 0 };
-		progress.total += entries.values().map(|entry| entry.size).sum::<u64>() + if footer == 0 { 0 } else { end };
+		// Workshop archives often carry a footer that matches nothing while every entry checksum is intact, and the game ignores the footer, so it only counts when an entry has no checksum of its own.
+		let verify_footer = footer != 0 && entries.values().any(|entry| entry.crc == 0);
+		progress.total += entries.values().map(|entry| entry.size).sum::<u64>() + if verify_footer { end } else { 0 };
 		for entry in entries.values() {
 			reader.seek(SeekFrom::Start(self.pointers.entries + entry.index)).map_err(|error| GMAError::io("seek archive entry", &self.path, error))?;
 			let mut remaining = entry.size;
@@ -251,7 +252,7 @@ impl GMAFile {
 		}
 		if actual_size == end { return Ok(()); } // Legacy archives may omit the footer.
 		if actual_size.checked_sub(end) != Some(4) { return Err(GMAError::FormatError); }
-		if footer == 0 { return Ok(()); } // Facepunch gmad -nocrc explicitly writes zero CRCs.
+		if !verify_footer { return Ok(()); } // Facepunch gmad -nocrc explicitly writes zero CRCs.
 		let checksummed = end;
 		reader.seek(SeekFrom::Start(0)).map_err(|error| GMAError::io("seek archive", &self.path, error))?;
 		let mut hash = crc32fast::Hasher::new();
@@ -310,23 +311,62 @@ mod tests {
 	}
 
 	#[test]
+	fn version_zero_archives_are_read_and_newer_versions_are_rejected() {
+		let mut bytes = b"GMAD\x00".to_vec();
+		bytes.extend_from_slice(&[0; 16]);
+		for text in ["Test", "{}", "Author"] { bytes.write_nt_string(text).unwrap(); }
+		bytes.write_i32::<LittleEndian>(1).unwrap();
+		bytes.write_u32::<LittleEndian>(1).unwrap();
+		bytes.write_nt_string("lua/a.lua").unwrap();
+		bytes.write_i64::<LittleEndian>(4).unwrap();
+		bytes.write_u32::<LittleEndian>(crc32fast::hash(b"test")).unwrap();
+		bytes.write_u32::<LittleEndian>(0).unwrap();
+		bytes.extend_from_slice(b"test");
+		let mut gma = GMAFile::read_header(GMAReader::MemBuffer(Cursor::new(bytes.into())), "fixture.gma").unwrap();
+		gma.entries().unwrap();
+		assert_eq!(gma.metadata.as_ref().unwrap().title(), "Test");
+		assert_eq!(gma.entries.as_ref().unwrap()["lua/a.lua"].size, 4);
+
+		let newer = b"GMAD\x04".to_vec();
+		assert!(matches!(GMAFile::read_header(GMAReader::MemBuffer(Cursor::new(newer.into())), "fixture.gma"), Err(GMAError::FormatError)));
+	}
+
+	#[test]
 	fn legacy_absent_and_zero_checksums_are_accepted_but_corruption_is_not() {
 		for footer in [None, Some(0), Some(crc32fast::hash(b"test")), Some(crc32fast::hash(b"st"))] {
 			let mut gma = archive(&[("lua/a.lua", 4, 0)], b"test", footer);
 			gma.entries().unwrap();
 			let transaction = crate::transactions::new_extraction();
 			let mut progress = ByteProgress::new(&transaction, 0);
-			gma.validate_payloads(&mut progress).unwrap();
-			assert_eq!(progress.done, progress.total);
+			gma.validate_payloads(&mut progress, &mut [0; 8 * 1024]).unwrap();
+			assert_eq!(*progress.done.lock(), progress.total);
 			transaction.finished(());
 		}
 		for (crc, footer) in [(1, None), (0, Some(1))] {
 			let mut gma = archive(&[("lua/a.lua", 4, crc)], b"test", footer);
 			gma.entries().unwrap();
 			let transaction = crate::transactions::new_extraction();
-			assert!(matches!(gma.validate_payloads(&mut ByteProgress::new(&transaction, 0)), Err(GMAError::Checksum(_))));
+			assert!(matches!(gma.validate_payloads(&mut ByteProgress::new(&transaction, 0), &mut [0; 8 * 1024]), Err(GMAError::Checksum(_))));
 			transaction.finished(());
 		}
+	}
+
+	#[test]
+	fn wrong_footer_is_ignored_when_every_entry_checksum_passes() {
+		let mut gma = archive(&[("lua/a.lua", 2, crc32fast::hash(b"te")), ("lua/b.lua", 2, crc32fast::hash(b"st"))], b"test", Some(1));
+		gma.entries().unwrap();
+		let transaction = crate::transactions::new_extraction();
+		let mut progress = ByteProgress::new(&transaction, 0);
+		gma.validate_payloads(&mut progress, &mut [0; 8 * 1024]).unwrap();
+		assert_eq!(*progress.done.lock(), 4);
+		assert_eq!(progress.total, 4);
+		transaction.finished(());
+
+		let mut gma = archive(&[("lua/a.lua", 2, crc32fast::hash(b"te")), ("lua/b.lua", 2, 0)], b"test", Some(1));
+		gma.entries().unwrap();
+		let transaction = crate::transactions::new_extraction();
+		assert!(matches!(gma.validate_payloads(&mut ByteProgress::new(&transaction, 0), &mut [0; 8 * 1024]), Err(GMAError::Checksum(_))));
+		transaction.finished(());
 	}
 
 	#[test]

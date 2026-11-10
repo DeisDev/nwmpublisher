@@ -35,6 +35,7 @@
 		['changelog', 'changelog_defaults.nav'],
 		['paths', 'settings.paths.paths'],
 		['appearance', 'settings.appearance'],
+		['advanced', 'settings.advanced.title'],
 	];
 	const layouts = [['vertical', ['bbcode.vertical']], ['horizontal', ['bbcode.horizontal']]];
 
@@ -62,6 +63,8 @@
 	function afterChange() {
 		if (this.type === 'checkbox') {
 			AppSettings[this.id] = this.checked;
+		} else if (this.type === 'number') {
+			AppSettings[this.id] = this.value === '' ? null : this.valueAsNumber;
 		} else if (typeof this.value === 'string') {
 			const trimmed = this.value.trim();
 			AppSettings[this.id] = trimmed.length > 0 ? trimmed : null;
@@ -205,7 +208,22 @@
 			<Setting afterChange={changeCustomColor} id="color_neutral" type="color" value={AppSettings.color_neutral}>{$_('settings.accessibility.color_neutral')}</Setting>
 			<Setting afterChange={changeCustomColor} id="color_success" type="color" value={AppSettings.color_success}>{$_('settings.accessibility.color_success')}</Setting>
 			<Setting afterChange={changeCustomColor} id="color_error" type="color" value={AppSettings.color_error}>{$_('settings.accessibility.color_error')}</Setting>
-
+		{:else if activeItem === 'advanced'}
+			<section>
+				<h3>{$_('settings.advanced.threads')}</h3>
+				<p class="note">{$_('settings.advanced.restart')}</p>
+				<Setting {afterChange} id="worker_threads" type="number" value={AppSettings.worker_threads} initial={AppData.performance_defaults.worker_threads} min="1" max="64" tooltip={$_('settings.advanced.worker_threads_tooltip')}>{$_('settings.advanced.worker_threads')}</Setting>
+				<Setting {afterChange} id="extraction_jobs" type="number" value={AppSettings.extraction_jobs} initial={AppData.performance_defaults.extraction_jobs} min="1" max="64">{$_('settings.advanced.extraction_jobs')}</Setting>
+				<Setting {afterChange} id="download_threads" type="number" value={AppSettings.download_threads} initial={AppData.performance_defaults.download_threads} min="1" max="64" tooltip={$_('settings.advanced.download_threads_tooltip')}>{$_('settings.advanced.download_threads')}</Setting>
+			</section>
+			<section>
+				<h3>{$_('settings.advanced.files')}</h3>
+				<Setting {afterChange} id="extraction_threads" type="number" value={AppSettings.extraction_threads} initial={AppData.performance_defaults.extraction_threads} min="1" max="64" tooltip={$_('settings.advanced.extraction_threads_tooltip')}>{$_('settings.advanced.extraction_threads')}</Setting>
+				<Setting {afterChange} id="packing_jobs" type="number" value={AppSettings.packing_jobs} initial={$_('settings.advanced.no_limit')} min="1" max="64" tooltip={$_('settings.advanced.packing_jobs_tooltip')}>{$_('settings.advanced.packing_jobs')}</Setting>
+				<Setting {afterChange} id="buffer_size_kib" type="number" value={AppSettings.buffer_size_kib} initial={AppData.performance_defaults.buffer_size_kib} min="8" max="16384" tooltip={$_('settings.advanced.buffer_size_tooltip')}>{$_('settings.advanced.buffer_size')}</Setting>
+				<Setting {afterChange} id="lzma_memory_mib" type="number" value={AppSettings.lzma_memory_mib} initial={AppData.performance_defaults.lzma_memory_mib} min="16" max="4096" tooltip={$_('settings.advanced.lzma_memory_tooltip')}>{$_('settings.advanced.lzma_memory')}</Setting>
+				<Setting {afterChange} id="sync_extracted_files" type="bool" value={AppSettings.sync_extracted_files} tooltip={$_('settings.advanced.sync_files_tooltip')}>{$_('settings.advanced.sync_files')}</Setting>
+			</section>
 		{/if}
 	</form>
 </Modal>
@@ -219,6 +237,7 @@
 	h2 { margin: 0 0 1rem; font-size: 1.1rem; }
 	h3 { margin: 0 0 1.25rem; font-size: .95rem; }
 	.discord-unavailable { color: var(--text-muted); font-size: .8rem; margin: -.5rem 0 1rem; }
+	.note { color: var(--text-muted); font-size: .8rem; margin: -.75rem 0 1.25rem; }
 	.open-logs {
 		align-self: flex-start;
 		display: flex;

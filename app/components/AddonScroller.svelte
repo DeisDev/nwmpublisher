@@ -20,7 +20,7 @@
 	export let emptyMessage = null;
 	export let total = 0;
 
-	// Removing more cards than this rebuilds the grid at once instead of animating each card out.
+	// Removing more cards than this updates the grid at once instead of animating each card out.
 	const ANIMATED_REMOVALS = 20;
 
 	let loading = true;
@@ -29,14 +29,15 @@
 	let addons = [];
 	let pages = 0;
 	let request = 0;
-	let generation = 0;
+	let animateChanges = true;
 
 	const key = addon => addon.installed?.path ?? addon.workshop?.id;
 
+	// Cards that stay keep their component, so their previews do not reload.
 	function replaceAddons(replacement, animate) {
 		const kept = new Set(replacement.map(key));
 		const removed = addons.filter(addon => !kept.has(key(addon))).length;
-		if (!animate || removed > ANIMATED_REMOVALS) generation++;
+		animateChanges = animate && removed <= ANIMATED_REMOVALS;
 		addons = replacement;
 	}
 
@@ -290,15 +291,13 @@
 		<Dead size="2rem"/>
 		<div id="error">{emptyMessage ?? $_('ERR_NO_ADDONS_FOUND')}</div>
 	{:else if selection}
-		{#key generation}
-			<div id="grid" role="listbox" aria-multiselectable="true" aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
-				{#each addons as addon, index (key(addon))}
-					<div class="option" role="option" aria-selected={!!selected?.has(key(addon))} aria-label={addonName(addon.workshop, addon.installed)} aria-setsize={total} aria-posinset={index + 1} tabindex={index === focusIndex ? 0 : -1} on:mousedown={cardMousedown} on:contextmenu={keyboardMenu} animate:flip={{ duration: 200 }} out:fade={{ duration: 150 }}>
-						<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={true} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
-					</div>
-				{/each}
-			</div>
-		{/key}
+		<div id="grid" role="listbox" aria-multiselectable="true" aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
+			{#each addons as addon, index (key(addon))}
+				<div class="option" role="option" aria-selected={!!selected?.has(key(addon))} aria-label={addonName(addon.workshop, addon.installed)} aria-setsize={total} aria-posinset={index + 1} tabindex={index === focusIndex ? 0 : -1} on:mousedown={cardMousedown} on:contextmenu={keyboardMenu} animate:flip={{ duration: animateChanges ? 200 : 0 }} out:fade={{ duration: animateChanges ? 150 : 0 }}>
+					<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={true} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
+				</div>
+			{/each}
+		</div>
 	{:else}
 		<div id="grid">
 			{#each addons as addon (key(addon))}

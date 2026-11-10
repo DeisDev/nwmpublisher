@@ -1,7 +1,7 @@
 <script>
 	import { onMount } from 'svelte';
 	import { _ } from 'svelte-i18n';
-	import { ArrowDown, ArrowUpRight, Download, CodeXml } from '@lucide/svelte';
+	import { ArrowDown, ArrowUpRight, Download, CodeXml, Monitor, Moon, Sun } from '@lucide/svelte';
 	import logo from '../public/img/logo.svg';
 	import windows from '../public/img/windows.svg';
 	import apple from '../public/img/apple.svg';
@@ -12,16 +12,23 @@
 	import editing from '../public/screenshots/Edit.webp';
 	import addonSettings from '../public/screenshots/Addon Settings.webp';
 	import extraction from '../public/screenshots/Addon Extract.webp';
+	import collections from '../public/screenshots/Collection Editor.webp';
+	import collectionCompare from '../public/screenshots/Collection Compare.webp';
+	import installed from '../public/screenshots/Installed Addons Selection.webp';
 	import { detectPlatform, getLatestRelease, getNightlyRelease, nightlyUrl, repositoryUrl, releasesUrl } from './downloads.js';
+	import { applyTheme, nextTheme, saveTheme, savedTheme } from './theme.js';
 
 	const screenshots = [
 		{ id: 'workshop', image: workshop },
 		{ id: 'publishing', image: publishing },
+		{ id: 'collections', image: collections },
+		{ id: 'installed', image: installed },
 		{ id: 'size', image: size }
 	];
 	const features = [
 		{ id: 'publish', image: editing, screen: 'edit' },
 		{ id: 'manage', image: addonSettings, screen: 'addon_settings' },
+		{ id: 'collections', image: collectionCompare, screen: 'collection_compare' },
 		{ id: 'clean', image: extraction, screen: 'extract' }
 	];
 	const platforms = [
@@ -38,7 +45,14 @@
 	let nightly = null;
 	let nightlyLoading = true;
 	let nightlyFailed = false;
+	let theme = savedTheme();
 	$: recommendedDownload = release?.downloads[detectedPlatform];
+	$: applyTheme(theme);
+
+	function changeTheme() {
+		theme = nextTheme(theme);
+		saveTheme(theme);
+	}
 
 	onMount(() => {
 		detectedPlatform = detectPlatform(navigator);
@@ -84,6 +98,9 @@
 		<a href="#downloads">{$_('website.downloads')}</a>
 		<a class="source-link" href={repositoryUrl}><CodeXml size={18}/> <span>{$_('website.source')}</span></a>
 	</nav>
+	<button type="button" class="theme-toggle" on:click={changeTheme} aria-label={$_(`website.theme_${theme}`)} title={$_(`website.theme_${theme}`)}>
+		{#if theme === 'light'}<Sun size={18}/>{:else if theme === 'dark'}<Moon size={18}/>{:else}<Monitor size={18}/>{/if}
+	</button>
 </header>
 
 <main id="main">
@@ -154,7 +171,7 @@
 			{#each platforms as platform}
 				<article class:detected={detectedPlatform === platform.id}>
 					<div class="platform-heading">
-						<img src={platform.icon} alt="" width="25" height="25"/>
+						<span class="platform-icon" style:--icon={`url("${platform.icon}")`}></span>
 						{#if detectedPlatform === platform.id}<span class="detected-label">{$_('website.detected')}</span>{/if}
 					</div>
 					<h3>{$_(`website.platform_${platform.id}`)}</h3>

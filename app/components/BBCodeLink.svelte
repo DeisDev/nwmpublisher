@@ -1,26 +1,22 @@
 <script>
 	import { _ } from 'svelte-i18n';
 	import { invoke } from '@tauri-apps/api/core';
+	import { taskError } from '../transactions.js';
 
 	export let href;
-	let error = null;
-	$: if (href) error = null;
 
 	async function follow(event) {
 		if (event.type === 'auxclick' && event.button !== 1) return;
 		event.preventDefault();
-		const target = href;
-		error = null;
 		try {
-			await invoke('open_url', { url: target });
+			await invoke('open_url', { url: href });
 		} catch (reason) {
-			if (target === href) error = String(reason);
+			taskError($_('bbcode.link_failed', { values: { error: String(reason) } }));
 		}
 	}
 </script>
 
 <a {href} title={href} target="_blank" rel="noopener noreferrer" on:click={follow} on:auxclick={follow}><slot/></a>
-{#if error}<span class="error" role="alert">{$_('bbcode.link_failed', { values: { error } })}</span>{/if}
 
 <style>
 	a {
@@ -31,10 +27,5 @@
 	a:focus-visible {
 		outline: 2px solid #127cff;
 		outline-offset: 2px;
-	}
-	.error {
-		display: block;
-		color: var(--error);
-		font-size: .85em;
 	}
 </style>

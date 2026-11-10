@@ -17,7 +17,6 @@
 	let sort = AppSettings.my_workshop_sort;
 	let saved = { visibility, sort };
 	let saveRequest = 0;
-	let saveError = null;
 	let filtersOpen = false;
 	let filterMenu;
 	let filterButton;
@@ -91,7 +90,6 @@
 		const request = ++saveRequest;
 		visibility = nextVisibility;
 		sort = nextSort;
-		saveError = null;
 		saveSettings({
 			my_workshop_visibility: nextVisibility,
 			my_workshop_sort: nextSort,
@@ -99,8 +97,7 @@
 			saved = { visibility: nextVisibility, sort: nextSort };
 			AppSettings.my_workshop_visibility = nextVisibility;
 			AppSettings.my_workshop_sort = nextSort;
-		}, error => {
-			saveError = String(error);
+		}, () => {
 			if (request !== saveRequest) return;
 			visibility = saved.visibility;
 			sort = saved.sort;
@@ -190,12 +187,9 @@
 		</label>
 		<div class="search">
 			<Search size="1rem"/>
-			<input type="search" bind:value={query} bind:this={searchInput} placeholder={$_('workshop_search')} aria-label={$_('workshop_search')} on:keydown={searchKeydown}/>
+			<input type="search" bind:value={query} bind:this={searchInput} placeholder={$_('my_workshop_search')} aria-label={$_('my_workshop_search')} on:keydown={searchKeydown}/>
 		</div>
 	</div>
-	{#if saveError}
-		<p class="error" role="alert">{$_('workshop_save_error', { values: { error: saveError } })}</p>
-	{/if}
 	{#if loading}
 		<p class="status" role="status"><Loading inline size="1rem"/> {$_('workshop_loading', { values: { num: loadedCount, total } })}</p>
 	{:else if loadError}

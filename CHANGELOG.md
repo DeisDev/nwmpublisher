@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Success and failure messages now appear in one place at the bottom of the window instead of inside each page. Failure messages stay until you close them.
+
+## [3.8.1] - 2026-11-10
+
+### Added
+
+- Remove the items that need a missing required addon from a collection's Problems tab.
+- Subscribe to missing required addons when you add them to a collection. They are subscribed when you save, and the choice is remembered.
+
+### Fixed
+
+- Fixed some older addons failing to download or extract with "Corrupted GMA file".
+- Fixed Reload from Steam not updating a collection's item details and missing required addons.
+
+## [3.8.0] - 2026-11-09
+
+### Added
+
+- Drop GMA files onto the Downloader to extract them. Other files are skipped with a message.
+- Add a light theme to the website. It follows your system setting, or pick one with the button in the header.
+- Links to the website now show a preview with a title, description and image in Discord and other apps.
+- Add a Sync tab to collections that compares a collection with your subscriptions, so you can add what you subscribe to and remove what you don't. Mark a collection as mirroring your subscriptions to see the differences as soon as you open it.
+- Change your subscriptions to match a collection from its Sync tab.
+- Remove unsubscribed items from several collections at once from the Collections selection bar.
+- Delete Steam's copies of unsubscribed addons from Installed Addons.
+- Translate all new interface text into every supported language.
+
+### Changed
+
+- Saving a collection shows progress and can be stopped. Large changes are sent to Steam at a steady pace and wait when Steam asks to slow down.
+- On Linux, temporary files now go in `~/.cache/nwmpublisher` instead of `/tmp`, so Steam installed through Nix can read uploads.
+- Temporary files left over for more than a day, such as after a crash, are deleted when nwmpublisher starts.
+
+### Fixed
+
+- The addon cleaner no longer keeps unsubscribed files with the message that Steam could not mark them as unused.
+- The addon cleaner and collection sync no longer fail when one of your subscriptions was deleted or made private.
+- Extracting an addon no longer fails with a checksum error when its files are intact but the archive's trailing checksum is wrong.
+- Opening nwmpublisher while it is already running now switches to the open window instead of starting a second copy.
+- On Windows, nwmpublisher now shows a message when an error closes it.
+- On Linux, uploads that Steam cannot read now explain how to fix it instead of showing "a file was not found".
+- The Linux packages no longer require libxdo, which they never used. The Fedora package installs again on Fedora 45.
+- The Linux AppImage uses your system's WebKitGTK when it is installed, which fixes it crashing on Fedora 45 and other recent distributions. Set `NWMPUBLISHER_BUNDLED_WEBKIT=1` to use the copy inside the AppImage.
+
+## [3.7.0] - 2026-10-23
+
 ### Added
 
 - Drag to resize the description and changelog previews, and swap them to the other side.
@@ -21,6 +69,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add a Collections page to create, edit, compare, and delete your Workshop collections, subscribe to or download everything in one, and find missing, removed, or duplicate items.
 - Add addons to your collections from their right-click menu or from the Installed Addons selection bar.
 - Search Installed Addons and My Workshop by name as you type. Press Ctrl+F to jump to the search box.
+- The addon size analyzer shows the total size, addon count, and each type's share. Click a type to zoom in, search to highlight addons, and press Ctrl+F to jump to the search box.
+- Move through the addon size analyzer with the arrow keys, open an addon with Enter, and open its menu with Shift+F10 or the Menu key.
+- Tiny addons in the size analyzer are grouped into one tile. Hovering shows the share of disk space, Workshop ID, and file path.
+- Add a Refresh button to the addon size analyzer and an option to include unpacked addon folders.
+- Entity and Other addon types now have their own tag colours.
+- Add an Advanced section in Settings for thread counts, memory use, a packing job limit, and syncing extracted files to disk.
 
 ### Changed
 
@@ -29,6 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installed Addons and My Workshop now show a scrollbar.
 - The addon cleaner now lists unsubscribed addons that Steam still keeps in its cache, and tells Steam it no longer needs them when you remove them.
 - Update to Steamworks SDK 1.64.
+- The addon size analyzer now resizes instantly, places the largest addon types first, follows the light theme, and uses less memory with many addons. It reopens instantly and only recomputes when addons change.
+- Extraction now writes several files at once.
 
 ### Removed
 
@@ -39,10 +95,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix extracting addons with thousands of files failing with "Too many open files".
 - Fix extraction progress staying at 0% and then jumping ahead. It now shows "Verifying" while the addon is checked.
 - Fix addons with tall icons making their card taller than the rest. Icons now fit in a square.
-- Fix deleting or unsubscribing from an addon sometimes never finishing while the addon list was reloading.
-- Deleting or unsubscribing from an installed addon now removes only that addon from the list, instead of reloading the whole list and jumping back to the top.
 - Fix the Create folder option being ignored when extracting an addon to a folder you choose.
 - Fix files in symlinked or junctioned folders being left out of uploads. A broken link now shows an error instead.
+- Fix the addon size analyzer never finishing when an addon's details cannot be read, and fix it breaking on addons with an empty or unusual type.
+- Fix the addon size analyzer showing "No Addons Found" for every error.
+- Fix the addon size analyzer tooltip flickering, lagging behind the mouse, and drifting from the tile near the edges.
 
 ## [3.6.0] - 2026-10-16
 

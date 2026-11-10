@@ -1,0 +1,30 @@
+name: Retry failed builds
+
+on:
+  workflow_run:
+    workflows: [build, nightly]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  rerun:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ github.event.workflow_run.id }}
+    steps:
+    # macOS jobs sometimes never get a runner or fail while creating the disk image.
+    - name: Rerun failed jobs
+      shell: bash
+      run: |
+        set -euo pipefail
+        attempt=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID" --jq .run_attempt)
+        if (( attempt >= 3 )); then
+          echo "::notice::Run $RUN_ID failed $attempt times. Not retrying again."
+          exit 0
+        fi
+        gh run rerun "$RUN_ID" --failed

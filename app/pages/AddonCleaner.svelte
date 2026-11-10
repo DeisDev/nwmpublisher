@@ -9,6 +9,8 @@
 	import Modal from '../components/Modal.svelte';
 	import { formatSize } from '../format.js';
 	import { saveSettings } from '../settings.js';
+	import { playSound } from '../sounds';
+	import { taskError, taskMessage } from '../transactions.js';
 
 	let scan = null;
 	let cleaner;
@@ -16,7 +18,6 @@
 	let busy = false;
 	let saving = false;
 	let confirming = false;
-	let error = null;
 	let result = null;
 	let permanent = AppSettings.addon_cleaner_permanent_delete ?? false;
 	const pageSize = 50;
@@ -96,7 +97,6 @@
 
 	async function scanAddons() {
 		busy = true;
-		error = null;
 		result = null;
 		scan = null;
 		selected = [];
@@ -111,7 +111,7 @@
 			scan = await invoke('scan_addon_cleaner', { onProgress });
 			selected = scan.files.map((_, index) => index);
 		} catch (err) {
-			error = err;
+			taskError(errorText(err));
 		} finally {
 			busy = false;
 			operation++;
@@ -123,12 +123,10 @@
 		const control = event.currentTarget;
 		const next = control.value === 'permanent';
 		saving = true;
-		error = null;
 		try {
 			await saveSettings({ addon_cleaner_permanent_delete: next });
 			permanent = next;
-		} catch (err) {
-			error = err;
+		} catch {
 		} finally {
 			saving = false;
 			control.value = permanent ? 'permanent' : 'trash';
@@ -138,7 +136,6 @@
 	async function clean() {
 		confirming = false;
 		busy = true;
-		error = null;
 		const onProgress = startProgress();
 		try {
 			result = await invoke('clean_addons', { scanId: scan.scanId, selected, permanent, onProgress });
@@ -147,8 +144,15 @@
 			detailsRequest++;
 			detailsLoading = false;
 			detailsError = null;
+			const summary = $_('cleaner_result', { values: { removed: result.removed.length, failed: result.failed.length } });
+			if (result.failed.length) {
+				taskError(summary);
+			} else {
+				taskMessage(summary);
+				playSound('success');
+			}
 		} catch (err) {
-			error = err;
+			taskError(errorText(err));
 		} finally {
 			busy = false;
 			operation++;
@@ -182,14 +186,12 @@
 			{#if progress.source}<small>{$_(`cleaner_source_${progress.source}`)}</small>{/if}
 			{#if progress.path}<small class="path">{progress.path}</small>{/if}
 			<small>{$_('cleaner_elapsed', { values: { seconds: elapsed } })}
-				{#if quietSeconds >= 2} · {$_(progress.stage === 'subscriptions' ? 'cleaner_waiting_steam' : 'cleaner_last_update', { values: { seconds: quietSeconds } })}{/if}
+				{#if quietSeconds >= 2}{' · '}{$_(progress.stage === 'subscriptions' ? 'cleaner_waiting_steam' : 'cleaner_last_update', { values: { seconds: quietSeconds } })}{/if}
 			</small>
 		</div>
 	{/if}
-	{#if error}<p class="error" role="alert">{errorText(error)}</p>{/if}
-	{#if result}
+	{#if result?.steamCache.length || result?.failed.length}
 		<div class="result" role="status">
-			<p>{$_('cleaner_result', { values: { removed: result.removed.length, failed: result.failed.length } })}</p>
 			{#if result.steamCache.length > 0}<p>{$_('cleaner_result_steam', { values: { count: result.steamCache.length } })}</p>{/if}
 			{#each result.failed as failure}
 				<p class="error"><span class="path">{failure.path}</span><br>{errorText(failure.error)}</p>
@@ -225,7 +227,7 @@
 						<div class="file-info">
 							<a class="title" href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${file.workshopId}`} target="_blank" rel="noreferrer">{details[file.workshopId]?.title ?? file.fileName}</a>
 							{#if details[file.workshopId] && !details[file.workshopId].title}<small>{$_('cleaner_details_unavailable')}</small>{/if}
-							<small>{$_(file.steamCache ? 'cleaner_source_steam_cache' : `cleaner_source_${file.source}`)} ·{$_('cleaner_workshop_id', { values: { id: file.workshopId } })}{#if file.folder} · {$_('cleaner_empty_folder')}{/if}</small>
+							<small>{$_(file.steamCache ? 'cleaner_source_steam_cache' : `cleaner_source_${file.source}`)} · {$_('cleaner_workshop_id', { values: { id: file.workshopId } })}{#if file.folder}{' · '}{$_('cleaner_empty_folder')}{/if}</small>
 							<small class="path">{file.path}</small>
 						</div>
 						<span class="size">{formatSize(file.size, $locale)}</span>

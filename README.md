@@ -35,7 +35,8 @@ It does not add shortcuts or `.gma` file associations.
 It requires [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section),
 which is already present on most Windows PCs.
 
-On Linux, if the window stays blank, install the package for your distribution instead of the AppImage.
+On Linux, the AppImage uses your system's WebKitGTK when it is installed. Set `NWMPUBLISHER_BUNDLED_WEBKIT=1` to use
+the copy inside the AppImage instead. If the window stays blank, install the package for your distribution instead of the AppImage.
 If the window looks wrong on Wayland, start nwmpublisher with `GDK_BACKEND=x11`, for example
 `GDK_BACKEND=x11 nwmpublisher`. If the window is blank or parts of it do not draw, which mostly happens with
 the proprietary NVIDIA driver, start it with `WEBKIT_DISABLE_DMABUF_RENDERER=1`. If that does not help, start it
@@ -112,7 +113,8 @@ nwmpublisher --publish "my_addon" --update 123456789 --changes "Fixed a bug"
 `-e` and `-o` are aliases for `--extract` and `--out`. Output goes directly into
 `--out`, creating the directory if needed and overwriting matching files. Without
 `--out`, extraction uses an addon-named folder in the application's configured
-temporary directory (by default, `nwmpublisher` inside the system temporary directory).
+temporary directory (by default, `nwmpublisher` inside the system temporary directory, or
+inside `~/.cache` on Linux).
 This default destination follows the application's overwrite/recycle setting.
 `--out-parent PATH` creates the addon folder inside `PATH` instead. `--out` can't be
 combined with `--out-parent` or `--workshop-title`.
@@ -208,7 +210,17 @@ Windows is the primary development and testing platform.
 
 ![Addon settings](public/screenshots/Addon%20Settings.webp)
 
+![Collections](public/screenshots/Collections.webp)
+
+![Edit a collection](public/screenshots/Collection%20Editor.webp)
+
+![Compare collections](public/screenshots/Collection%20Compare.webp)
+
 ![Installed addons](public/screenshots/Installed%20Addons.webp)
+
+![Select installed addons](public/screenshots/Installed%20Addons%20Selection.webp)
+
+![Addon details](public/screenshots/Addon%20Details.webp)
 
 ![Extract an addon](public/screenshots/Addon%20Extract.webp)
 

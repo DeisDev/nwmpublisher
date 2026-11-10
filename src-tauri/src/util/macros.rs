@@ -83,21 +83,12 @@ macro_rules! try_block {
 	};
 }
 
-pub static NUM_THREADS: std::sync::LazyLock<usize> =
-	std::sync::LazyLock::new(|| usize::max(std::thread::available_parallelism().map_or(1, |n| n.get()) - 2, 2));
 #[macro_export]
 macro_rules! thread_pool {
 	( $n:expr ) => {
 		rayon::ThreadPoolBuilder::new()
-			.num_threads(isize::max(
-				isize::min($n - 2, std::thread::available_parallelism().map_or(1, |n| n.get()) as isize),
-				2,
-			) as usize)
+			.num_threads(usize::clamp($n, 1, std::thread::available_parallelism().map_or(1, |n| n.get())))
 			.build()
 			.unwrap()
-	};
-
-	() => {
-		rayon::ThreadPoolBuilder::new().num_threads(*$crate::NUM_THREADS).build().unwrap()
 	};
 }

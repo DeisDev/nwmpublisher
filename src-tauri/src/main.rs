@@ -75,7 +75,7 @@ fn deadlock_watchdog() {
 fn main() -> std::process::ExitCode {
 	std::panic::set_hook(Box::new(logging::panic));
 
-	rayon::ThreadPoolBuilder::new().num_threads(*crate::NUM_THREADS).build_global().unwrap();
+	rayon::ThreadPoolBuilder::new().num_threads(app_data!().settings.read().performance().worker_threads).build_global().unwrap();
 
 	if let Some(exit_code) = cli::stdin() {
 		return exit_code;
@@ -93,6 +93,11 @@ fn main() -> std::process::ExitCode {
 	println!("Starting GUI...");
 
 	tauri::Builder::default()
+		.plugin(tauri_plugin_single_instance::init(|app, _, _| {
+			let Some(window) = app.get_webview_window("nwmpublisher") else { return };
+			window.unminimize().ok();
+			window.set_focus().ok();
+		}))
 		.plugin(tauri_plugin_dialog::init())
 		.plugin(tauri_plugin_clipboard_manager::init())
 		.setup(|app| {

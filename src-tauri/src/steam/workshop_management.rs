@@ -1,17 +1,155 @@
 use std::{
 	collections::HashSet,
-	sync::mpsc,
+	sync::{
+		atomic::{AtomicBool, Ordering},
+		mpsc,
+	},
 	time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize};
-use steamworks::{AppIDs, FileType, PublishedFileId, QueryResult, QueryResults, SteamId, UGCQueryType, UGCType};
+use steamworks::{AppIDs, FileType, PublishedFileId, QueryResult, QueryResults, SteamError, SteamId, UGCQueryType, UGCType};
 
 use super::workshop::{WorkshopItem, WorkshopVisibility};
 use crate::GMOD_APP_ID;
 
 pub(super) const STEAM_TIMEOUT: Duration = Duration::from_secs(30);
 static SAVE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
+// Steamworks publishes no rate limits for Workshop writes, so the pace is ours. The gap also lets other
+// Steam callbacks run between writes. Backoff follows EResult: RateLimitExceeded (84), Busy (10) and
+// ServiceUnavailable (20) are temporary, while LimitExceeded (25) may be permanent.
+const WRITE_GAP: Duration = Duration::from_millis(250);
+const BACKOFF: [Duration; 5] = [
+	Duration::from_secs(2),
+	Duration::from_secs(4),
+	Duration::from_secs(8),
+	Duration::from_secs(16),
+	Duration::from_secs(32),
+];
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum WriteFailure {
+	Retry,
+	Stop,
+	Fail,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SteamWriteError {
+	message: String,
+	pub(crate) result: Option<SteamError>,
+	halt: bool,
+}
+
+impl SteamWriteError {
+	pub(crate) fn steam(error: SteamError) -> Self {
+		Self {
+			message: error.to_string(),
+			result: Some(error),
+			halt: false,
+		}
+	}
+
+	fn halt(message: impl Into<String>) -> Self {
+		Self {
+			message: message.into(),
+			result: None,
+			halt: true,
+		}
+	}
+
+	fn fail(message: impl Into<String>) -> Self {
+		Self {
+			message: message.into(),
+			result: None,
+			halt: false,
+		}
+	}
+
+	pub(crate) fn kind(&self) -> WriteFailure {
+		match self.result {
+			Some(SteamError::RateLimitExceeded | SteamError::Busy | SteamError::ServiceUnavailable) => WriteFailure::Retry,
+			Some(SteamError::LimitExceeded | SteamError::Timeout | SteamError::NoConnection) => WriteFailure::Stop,
+			Some(_) => WriteFailure::Fail,
+			None if self.halt => WriteFailure::Stop,
+			None => WriteFailure::Fail,
+		}
+	}
+}
+
+impl std::fmt::Display for SteamWriteError {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.write_str(&self.message)
+	}
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum Paced {
+	Written,
+	Stopped,
+}
+
+fn paced_write(
+	mut write: impl FnMut() -> Result<(), SteamWriteError>,
+	mut wait: impl FnMut(Duration) -> bool,
+	mut retrying: impl FnMut(Duration),
+) -> Result<Paced, SteamWriteError> {
+	let mut backoff = BACKOFF.iter();
+	let mut delay = WRITE_GAP;
+	loop {
+		if !wait(delay) {
+			return Ok(Paced::Stopped);
+		}
+		let error = match write() {
+			Ok(()) => return Ok(Paced::Written),
+			Err(error) => error,
+		};
+		if error.kind() != WriteFailure::Retry {
+			return Err(error);
+		}
+		let Some(next) = backoff.next() else {
+			return Err(SteamWriteError::halt("Steam kept asking us to slow down. Try again later."));
+		};
+		retrying(*next);
+		delay = *next;
+	}
+}
+
+fn wait_unless_stopped(stop: &AtomicBool, delay: Duration) -> bool {
+	let end = Instant::now() + delay;
+	while !stop.load(Ordering::Acquire) {
+		let left = end.saturating_duration_since(Instant::now());
+		if left.is_zero() {
+			return true;
+		}
+		std::thread::sleep(left.min(Duration::from_millis(100)));
+	}
+	false
+}
+
+/// Runs one Steam write after the pause between writes, retrying throttled writes with backoff.
+/// Returns `Stopped` without writing once `stop` is set.
+pub(crate) fn paced(stop: &AtomicBool, write: impl FnMut() -> Result<(), SteamWriteError>, retrying: impl FnMut(Duration)) -> Result<Paced, SteamWriteError> {
+	paced_write(write, |delay| wait_unless_stopped(stop, delay), retrying)
+}
+
+pub(crate) fn change_subscription(id: PublishedFileId, subscribe: bool) -> Result<(), SteamWriteError> {
+	connected().map_err(SteamWriteError::halt)?;
+	let (sender, receiver) = mpsc::sync_channel(1);
+	let send = move |result| {
+		let _ = sender.send(result);
+	};
+	if subscribe {
+		steam!().client().ugc().subscribe_item(id, send);
+	} else {
+		steam!().client().ugc().unsubscribe_item(id, send);
+	}
+	receiver
+		.recv_timeout(STEAM_TIMEOUT)
+		.map_err(|_| SteamWriteError::halt("Steam stopped responding. The change may still complete."))?
+		.map_err(SteamWriteError::steam)
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,16 +217,16 @@ fn dependency_changes(
 // steamworks consumes even unregistered call results in its callback pump.
 // Hold the dispatch lock until this raw result is read; other callbacks remain
 // queued while Steam's periodic frame work continues, including on timeout.
-pub(super) fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool) -> Result<(), String> {
+pub(super) fn change_dependency(parent: PublishedFileId, child: PublishedFileId, add: bool) -> Result<(), SteamWriteError> {
 	use steamworks::sys;
-	connected()?;
+	connected().map_err(SteamWriteError::halt)?;
 	let dispatch = steam!().callback_dispatch.lock();
 	let _client = steam!().client();
 	unsafe {
 		let ugc = sys::SteamAPI_SteamUGC_v021();
 		let utils = sys::SteamAPI_SteamUtils_v010();
 		if ugc.is_null() || utils.is_null() {
-			return Err("Steam Workshop is unavailable.".into());
+			return Err(SteamWriteError::halt("Steam Workshop is unavailable."));
 		}
 		let call = if add {
 			sys::SteamAPI_ISteamUGC_AddDependency(ugc, parent.0, child.0)
@@ -96,22 +234,22 @@ pub(super) fn change_dependency(parent: PublishedFileId, child: PublishedFileId,
 			sys::SteamAPI_ISteamUGC_RemoveDependency(ugc, parent.0, child.0)
 		};
 		if call == 0 {
-			return Err("Steam did not start the change.".into());
+			return Err(SteamWriteError::fail("Steam did not start the change."));
 		}
 		let start = Instant::now();
 		let mut failed = false;
 		while !sys::SteamAPI_ISteamUtils_IsAPICallCompleted(utils, call, &mut failed) {
 			if start.elapsed() >= STEAM_TIMEOUT {
-				return Err("Steam timed out. The change may still complete; reload before retrying.".into());
+				return Err(SteamWriteError::halt("Steam timed out. The change may still complete; reload before retrying."));
 			}
 			sys::SteamAPI_ManualDispatch_RunFrame(sys::SteamAPI_GetHSteamPipe());
 			std::thread::sleep(Duration::from_millis(20));
 		}
 		if failed {
-			return Err(format!(
+			return Err(SteamWriteError::halt(format!(
 				"Steam connection failure: {:?}",
 				sys::SteamAPI_ISteamUtils_GetAPICallFailureReason(utils, call)
-			));
+			)));
 		}
 		let (result, returned_parent, returned_child) = if add {
 			let mut result = std::mem::MaybeUninit::<sys::AddUGCDependencyResult_t>::uninit();
@@ -124,7 +262,7 @@ pub(super) fn change_dependency(parent: PublishedFileId, child: PublishedFileId,
 				&mut failed,
 			) || failed
 			{
-				return Err("Could not confirm the addition. Reload before retrying.".into());
+				return Err(SteamWriteError::halt("Could not confirm the addition. Reload before retrying."));
 			}
 			let result = result.assume_init();
 			(result.m_eResult, result.m_nPublishedFileId, result.m_nChildPublishedFileId)
@@ -139,16 +277,16 @@ pub(super) fn change_dependency(parent: PublishedFileId, child: PublishedFileId,
 				&mut failed,
 			) || failed
 			{
-				return Err("Could not confirm the removal. Reload before retrying.".into());
+				return Err(SteamWriteError::halt("Could not confirm the removal. Reload before retrying."));
 			}
 			let result = result.assume_init();
 			(result.m_eResult, result.m_nPublishedFileId, result.m_nChildPublishedFileId)
 		};
 		if returned_parent != parent.0 || returned_child != child.0 {
-			return Err("Steam returned a result for a different dependency.".into());
+			return Err(SteamWriteError::fail("Steam returned a result for a different dependency."));
 		}
 		if result != sys::EResult::k_EResultOK {
-			return Err(steamworks::SteamError::from(result).to_string());
+			return Err(SteamWriteError::steam(SteamError::from(result)));
 		}
 	}
 	drop(dispatch);
@@ -267,7 +405,7 @@ fn save_settings(request: WorkshopSettingsRequest) -> Result<WorkshopSaveResult,
 		&added,
 		&removed,
 		(request.visibility != request.original_visibility).then_some(request.visibility),
-		|child, add| change_dependency(id, child, add),
+		|child, add| change_dependency(id, child, add).map_err(|error| error.to_string()),
 		|visibility| change_visibility(id, visibility),
 	))
 }
@@ -671,5 +809,90 @@ mod tests {
 		request.visibility = WorkshopVisibility::Unlisted;
 		assert!(check_settings_conflict(&request, &[PublishedFileId(2)], WorkshopVisibility::Public).is_err());
 		assert!(check_settings_conflict(&request, &[PublishedFileId(2), PublishedFileId(4)], WorkshopVisibility::Private).is_ok());
+	}
+
+	#[test]
+	fn write_errors_are_classified_by_steam_result() {
+		for error in [SteamError::RateLimitExceeded, SteamError::Busy, SteamError::ServiceUnavailable] {
+			assert_eq!(SteamWriteError::steam(error).kind(), WriteFailure::Retry);
+		}
+		for error in [SteamError::LimitExceeded, SteamError::Timeout, SteamError::NoConnection] {
+			assert_eq!(SteamWriteError::steam(error).kind(), WriteFailure::Stop);
+		}
+		assert_eq!(SteamWriteError::steam(SteamError::AccessDenied).kind(), WriteFailure::Fail);
+		assert_eq!(SteamWriteError::halt("Timed out").kind(), WriteFailure::Stop);
+		assert_eq!(SteamWriteError::fail("Mismatch").kind(), WriteFailure::Fail);
+	}
+
+	#[test]
+	fn paced_writes_pause_back_off_and_give_up_after_five_throttles() {
+		let mut waits = Vec::new();
+		let mut retries = Vec::new();
+		let mut attempts = 0;
+		let result = paced_write(
+			|| {
+				attempts += 1;
+				if attempts < 3 {
+					Err(SteamWriteError::steam(SteamError::RateLimitExceeded))
+				} else {
+					Ok(())
+				}
+			},
+			|delay| {
+				waits.push(delay);
+				true
+			},
+			|delay| retries.push(delay),
+		);
+		assert_eq!(result.unwrap(), Paced::Written);
+		assert_eq!(waits, [WRITE_GAP, BACKOFF[0], BACKOFF[1]]);
+		assert_eq!(retries, &BACKOFF[..2]);
+
+		let mut attempts = 0;
+		let result = paced_write(
+			|| {
+				attempts += 1;
+				Err(SteamWriteError::steam(SteamError::Busy))
+			},
+			|_| true,
+			|_| {},
+		);
+		assert_eq!(attempts, 6);
+		assert_eq!(result.unwrap_err().kind(), WriteFailure::Stop);
+
+		let mut attempts = 0;
+		let result = paced_write(
+			|| {
+				attempts += 1;
+				Err(SteamWriteError::steam(SteamError::AccessDenied))
+			},
+			|_| true,
+			|_| {},
+		);
+		assert_eq!(attempts, 1);
+		assert_eq!(result.unwrap_err().kind(), WriteFailure::Fail);
+	}
+
+	#[test]
+	fn stopping_skips_the_write_even_during_backoff() {
+		let stop = AtomicBool::new(true);
+		let result = paced(&stop, || panic!("A stopped write must not run"), |_| {});
+		assert_eq!(result.unwrap(), Paced::Stopped);
+
+		let mut waits = 0;
+		let mut attempts = 0;
+		let result = paced_write(
+			|| {
+				attempts += 1;
+				Err(SteamWriteError::steam(SteamError::ServiceUnavailable))
+			},
+			|_| {
+				waits += 1;
+				waits == 1
+			},
+			|_| {},
+		);
+		assert_eq!(result.unwrap(), Paced::Stopped);
+		assert_eq!(attempts, 1);
 	}
 }

@@ -493,7 +493,7 @@
 				return;
 			}
 			const id = await invoke('package_addon', { request: { ...request, destination } });
-			new Transaction(id, transaction => $_('PUBLISH_PACKING', { values: {
+			new Transaction(id, transaction => $_(transaction.status ?? 'PUBLISH_PACKING', { values: {
 				pct: transaction.progress,
 				data: formatSize((transaction.progress / 100) * size),
 				dataTotal: formatSize(size),

@@ -6,7 +6,6 @@ pub use io_error::IoError;
 
 #[macro_use]
 mod macros;
-pub use macros::*;
 
 mod rwlockcow;
 pub use rwlockcow::*;

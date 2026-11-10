@@ -16,6 +16,8 @@
 	export let afterChange = null;
 	export let tooltip = null;
 	export let disabled = false;
+	export let min = null;
+	export let max = null;
 
 	if (!beforeChange && type === 'directory') {
 		beforeChange = async (before, after) => {
@@ -30,7 +32,7 @@
 		};
 	}
 
-	let prevVal = '';
+	let prevVal = type === 'number' ? String(value ?? '') : '';
 
 	function browse() {
 		const input = this.parentNode.querySelector(':scope > input');
@@ -60,6 +62,11 @@
 
 	async function change() {
 		if (this.value === prevVal) return;
+		if (type === 'number' && !this.checkValidity()) {
+			this.value = prevVal;
+			playSound('error');
+			return;
+		}
 		if (beforeChange) {
 			this.value = await beforeChange(prevVal, this.value);
 			if (this.value === prevVal) {
@@ -100,6 +107,8 @@
 			</div>
 		{:else if type === 'text'}
 			<input type="text" {id} name={id} {value} {disabled} spellcheck="false" on:change={beforeChange || afterChange ? change : null}/>
+		{:else if type === 'number'}
+			<input type="number" {id} name={id} placeholder={initial} {value} {min} {max} step="1" {disabled} on:change={beforeChange || afterChange ? change : null}/>
 		{/if}
 	{/if}
 </setting>
@@ -132,7 +141,7 @@
 		cursor: pointer;
 	}
 
-	input[type='text'] {
+	input[type='text'], input[type='number'] {
 		appearance: none;
 		font: inherit;
 		border-radius: 4px;
@@ -143,11 +152,11 @@
 		color: var(--text);
 		font-size: .85em;
 	}
-	input[type='text']:focus {
+	input[type='text']:focus, input[type='number']:focus {
 		outline: none;
 		box-shadow: inset 0 0 0px 1.5px #127cff;
 	}
-	input[type='text']:disabled {
+	input[type='text']:disabled, input[type='number']:disabled {
 		opacity: .5;
 		cursor: not-allowed;
 	}

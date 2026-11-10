@@ -211,20 +211,88 @@ fn account() -> Result<SteamId, CleanerError> {
 	Ok(steam!().client().user().steam_id())
 }
 
-fn append_page(ids: &mut HashSet<PublishedFileId>, total: u32, expected: &mut Option<u32>, page: Vec<PublishedFileId>) -> Result<bool, CleanerError> {
-	if expected.is_some_and(|previous| previous != total) || (page.is_empty() && ids.len() < total as usize) {
-		return Err(CleanerError::new("cleaner_error_subscriptions"));
-	}
-	*expected = Some(total);
-	for id in page {
-		if id.0 == 0 || !ids.insert(id) {
+/// Steam still counts deleted and private subscriptions in the total but leaves them out of the pages.
+#[derive(Default)]
+pub(crate) struct SubscriptionPages {
+	pub(crate) ids: HashSet<PublishedFileId>,
+	total: Option<u32>,
+	missing: u32,
+}
+
+impl SubscriptionPages {
+	pub(crate) fn append(&mut self, page: u32, total: u32, ids: Vec<PublishedFileId>) -> Result<(), CleanerError> {
+		let page_size = steamworks::RESULTS_PER_PAGE;
+		let expected = total.saturating_sub((page - 1) * page_size).min(page_size);
+		if self.total.is_some_and(|previous| previous != total) || ids.len() > expected as usize {
 			return Err(CleanerError::new("cleaner_error_subscriptions"));
 		}
+		self.total = Some(total);
+		self.missing += expected - ids.len() as u32;
+		for id in ids {
+			if id.0 == 0 || !self.ids.insert(id) {
+				return Err(CleanerError::new("cleaner_error_subscriptions"));
+			}
+		}
+		Ok(())
 	}
-	if ids.len() > total as usize {
-		return Err(CleanerError::new("cleaner_error_subscriptions"));
+
+	pub(crate) fn received(&self) -> usize {
+		self.ids.len() + self.missing as usize
 	}
-	Ok(ids.len() == total as usize)
+
+	pub(crate) fn complete(&self) -> bool {
+		self.total == Some(self.received() as u32)
+	}
+
+	pub(crate) fn missing(&self) -> usize {
+		self.missing as usize
+	}
+}
+
+/// Trusts pages with items left out only when as many subscriptions known only to the Steam client are unavailable.
+pub(crate) fn missing_explained(missing: usize, unavailable: usize) -> bool {
+	if unavailable < missing {
+		eprintln!("Steam left out {missing} subscriptions, but only {unavailable} subscriptions known only to the Steam client are unavailable");
+		return false;
+	}
+	if missing > 0 {
+		println!("Steam left out {missing} unavailable subscriptions");
+	}
+	true
+}
+
+/// Counts the items Steam can no longer show, such as deleted or private ones.
+fn unavailable(ids: &[PublishedFileId]) -> Result<usize, CleanerError> {
+	let mut count = 0;
+	for chunk in ids.chunks(DETAILS_BATCH_SIZE) {
+		let requested: HashSet<PublishedFileId> = chunk.iter().copied().collect();
+		let (sender, receiver) = mpsc::sync_channel(1);
+		steam!()
+			.client()
+			.ugc()
+			.query_items(chunk.to_vec())
+			.map_err(|error| CleanerError::detail("cleaner_error_subscriptions", error))?
+			.allow_cached_response(0)
+			.fetch(move |response| {
+				let found = response
+					.map(|results| {
+						results
+							.iter()
+							.flatten()
+							.map(|item| item.published_file_id)
+							.filter(|id| requested.contains(id))
+							.collect::<HashSet<_>>()
+							.len()
+					})
+					.map_err(|error| CleanerError::detail("cleaner_error_subscriptions", error));
+				let _ = sender.send(found);
+			});
+		let found = receiver
+			.recv_timeout(STEAM_TIMEOUT)
+			.map_err(|error| CleanerError::detail("cleaner_error_subscriptions", error))??;
+		count += chunk.len() - found;
+	}
+	Ok(count)
 }
 
 type SubscriptionPage = Result<(u32, Vec<PublishedFileId>), CleanerError>;
@@ -250,16 +318,11 @@ fn request_subscription_page(owner: SteamId, page: u32, sender: mpsc::Sender<(u3
 		.fetch(move |result| {
 			let result = result
 				.map_err(|error| CleanerError::detail("cleaner_error_subscriptions", error))
-				.and_then(|results| {
+				.map(|results| {
 					let ids = (0..results.returned_results())
-						.map(|index| {
-							results
-								.get(index)
-								.map(|item| item.published_file_id)
-								.ok_or_else(|| CleanerError::new("cleaner_error_subscriptions"))
-						})
-						.collect::<Result<Vec<_>, _>>()?;
-					Ok((results.total_results(), ids))
+						.filter_map(|index| results.get(index).map(|item| item.published_file_id))
+						.collect();
+					(results.total_results(), ids)
 				});
 			let _ = sender.send((page, result));
 		});
@@ -268,8 +331,7 @@ fn request_subscription_page(owner: SteamId, page: u32, sender: mpsc::Sender<(u3
 
 fn subscriptions(owner: SteamId, progress: &mut Progress) -> Result<HashSet<PublishedFileId>, CleanerError> {
 	progress.stage("subscriptions", None);
-	let mut ids = HashSet::new();
-	let mut expected = None;
+	let mut pages = SubscriptionPages::default();
 	let (sender, receiver) = mpsc::channel();
 	let mut pending = HashMap::from([(1, Instant::now())]);
 	request_subscription_page(owner, 1, sender.clone())?;
@@ -287,29 +349,34 @@ fn subscriptions(owner: SteamId, progress: &mut Progress) -> Result<HashSet<Publ
 			return Err(CleanerError::new("cleaner_error_subscriptions"));
 		}
 		let (total, page_ids) = response?;
-		let page_size = steamworks::RESULTS_PER_PAGE;
-		if page_ids.len() != total.saturating_sub((page - 1) * page_size).min(page_size) as usize {
-			return Err(CleanerError::new("cleaner_error_subscriptions"));
-		}
-		append_page(&mut ids, total, &mut expected, page_ids)?;
-		progress.state.completed = ids.len();
+		pages.append(page, total, page_ids)?;
+		progress.state.completed = pages.received();
 		progress.state.total = Some(total as usize);
 		progress.send(true);
-		let pages = total.div_ceil(page_size);
-		while pending.len() < SUBSCRIPTION_CONCURRENCY && next_page <= pages {
+		let page_count = total.div_ceil(steamworks::RESULTS_PER_PAGE);
+		while pending.len() < SUBSCRIPTION_CONCURRENCY && next_page <= page_count {
 			pending.insert(next_page, Instant::now());
 			request_subscription_page(owner, next_page, sender.clone())?;
 			next_page += 1;
 		}
 	}
-	if expected != Some(ids.len() as u32) {
+	if !pages.complete() {
 		return Err(CleanerError::new("cleaner_error_subscriptions"));
 	}
 	if account()? != owner {
 		return Err(CleanerError::new("cleaner_error_account"));
 	}
+	let local: HashSet<PublishedFileId> = steam!().client().ugc().subscribed_items(true).into_iter().collect();
+	if pages.missing() > 0 {
+		let (unsubscribed, _) = game_addons!().session_subscriptions();
+		let unlisted: Vec<_> = local.iter().filter(|id| !pages.ids.contains(id) && !unsubscribed.contains(id)).copied().collect();
+		if !missing_explained(pages.missing(), unavailable(&unlisted)?) {
+			return Err(CleanerError::new("cleaner_error_subscriptions"));
+		}
+	}
 	// Keep local subscriptions too, including items missing from a server query and items disabled locally in Steam.
-	ids.extend(steam!().client().ugc().subscribed_items(true));
+	let mut ids = pages.ids;
+	ids.extend(local);
 	Ok(ids)
 }
 
@@ -333,6 +400,16 @@ fn mark_unused(id: PublishedFileId) -> bool {
 		let ugc = sys::SteamAPI_SteamUGC_v021();
 		!ugc.is_null() && sys::SteamAPI_ISteamUGC_MarkDownloadedItemAsUnused(ugc, id.0)
 	}
+}
+
+/// Steam restores the files of items it still needs, so it has to let go of the item first.
+/// It refuses items it no longer needs, which it leaves on disk without restoring them.
+pub(crate) fn release_item(id: PublishedFileId, state: ItemState) -> bool {
+	let released = mark_unused(id);
+	if !released {
+		wprintln!("Steam would not mark Workshop item {} as unused (state {:?}); deleting its files", id.0, state);
+	}
+	released
 }
 
 pub(crate) fn is_link(metadata: &Metadata) -> bool {
@@ -519,20 +596,34 @@ pub(crate) fn remove_file(path: &Path, permanent: bool) -> Result<(), CleanerErr
 /// Garry's Mod's copies of one Workshop item. Steam removes its own copy once the game closes, and still reports
 /// the item as subscribed right after unsubscribing, so its content folder is left alone.
 pub(crate) fn item_archives(gmod: &Path, id: PublishedFileId, selected: &Path) -> Result<Vec<PathBuf>, CleanerError> {
-	check_ancestors(gmod)?;
-	let mut files = Vec::new();
-	for (folder, legacy) in [(gmod.join("garrysmod/addons"), true), (gmod.join("garrysmod/cache/workshop"), false)] {
-		files.extend(entries(&folder)?.into_iter().filter(|path| archive_id(path, legacy) == Some(id.0)));
-	}
+	let mut files = item_archives_by_id(gmod, &HashSet::from([id]))?.remove(&id).unwrap_or_default();
 	if crate::game_addons::GameAddons::workshop_content_id(selected).is_none() {
 		files.push(selected.to_owned());
 	}
+	Ok(regular_files(files))
+}
+
+/// Like `item_archives`, for many items that may never have been installed, reading each folder once.
+pub(crate) fn item_archives_by_id(gmod: &Path, ids: &HashSet<PublishedFileId>) -> Result<HashMap<PublishedFileId, Vec<PathBuf>>, CleanerError> {
+	check_ancestors(gmod)?;
+	let mut found: HashMap<PublishedFileId, Vec<PathBuf>> = HashMap::new();
+	for (folder, legacy) in [(gmod.join("garrysmod/addons"), true), (gmod.join("garrysmod/cache/workshop"), false)] {
+		for path in entries(&folder)? {
+			if let Some(id) = archive_id(&path, legacy).map(PublishedFileId).filter(|id| ids.contains(id)) {
+				found.entry(id).or_default().push(path);
+			}
+		}
+	}
+	Ok(found.into_iter().map(|(id, files)| (id, regular_files(files))).filter(|(_, files)| !files.is_empty()).collect())
+}
+
+fn regular_files(mut files: Vec<PathBuf>) -> Vec<PathBuf> {
 	let mut seen = HashSet::new();
 	files.retain(|path| {
 		fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file() && !is_link(&metadata))
 			&& seen.insert(dunce::canonicalize(path).unwrap_or_else(|_| path.clone()))
 	});
-	Ok(files)
+	files
 }
 
 pub(crate) fn remove_archives(files: Vec<PathBuf>, permanent: bool) -> CleanResult {
@@ -740,10 +831,9 @@ pub async fn clean_addons(
 			if file.source != Source::Workshop || state.is_empty() {
 				return Ok(Removal::Delete);
 			}
-			// Steam restores the files of items it still tracks, so it has to let go of the item first.
 			unchanged(file)?;
-			if !*marked.entry(id).or_insert_with(|| mark_unused(id)) {
-				return Err(CleanerError::new("cleaner_error_unused"));
+			if !*marked.entry(id).or_insert_with(|| release_item(id, state)) {
+				return Ok(Removal::Delete);
 			}
 			if fs::symlink_metadata(&file.path).is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound) {
 				return Ok(Removal::Gone);
@@ -814,27 +904,43 @@ mod tests {
 	}
 
 	#[test]
-	fn incomplete_or_changing_subscription_pages_fail_closed() {
-		let mut ids = HashSet::new();
-		let mut total = None;
-		assert!(!append_page(&mut ids, 2, &mut total, vec![PublishedFileId(1)]).unwrap());
-		assert!(append_page(&mut ids, 2, &mut total, vec![]).is_err());
-		assert!(append_page(&mut ids, 3, &mut total, vec![PublishedFileId(2)]).is_err());
-		assert!(append_page(&mut ids, 2, &mut total, vec![PublishedFileId(1)]).is_err());
-		assert!(append_page(&mut ids, 2, &mut total, vec![PublishedFileId(2)]).unwrap());
-		assert!(append_page(&mut HashSet::new(), 0, &mut None, vec![]).unwrap());
+	fn changing_or_inconsistent_subscription_pages_fail_closed() {
+		let ids = |range: std::ops::RangeInclusive<u64>| range.map(PublishedFileId).collect::<Vec<_>>();
+		let mut pages = SubscriptionPages::default();
+		pages.append(1, 51, ids(1..=50)).unwrap();
+		assert!(pages.append(2, 52, ids(51..=51)).is_err());
+		assert!(SubscriptionPages::default().append(1, 2, ids(1..=3)).is_err());
+		assert!(SubscriptionPages::default().append(1, 2, vec![PublishedFileId(1), PublishedFileId(1)]).is_err());
+		assert!(SubscriptionPages::default().append(1, 1, vec![PublishedFileId(0)]).is_err());
+		let mut pages = SubscriptionPages::default();
+		pages.append(1, 0, Vec::new()).unwrap();
+		assert!(pages.complete());
+	}
+
+	#[test]
+	fn subscription_pages_count_items_steam_leaves_out() {
+		let mut pages = SubscriptionPages::default();
+		pages.append(2, 100, (51..=99).map(PublishedFileId).collect()).unwrap();
+		assert!(!pages.complete());
+		pages.append(1, 100, Vec::new()).unwrap();
+		assert!(pages.complete());
+		assert_eq!(pages.missing(), 51);
+		assert_eq!(pages.received(), 100);
+		assert!(!missing_explained(51, 50));
+		assert!(missing_explained(51, 51));
+		assert!(missing_explained(0, 0));
 	}
 
 	#[test]
 	fn subscription_pages_can_complete_out_of_order_without_losing_ids() {
-		let mut ids = HashSet::new();
-		let mut total = None;
+		let mut pages = SubscriptionPages::default();
 		for page in [1, 4, 2, 3] {
 			let start = (page - 1) * 50 + 1;
-			let complete = append_page(&mut ids, 200, &mut total, (start..start + 50).map(PublishedFileId).collect()).unwrap();
-			assert_eq!(complete, page == 3);
+			pages.append(page as u32, 200, (start..start + 50).map(PublishedFileId).collect()).unwrap();
+			assert_eq!(pages.complete(), page == 3);
 		}
-		assert_eq!(ids, (1..=200).map(PublishedFileId).collect());
+		assert_eq!(pages.ids, (1..=200).map(PublishedFileId).collect());
+		assert_eq!(pages.missing(), 0);
 	}
 
 	#[test]
@@ -967,6 +1073,10 @@ mod tests {
 		assert_eq!(item_archives(&gmod, PublishedFileId(10), &gmod.join("garrysmod/addons/name_10.gma")).unwrap().len(), 3);
 		let steam_copy = root_path.join("steamapps/workshop/content/4000/10/content.gma");
 		assert_eq!(item_archives(&gmod, PublishedFileId(10), &steam_copy).unwrap().len(), 3);
+		let by_id = item_archives_by_id(&gmod, &HashSet::from([PublishedFileId(10), PublishedFileId(20), PublishedFileId(30)])).unwrap();
+		assert_eq!(by_id[&PublishedFileId(10)].len(), 3);
+		assert_eq!(by_id[&PublishedFileId(20)], vec![gmod.join("garrysmod/cache/workshop/20.gma")]);
+		assert!(!by_id.contains_key(&PublishedFileId(30)));
 
 		let result = remove_archives(found, true);
 		assert_eq!(result.removed.len(), 4);

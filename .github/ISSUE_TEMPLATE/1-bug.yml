@@ -22,7 +22,7 @@ body:
     attributes:
       label: nwmpublisher version
       description: Shown at the bottom of the sidebar, or run `nwmpublisher --version` (`nwmpublisher-nightly --version` for nightly builds).
-      placeholder: "3.4.0"
+      placeholder: "3.6.0"
     validations:
       required: true
 
@@ -45,6 +45,7 @@ body:
       options:
         - Publishing or updating an addon
         - My Workshop
+        - Collections
         - Installed addons
         - Extracting or browsing GMA files
         - Downloader

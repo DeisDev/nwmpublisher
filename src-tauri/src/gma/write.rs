@@ -3,18 +3,18 @@ use std::{
 	fs::File,
 	io::{BufWriter, Read, Seek, Write},
 	path::{Path, PathBuf},
-	time::SystemTime,
+	time::{Duration, SystemTime},
 };
 
-use crate::{transactions::Transaction, GMAFile, NTStringWriter};
+use parking_lot::{Condvar, Mutex};
+
+use crate::{appdata::Performance, transactions::Transaction, GMAFile, NTStringWriter};
 
 use super::{manifest::ContentManifest, GMAError, GMAMetadata};
 
 use super::GMA_HEADER;
 
 impl NTStringWriter for BufWriter<File> {}
-
-const PACK_CHUNK_SIZE: usize = 64 * 1024;
 
 fn check_cancelled(transaction: &Transaction) -> Result<(), GMAError> {
 	if transaction.aborted() {
@@ -24,13 +24,40 @@ fn check_cancelled(transaction: &Transaction) -> Result<(), GMAError> {
 	}
 }
 
-fn read_contents(reader: &mut impl Read, writer: &mut impl Write, source: &Path, output: &Path, transaction: &Transaction) -> Result<(u64, u32), GMAError> {
-	let mut buffer = [0; PACK_CHUNK_SIZE];
+static PACKING_JOBS: std::sync::LazyLock<(Mutex<usize>, Condvar)> = std::sync::LazyLock::new(|| (Mutex::new(0), Condvar::new()));
+
+pub(crate) struct PackingSlot;
+impl Drop for PackingSlot {
+	fn drop(&mut self) {
+		let (active, available) = &*PACKING_JOBS;
+		*active.lock() -= 1;
+		available.notify_all();
+	}
+}
+
+pub(crate) fn wait_for_packing_slot(transaction: &Transaction, limit: Option<usize>) -> Result<PackingSlot, GMAError> {
+	let (active, available) = &*PACKING_JOBS;
+	let mut active = active.lock();
+	let mut queued = false;
+	while limit.is_some_and(|limit| *active >= limit) {
+		check_cancelled(transaction)?;
+		if !queued {
+			transaction.status("queued");
+			queued = true;
+		}
+		// Cancellation does not notify, so wake up periodically to check it.
+		available.wait_for(&mut active, Duration::from_millis(250));
+	}
+	*active += 1;
+	Ok(PackingSlot)
+}
+
+fn read_contents(reader: &mut impl Read, writer: &mut impl Write, source: &Path, output: &Path, transaction: &Transaction, buffer: &mut [u8]) -> Result<(u64, u32), GMAError> {
 	let mut size = 0u64;
 	let mut crc32 = crc32fast::Hasher::new();
 	loop {
 		check_cancelled(transaction)?;
-		let read = match reader.read(&mut buffer) {
+		let read = match reader.read(buffer) {
 			Ok(0) => break,
 			Ok(read) => read,
 			Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
@@ -67,9 +94,10 @@ impl GMAFile {
 		))
 	}
 
-	pub fn create(&self, manifest: ContentManifest, transaction: Transaction) -> Result<(), GMAError> {
+	pub fn create(&self, manifest: ContentManifest, transaction: Transaction, buffer_size: usize) -> Result<(), GMAError> {
 		check_cancelled(&transaction)?;
 		let mut f = self.write()?;
+		let mut buffer = vec![0; buffer_size];
 
 		let metadata = self.metadata.as_ref().expect("Expected metadata to be set");
 
@@ -140,7 +168,7 @@ impl GMAFile {
 			check_cancelled(&transaction)?;
 			let mut source = File::open(&entry.source_path).map_err(|error| GMAError::io("read source file", &entry.source_path, error))?;
 			let before = source.metadata().map_err(|error| GMAError::io("read source metadata", &entry.source_path, error))?;
-			let (size, crc) = read_contents(&mut source, &mut f, &entry.source_path, &self.path, &transaction)?;
+			let (size, crc) = read_contents(&mut source, &mut f, &entry.source_path, &self.path, &transaction, &mut buffer)?;
 			let after = source.metadata().map_err(|error| GMAError::io("read source metadata", &entry.source_path, error))?;
 			if size != entry.size || size != after.len() || before.modified().ok() != after.modified().ok() {
 				return Err(GMAError::SourceChanged(entry.source_path.clone()));
@@ -155,7 +183,7 @@ impl GMAFile {
 		}
 		f.flush().map_err(|error| GMAError::io("flush archive", &self.path, error))?;
 		let mut archive = File::open(&self.path).map_err(|error| GMAError::io("read archive checksum", &self.path, error))?;
-		let (_, crc) = read_contents(&mut archive, &mut std::io::sink(), &self.path, &self.path, &transaction)?;
+		let (_, crc) = read_contents(&mut archive, &mut std::io::sink(), &self.path, &self.path, &transaction, &mut buffer)?;
 		f.write_u32::<LittleEndian>(crc).map_err(|error| GMAError::io("write archive footer", &self.path, error))?;
 
 		check_cancelled(&transaction)?;
@@ -185,8 +213,11 @@ pub fn package_addon(request: PackageRequest) -> u32 {
 	let id = transaction.id;
 	transaction.context(serde_json::json!({ "kind": "package", "sourcePath": request.content_path, "destination": request.destination }));
 	std::thread::spawn(move || {
-		let ignore = app_data!().settings.read().ignore_globs.clone();
-		match package_archive(request, ignore, &transaction) {
+		let (ignore, performance) = {
+			let settings = app_data!().settings.read();
+			(settings.ignore_globs.clone(), settings.performance())
+		};
+		match package_archive(request, ignore, performance, &transaction) {
 			Ok(path) => transaction.finished(serde_json::json!({ "path": path })),
 			Err(GMAError::Cancelled) => transaction.cancelled(),
 			Err(error) => transaction.error(error.to_string(), turbonone!()),
@@ -195,7 +226,7 @@ pub fn package_addon(request: PackageRequest) -> u32 {
 	id
 }
 
-pub(crate) fn package_archive(request: PackageRequest, ignore: Vec<String>, transaction: &Transaction) -> Result<PathBuf, GMAError> {
+pub(crate) fn package_archive(request: PackageRequest, ignore: Vec<String>, performance: Performance, transaction: &Transaction) -> Result<PathBuf, GMAError> {
 	check_cancelled(transaction)?;
 	let PackageRequest { content_path, destination, title, addon_type, tags } = request;
 	if title.trim().is_empty() || title.contains('\0')
@@ -222,10 +253,11 @@ pub(crate) fn package_archive(request: PackageRequest, ignore: Vec<String>, tran
 		.map_err(|error| GMAError::io("create package staging", &parent, error))?;
 	let stage_path = stage.path().to_owned();
 	let result = (|| {
+		let _slot = wait_for_packing_slot(transaction, performance.packing_jobs)?;
 		if !transaction.begin_packing() { return Err(GMAError::Cancelled); }
 		transaction.status("PUBLISH_PACKING");
 		let gma = GMAFile::new(stage_path.join("addon.gma"), GMAMetadata::Standard { title, addon_type, tags, ignore });
-		gma.create(manifest, transaction.clone())?;
+		gma.create(manifest, transaction.clone(), performance.buffer_size())?;
 		std::fs::OpenOptions::new().write(true).open(&gma.path).and_then(|file| file.sync_all())
 			.map_err(|error| GMAError::io("sync package", &gma.path, error))?;
 		if !transaction.begin_commit() { return Err(GMAError::Cancelled); }
@@ -244,6 +276,8 @@ mod tests {
 	use crate::gma::ExtractGMAMut;
 	use std::fs;
 	use std::io;
+
+	const PACK_CHUNK_SIZE: usize = 64 * 1024;
 
 	fn package_request(root: &Path) -> PackageRequest {
 		PackageRequest {
@@ -264,7 +298,7 @@ mod tests {
 		fs::write(root.join("source/lua/skip.lua"), b"ignored").unwrap();
 		fs::write(root.join("saved.gma"), b"previous archive").unwrap();
 		let transaction = crate::transactions::new_publish();
-		let path = package_archive(package_request(&root), vec!["lua/skip.lua".into()], &transaction).unwrap();
+		let path = package_archive(package_request(&root), vec!["lua/skip.lua".into()], Performance::default(), &transaction).unwrap();
 		transaction.finished(());
 		let mut archive = GMAFile::open(&path).unwrap();
 		let extraction = transaction!();
@@ -286,20 +320,20 @@ mod tests {
 		fs::write(root.join("source/invalid.exe"), b"invalid").unwrap();
 		fs::write(root.join("saved.gma"), b"keep").unwrap();
 		let transaction = crate::transactions::new_publish();
-		assert!(matches!(package_archive(package_request(&root), vec![], &transaction), Err(GMAError::NotWhitelisted(_))));
+		assert!(matches!(package_archive(package_request(&root), vec![], Performance::default(), &transaction), Err(GMAError::NotWhitelisted(_))));
 		transaction.error("test", ());
 		assert_eq!(fs::read(root.join("saved.gma")).unwrap(), b"keep");
 		fs::remove_file(root.join("source/invalid.exe")).unwrap();
 		let transaction = crate::transactions::new_publish();
 		transaction.cancel();
-		assert!(matches!(package_archive(package_request(&root), vec![], &transaction), Err(GMAError::Cancelled)));
+		assert!(matches!(package_archive(package_request(&root), vec![], Performance::default(), &transaction), Err(GMAError::Cancelled)));
 		transaction.cancelled();
 		assert_eq!(fs::read(root.join("saved.gma")).unwrap(), b"keep");
 		fs::remove_file(root.join("saved.gma")).unwrap();
 		fs::create_dir(root.join("saved.gma")).unwrap();
 		fs::write(root.join("saved.gma/keep"), b"keep").unwrap();
 		let transaction = crate::transactions::new_publish();
-		assert!(matches!(package_archive(package_request(&root), vec![], &transaction), Err(GMAError::IOError(_))));
+		assert!(matches!(package_archive(package_request(&root), vec![], Performance::default(), &transaction), Err(GMAError::IOError(_))));
 		transaction.error("test", ());
 		assert_eq!(fs::read(root.join("saved.gma/keep")).unwrap(), b"keep");
 		assert!(fs::read_dir(&root).unwrap().all(|entry| !entry.unwrap().file_name().to_string_lossy().starts_with(".nwmpublisher-package-")));
@@ -313,18 +347,18 @@ mod tests {
 		let mut request = package_request(&root);
 		request.title = "invalid\0title".into();
 		let transaction = crate::transactions::new_publish();
-		assert!(matches!(package_archive(request, vec![], &transaction), Err(GMAError::InvalidPackageMetadata)));
+		assert!(matches!(package_archive(request, vec![], Performance::default(), &transaction), Err(GMAError::InvalidPackageMetadata)));
 		transaction.error("test", ());
 		let mut request = package_request(&root);
 		request.destination = root.join("source/output.gma");
 		let transaction = crate::transactions::new_publish();
-		assert!(matches!(package_archive(request, vec![], &transaction), Err(GMAError::PackageInsideSource)));
+		assert!(matches!(package_archive(request, vec![], Performance::default(), &transaction), Err(GMAError::PackageInsideSource)));
 		transaction.error("test", ());
 		assert_eq!(fs::read_dir(root.join("source")).unwrap().count(), 0);
 		let mut request = package_request(&root);
 		request.destination = root.join("output.lua");
 		let transaction = crate::transactions::new_publish();
-		assert!(matches!(package_archive(request, vec![], &transaction), Err(GMAError::InvalidPackageDestination)));
+		assert!(matches!(package_archive(request, vec![], Performance::default(), &transaction), Err(GMAError::InvalidPackageDestination)));
 		transaction.error("test", ());
 	}
 
@@ -337,7 +371,7 @@ mod tests {
 			let mut request = package_request(root.path());
 			request.destination = root.path().join(name);
 			let transaction = crate::transactions::new_publish();
-			assert!(matches!(package_archive(request, vec![], &transaction), Err(GMAError::InvalidPackageFileName)), "{name}");
+			assert!(matches!(package_archive(request, vec![], Performance::default(), &transaction), Err(GMAError::InvalidPackageFileName)), "{name}");
 			transaction.error("test", ());
 		}
 		assert_eq!(fs::read(root.path().join("publishedaddon.gma")).unwrap(), b"keep");
@@ -385,7 +419,7 @@ mod tests {
 			transaction: transaction.clone(),
 			bytes: 0,
 		};
-		assert!(matches!(read_contents(&mut reader, &mut io::sink(), path, path, &transaction), Err(GMAError::Cancelled)));
+		assert!(matches!(read_contents(&mut reader, &mut io::sink(), path, path, &transaction, &mut [0; PACK_CHUNK_SIZE]), Err(GMAError::Cancelled)));
 		assert_eq!(reader.bytes, PACK_CHUNK_SIZE);
 		transaction.cancelled();
 
@@ -395,7 +429,7 @@ mod tests {
 			bytes: 0,
 		};
 		assert!(matches!(
-			read_contents(&mut &vec![1; PACK_CHUNK_SIZE * 3][..], &mut writer, path, path, &transaction),
+			read_contents(&mut &vec![1; PACK_CHUNK_SIZE * 3][..], &mut writer, path, path, &transaction, &mut [0; PACK_CHUNK_SIZE]),
 			Err(GMAError::Cancelled)
 		));
 		assert_eq!(writer.bytes, PACK_CHUNK_SIZE);
@@ -443,7 +477,7 @@ mod tests {
 		let manifest = ContentManifest::build(&source, &ignore, || false).unwrap();
 		let cancelled = crate::transactions::new_publish();
 		cancelled.cancel();
-		assert!(matches!(gma.create(manifest, cancelled.clone()), Err(GMAError::Cancelled)));
+		assert!(matches!(gma.create(manifest, cancelled.clone(), PACK_CHUNK_SIZE), Err(GMAError::Cancelled)));
 		assert!(!gma.path.exists());
 		cancelled.cancelled();
 		#[cfg(target_os = "windows")]
@@ -452,7 +486,7 @@ mod tests {
 			let manifest = ContentManifest::build(&source, &ignore, || false).unwrap();
 			let lock = fs::OpenOptions::new().read(true).share_mode(0).open(&file).unwrap();
 			let transaction = transaction!();
-			let error = gma.create(manifest, transaction.clone()).unwrap_err();
+			let error = gma.create(manifest, transaction.clone(), PACK_CHUNK_SIZE).unwrap_err();
 			assert!(error.to_string().contains("read source file"));
 			assert!(error.to_string().contains("Test.LUA"));
 			transaction.cancel();
@@ -461,7 +495,7 @@ mod tests {
 		let (preview, preview_size) = ContentManifest::build(&source, &ignore, || false).unwrap().into_preview();
 		let manifest = ContentManifest::build(&source, &ignore, || false).unwrap();
 		let transaction = transaction!();
-		gma.create(manifest, transaction.clone()).unwrap();
+		gma.create(manifest, transaction.clone(), PACK_CHUNK_SIZE).unwrap();
 		let archive = fs::read(&gma.path).unwrap();
 		assert_eq!(independent_crc(b"123456789"), 0xcbf43926);
 		assert_eq!(u32::from_le_bytes(archive[archive.len() - 4..].try_into().unwrap()), independent_crc(&archive[..archive.len() - 4]));
@@ -485,10 +519,31 @@ mod tests {
 		gma.path = root.join("missing/test.gma");
 		let manifest = ContentManifest::build(&source, &ignore, || false).unwrap();
 		let transaction = transaction!();
-		let error = gma.create(manifest, transaction.clone()).unwrap_err();
+		let error = gma.create(manifest, transaction.clone(), PACK_CHUNK_SIZE).unwrap_err();
 		assert!(error.to_string().contains("create archive"));
 		assert!(error.to_string().contains("test.gma"));
 		transaction.cancel();
 		fs::remove_dir_all(root).unwrap();
+	}
+
+	#[test]
+	fn packing_slots_wait_for_a_free_slot_and_stop_when_cancelled() {
+		let first = wait_for_packing_slot(&crate::transactions::new_publish(), None).unwrap();
+		let cancelled = crate::transactions::new_publish();
+		cancelled.cancel();
+		assert!(matches!(wait_for_packing_slot(&cancelled, Some(1)), Err(GMAError::Cancelled)));
+		cancelled.cancelled();
+
+		let (sender, receiver) = std::sync::mpsc::channel();
+		let waiter = std::thread::spawn(move || {
+			let transaction = crate::transactions::new_publish();
+			let slot = wait_for_packing_slot(&transaction, Some(1));
+			sender.send(slot.is_ok()).unwrap();
+			transaction.cancelled();
+		});
+		assert!(receiver.recv_timeout(Duration::from_millis(300)).is_err());
+		drop(first);
+		assert!(receiver.recv_timeout(Duration::from_secs(30)).unwrap());
+		waiter.join().unwrap();
 	}
 }

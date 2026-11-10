@@ -10,7 +10,6 @@
 	import PublishRecovery from './components/PublishRecovery.svelte';
 	import DeleteAddon from './components/DeleteAddon.svelte';
 	import AddToCollection from './components/AddToCollection.svelte';
-	import { settingsSave } from './settings.js';
 	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
 	import { Transaction } from './transactions.js';
@@ -37,9 +36,6 @@
 
 	<TasksOverlay/>
 	<PublishRecovery/>
-	{#if $settingsSave.state === 'failed'}
-		<div class="settings-error" role="alert">{$_('settings_save_failed')}: {$settingsSave.error}</div>
-	{/if}
 	{#if recovery}<RecoverSettings {recovery}/>{/if}
 
 	<ContextMenuContainer/>
@@ -74,7 +70,6 @@
 </main>
 
 <style>
-	.settings-error { position: fixed; inset: auto 1rem 1rem; z-index: 10000; padding: .75rem; background: var(--error); color: #fff; }
 	/*
 	#file-drop {
 		position: absolute;

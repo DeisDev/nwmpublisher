@@ -33,6 +33,8 @@ pub enum PublishError {
 	TranslationLanguage,
 	IOError(#[source] crate::IoError),
 	SteamError(#[source] SteamError),
+	#[cfg(target_os = "linux")]
+	SteamFilesUnreadable(PathBuf),
 	ImageError {
 		operation: &'static str,
 		path: PathBuf,
@@ -61,6 +63,8 @@ impl std::fmt::Display for PublishError {
 			PublishError::TranslationLanguage => write!(f, "ERR_TRANSLATION_LANGUAGE"),
 			PublishError::IOError(error) => write!(f, "ERR_IO_ERROR:{}", error),
 			PublishError::SteamError(error) => write!(f, "ERR_STEAM_ERROR:{}", error),
+			#[cfg(target_os = "linux")]
+			PublishError::SteamFilesUnreadable(path) => write!(f, "ERR_STEAM_FILES_UNREADABLE:{}", path.display()),
 			PublishError::ImageError { operation, path, source } => write!(f, "ERR_IMAGE_ERROR:{} \"{}\": {}", operation, path.display(), source),
 		}
 	}
@@ -465,6 +469,8 @@ impl Steam {
 				Ok(legal_agreement)
 			}
 			Err(SteamError::Timeout | SteamError::IOFailure | SteamError::RemoteDisconnect) => { job.uncertain(transaction); Err(PublishError::Unknown) },
+			#[cfg(target_os = "linux")]
+			Err(SteamError::FileNotFound) => Err(PublishError::SteamFilesUnreadable(app_data!().temp_dir().to_owned())),
 			Err(error) => Err(PublishError::SteamError(error)),
 		}
 	}
@@ -556,6 +562,8 @@ impl Steam {
 				Ok(legal_agreement)
 			}
 			Err(SteamError::Timeout | SteamError::IOFailure | SteamError::RemoteDisconnect) => { job.uncertain(transaction); Err(PublishError::Unknown) },
+			#[cfg(target_os = "linux")]
+			Err(SteamError::FileNotFound) => Err(PublishError::SteamFilesUnreadable(app_data!().temp_dir().to_owned())),
 			Err(error) => Err(PublishError::SteamError(error)),
 		}
 	}
@@ -805,6 +813,10 @@ pub(crate) fn run_publish(request: PublishRequest, transaction: &Transaction) ->
 		}
 		let preview = preview.map(|icon| icon.into_path(root)).transpose().map_err(|error| error.to_string())?;
 
+		let performance = app_data!().settings.read().performance();
+		let Ok(slot) = crate::gma::write::wait_for_packing_slot(transaction, performance.packing_jobs) else {
+			return Ok(None);
+		};
 		if !transaction.begin_packing() {
 			return Ok(None);
 		}
@@ -820,12 +832,13 @@ pub(crate) fn run_publish(request: PublishRequest, transaction: &Transaction) ->
 			},
 		);
 
-		if let Err(error) = gma.create(manifest, transaction.clone()) {
+		if let Err(error) = gma.create(manifest, transaction.clone(), performance.buffer_size()) {
 			if matches!(error, crate::gma::GMAError::Cancelled) {
 				return Ok(None);
 			}
 			return Err(error.to_string());
 		}
+		drop(slot);
 		if transaction.aborted() {
 			return Ok(None);
 		}

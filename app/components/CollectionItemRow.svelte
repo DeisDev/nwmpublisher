@@ -7,6 +7,7 @@
 	export let id;
 	export let entry = null;
 	export let pending = false;
+	export let willSubscribe = false;
 	export let note = '';
 </script>
 
@@ -15,7 +16,8 @@
 	{#if entry?.previewUrl}<img src={entry.previewUrl} alt="" loading="lazy"/>{:else}<div class="image-placeholder" aria-hidden="true">?</div>{/if}
 	<div class="text">
 		<a href={workshopUrl(id)} target="_blank" rel="noreferrer">{entry?.title ?? (entry ? $_('collections_unavailable_item') : id)}<ExternalLink size=".75rem"/></a>
-		<small>{id}{#if entry?.fileSize}{' · '}{formatSize(entry.fileSize)}{/if}{#if entry && entry.status !== 'available'}{' · '}<span class="status">{$_('collections_status_' + entry.status)}</span>{/if}{#if note}{' · '}{note}{/if}{#if pending}{' · '}<span class="pending-label">{$_('workshop_pending_addition')}</span>{/if}</small>
+		<small>{id}{#if entry?.fileSize}{' · '}{formatSize(entry.fileSize)}{/if}{#if entry && entry.status !== 'available'}{' · '}<span class="status">{$_('collections_status_' + entry.status)}</span>{/if}{#if note}{' · '}{note}{/if}{#if pending}{' · '}<span class="pending-label">{$_('workshop_pending_addition')}</span>{/if}{#if willSubscribe}{' · '}<span class="pending-label">{$_('collections_will_subscribe')}</span>{/if}</small>
+		<slot name="detail"></slot>
 	</div>
 	<slot></slot>
 </li>
