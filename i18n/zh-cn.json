@@ -295,7 +295,6 @@
 	"workshop_no_search_matches": "没有与搜索匹配的模组。",
 	"workshop_load_error": "无法载入您的创意工坊模组。{error}",
 	"workshop_incomplete": "Steam 在载入全部模组之前返回了空白页面。请重新载入。",
-	"workshop_save_error": "无法保存您的创意工坊偏好。已恢复您之前的选择。{error}",
 	"workshop_retry": "重试",
 	"collections_loading": "正在载入您的合集…",
 	"collections_load_error": "无法载入您的合集。{error}",
@@ -490,7 +489,6 @@
 	"installed_no_types": "未选择任何类型。请在“筛选”中勾选类型以显示模组。",
 	"installed_search": "搜索已安装的模组",
 	"installed_no_matches": "没有与搜索匹配的已安装模组。",
-	"installed_save_error": "无法保存您的偏好。已恢复您之前的选择。{error}",
 	"loading": "载入中...",
 	"gmod_dir": {
 		"name": "Garry's Mod 目录",

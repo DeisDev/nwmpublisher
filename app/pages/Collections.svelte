@@ -21,7 +21,7 @@
 	import CollectionCompare from '../components/CollectionCompare.svelte';
 	import { collections, compareTitles, ensureCollections, includeExtras, loadCollections, loadSnapshot, mirrors, planSync, setIncludeExtras, subscriptionSnapshot } from '../collections.js';
 	import { saveSettings } from '../settings.js';
-	import { taskMessage } from '../transactions.js';
+	import { taskError, taskMessage } from '../transactions.js';
 
 	const visibilityOptions = ['public', 'friends_only', 'private', 'unlisted'];
 	const sortOptions = ['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'title_asc', 'title_desc', 'items_desc', 'items_asc', 'visitors_desc', 'visitors_asc'];
@@ -29,18 +29,14 @@
 	let sort = AppSettings.collections_sort;
 	let saved = { visibility, sort };
 	let saveRequest = 0;
-	let saveError = null;
 	let filtersOpen = false;
 	let filterMenu;
 	let filterButton;
 	let query = '';
 	let view = null;
-	let notice = null;
-	let listNotice = null;
 	let selecting = false;
 	let selected = new Set();
 	let actionBusy = false;
-	let actionErrors = [];
 
 	ensureCollections();
 
@@ -73,7 +69,6 @@
 		const request = ++saveRequest;
 		visibility = nextVisibility;
 		sort = nextSort;
-		saveError = null;
 		saveSettings({
 			collections_visibility: nextVisibility,
 			collections_sort: nextSort,
@@ -81,8 +76,7 @@
 			saved = { visibility: nextVisibility, sort: nextSort };
 			AppSettings.collections_visibility = nextVisibility;
 			AppSettings.collections_sort = nextSort;
-		}, error => {
-			saveError = String(error);
+		}, () => {
 			if (request !== saveRequest) return;
 			visibility = saved.visibility;
 			sort = saved.sort;
@@ -121,44 +115,40 @@
 			toggleSelected(collection.id);
 			return;
 		}
-		notice = null;
-		listNotice = null;
 		view = { kind: 'edit', id: collection.id };
 	}
 
 	function newCollection() {
-		notice = null;
-		listNotice = null;
 		view = { kind: 'new' };
 	}
 
 	async function created({ detail }) {
 		await loadCollections();
-		if (get(collections).items.some(collection => collection.id === detail.id)) {
-			notice = detail.error;
-			view = { kind: 'edit', id: detail.id };
-		} else {
-			view = null;
-			listNotice = detail.error ?? $_('collections_created_pending');
-		}
+		view = get(collections).items.some(collection => collection.id === detail.id) ? { kind: 'edit', id: detail.id } : null;
+		if (detail.error) taskError(detail.error);
+		else if (!view) taskMessage($_('collections_created_pending'));
 	}
 
 	function failureList(outcomes) {
 		return outcomes.filter(outcome => outcome.error).map(outcome => ({ title: byId.get(outcome.id)?.fields.title ?? outcome.id, error: outcome.error }));
 	}
 
+	function reportFailures(failures) {
+		if (failures.length) taskError(failures.map(failure => `${failure.title}: ${failure.error}`).join('\n'));
+	}
+
 	async function changeVisibility(value) {
 		const ids = selectedList;
 		if (!value || !ids.length || actionBusy) return;
 		actionBusy = true;
-		actionErrors = [];
 		try {
 			const outcomes = await invoke('set_collections_visibility', { collections: ids, visibility: value });
-			actionErrors = failureList(outcomes);
-			const changed = outcomes.length - actionErrors.length;
+			const failures = failureList(outcomes);
+			reportFailures(failures);
+			const changed = outcomes.length - failures.length;
 			if (changed) taskMessage($_('collections_visibility_changed', { values: { count: changed } }));
 		} catch (error) {
-			actionErrors = [{ title: $_('collections'), error: String(error) }];
+			reportFailures([{ title: $_('collections'), error: String(error) }]);
 		} finally {
 			actionBusy = false;
 			loadCollections();
@@ -168,7 +158,6 @@
 	let deleting = null;
 
 	function confirmDelete(ids) {
-		actionErrors = [];
 		deleting = { ids, busy: false };
 	}
 
@@ -177,13 +166,13 @@
 		deleting = { ...deleting, busy: true };
 		try {
 			const outcomes = await invoke('delete_collections', { collections: ids });
-			actionErrors = failureList(outcomes);
+			reportFailures(failureList(outcomes));
 			const removed = outcomes.filter(outcome => !outcome.error).map(outcome => outcome.id);
 			if (removed.length) taskMessage($_('collections_deleted', { values: { count: removed.length } }));
 			selected = new Set([...selected].filter(id => !removed.includes(id)));
 			if (view?.kind === 'edit' && removed.includes(view.id)) view = null;
 		} catch (error) {
-			actionErrors = [{ title: $_('collections'), error: String(error) }];
+			reportFailures([{ title: $_('collections'), error: String(error) }]);
 		} finally {
 			deleting = null;
 			loadCollections();
@@ -249,7 +238,6 @@
 	let pruning = null;
 
 	async function openPrune() {
-		actionErrors = [];
 		const ids = selectedList;
 		pruning = { ids, loading: true, error: null, entries: new Map(), unticked: new Set(), busy: false, stopping: false, progress: null, failures: [], notice: null };
 		await loadSnapshot();
@@ -326,7 +314,7 @@
 
 {#if view?.kind === 'edit' && byId.has(view.id)}
 	{#key view.id}
-		<CollectionEditor collection={byId.get(view.id)} others={all.filter(collection => collection.id !== view.id)} {notice} on:close={() => view = null} on:saved={loadCollections} on:delete={event => confirmDelete([event.detail])} on:removeEverywhere={event => openRemove(event.detail)}/>
+		<CollectionEditor collection={byId.get(view.id)} others={all.filter(collection => collection.id !== view.id)} on:close={() => view = null} on:saved={loadCollections} on:delete={event => confirmDelete([event.detail])} on:removeEverywhere={event => openRemove(event.detail)}/>
 	{/key}
 {:else if view?.kind === 'new'}
 	<CollectionEditor on:close={() => view = null} on:created={created}/>
@@ -389,14 +377,6 @@
 					{#if actionBusy}<Loading inline size="1rem"/>{/if}
 				</div>
 			</div>
-		{/if}
-
-		{#if saveError}<p class="error" role="alert">{$_('workshop_save_error', { values: { error: saveError } })}</p>{/if}
-		{#if listNotice}<p class="notice" role="status">{listNotice}</p>{/if}
-		{#if actionErrors.length}
-			<ul class="error failures" role="alert">
-				{#each actionErrors as failure}<li><strong>{failure.title}</strong>: {failure.error}</li>{/each}
-			</ul>
 		{/if}
 
 		{#if !$collections.loaded && $collections.loading}
@@ -557,12 +537,10 @@
 	.search input:focus-visible { outline: none; }
 	.search:focus-within { outline: 2px solid var(--text); outline-offset: 2px; }
 	.count { font-weight: 600; }
-	.status, .error, .notice { margin: .5rem 1.5rem 0; }
+	.status, .error { margin: .5rem 1.5rem 0; }
 	.status { display: flex; align-items: center; gap: .5rem; color: var(--text-soft); }
-	.notice { color: var(--text-soft); }
 	.error { color: var(--text-error-soft); overflow-wrap: anywhere; }
 	.error p { margin: 0 0 .5rem; }
-	.failures { padding-inline-start: 1.25rem; line-height: 1.5; }
 	.list { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: .75rem 0 0; padding: 0 1.5rem 1.5rem; }
 	.list li { display: flex; align-items: center; gap: .75rem; margin-bottom: .5rem; padding-inline-start: .25rem; border-radius: 4px; }
 	.list li.selected { background: color-mix(in srgb, var(--neutral) 18%, transparent); box-shadow: inset 0 0 0 2px var(--neutral); }

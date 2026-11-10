@@ -295,7 +295,6 @@
 	"workshop_no_search_matches": "Geen addons komen overeen met je zoekopdracht.",
 	"workshop_load_error": "Kon je Workshop-addons niet laden. {error}",
 	"workshop_incomplete": "Steam gaf een lege pagina terug voordat alle addons waren geladen. Probeer opnieuw te laden.",
-	"workshop_save_error": "Kon je Workshop-voorkeuren niet opslaan. Je vorige keuzes zijn hersteld. {error}",
 	"workshop_retry": "Opnieuw proberen",
 	"collections_loading": "Je collecties laden…",
 	"collections_load_error": "Kon je collecties niet laden. {error}",
@@ -490,7 +489,6 @@
 	"installed_no_types": "Geen typen geselecteerd. Vink een type aan bij Filters om addons te tonen.",
 	"installed_search": "Geïnstalleerde addons doorzoeken",
 	"installed_no_matches": "Geen geïnstalleerde addons komen overeen met je zoekopdracht.",
-	"installed_save_error": "Kon je voorkeuren niet opslaan. Je vorige keuzes zijn hersteld. {error}",
 	"loading": "Laden...",
 	"gmod_dir": {
 		"name": "Garry's Mod Map",

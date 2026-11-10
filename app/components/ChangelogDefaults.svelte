@@ -2,6 +2,7 @@
 	import { _ } from 'svelte-i18n';
 	import { createEventDispatcher, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
+	import { taskError, taskMessage } from '../transactions.js';
 
 	export let id;
 	export let global = false;
@@ -21,10 +22,8 @@
 	let loadId = 0;
 	let loading = false;
 	let loadError = null;
-	let saveError = null;
 	let mode = 'blank';
 	let template = '';
-	let saved = false;
 
 	$: syncSession(active, global, addonId, addonId ? null : contentPath);
 	$: original = global ? state?.defaults : state?.addon;
@@ -52,8 +51,7 @@
 	async function load() {
 		const request = ++loadId;
 		loading = true;
-		loadError = saveError = null;
-		saved = false;
+		loadError = null;
 		try {
 			const next = await invoke('get_changelog', {
 				addonId: global ? null : addonId,
@@ -72,17 +70,15 @@
 		const request = loadId;
 		const payload = { key: state.key, global, preferences: mode === 'inherit' ? null : { mode, template } };
 		busy = true;
-		saveError = null;
-		saved = false;
 		try {
 			if (beforeSave) await beforeSave();
 			const next = await invoke('save_changelog_defaults', payload);
 			if (request !== loadId) return;
 			setPreferences(next);
-			saved = true;
+			taskMessage($_(global ? 'changelog_defaults.global_saved' : 'changelog_defaults.addon_saved'));
 			dispatch('saved', next);
 		} catch (error) {
-			if (request === loadId) saveError = String(error);
+			if (request === loadId) taskError($_('changelog_defaults.error', { values: { error: String(error) } }));
 		} finally {
 			busy = false;
 		}
@@ -105,20 +101,19 @@
 			<legend>{$_('changelog_defaults.prefill')}</legend>
 			{#each modes as option}
 				<label class="choice" class:selected={mode === option}>
-					<input type="radio" name={`${id}-mode`} value={option} bind:group={mode} on:change={() => saved = false}/>
+					<input type="radio" name={`${id}-mode`} value={option} bind:group={mode}/>
 					<span><strong>{$_('changelog_defaults.mode_' + option)}</strong><small>{option === 'inherit' ? $_('changelog_defaults.inherit_help', { values: { mode: $_('changelog_defaults.mode_' + state.defaults.mode) } }) : $_('changelog_defaults.help_' + option)}</small></span>
 				</label>
 			{/each}
 			{#if mode === 'template'}
 				<label class="template-label" for={`${id}-template`}>{$_(global ? 'changelog_defaults.global_template' : 'changelog_defaults.addon_template')}</label>
-				<textarea id={`${id}-template`} rows="6" bind:value={template} on:input={() => saved = false} aria-describedby={`${id}-template-help`}></textarea>
+				<textarea id={`${id}-template`} rows="6" bind:value={template} aria-describedby={`${id}-template-help`}></textarea>
 				<p id={`${id}-template-help`}>{$_('changelog_defaults.template_help')}</p>
-				{#if !global}<button type="button" on:click={() => { template = currentChangelog; saved = false; }}>{$_('changelog_defaults.copy_current')}</button>{/if}
+				{#if !global}<button type="button" on:click={() => template = currentChangelog}>{$_('changelog_defaults.copy_current')}</button>{/if}
 			{/if}
 		</fieldset>
 		<p class="save-help">{$_('changelog_defaults.help')}</p>
-		{#if saveError}<p class="error" role="alert">{$_('changelog_defaults.error', { values: { error: saveError } })}</p>{/if}
-		<div class="actions"><span role="status">{#if saved}{$_(global ? 'changelog_defaults.global_saved' : 'changelog_defaults.addon_saved')}{/if}</span><button type="button" class="primary" disabled={locked || !dirty} on:click={save}>{$_(busy ? 'changelog_defaults.saving' : global ? 'changelog_defaults.save_global' : 'changelog_defaults.save_addon')}</button></div>
+		<div class="actions"><button type="button" class="primary" disabled={locked || !dirty} on:click={save}>{$_(busy ? 'changelog_defaults.saving' : global ? 'changelog_defaults.save_global' : 'changelog_defaults.save_addon')}</button></div>
 	{/if}
 </section>
 
@@ -149,7 +144,6 @@
 	button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid #127cff; outline-offset: 2px; }
 	.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .75rem; }
 	.addon .actions { margin-top: 1.25rem; }
-	.actions span { margin-right: auto; font-size: .8em; color: var(--text-muted); }
 	.primary { background: var(--neutral); color: #fff; }
 	.primary:hover:enabled { background: var(--neutral-dark); color: #fff; }
 	.save-help { margin-top: 1rem; }

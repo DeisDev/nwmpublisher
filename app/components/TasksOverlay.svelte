@@ -11,7 +11,7 @@
 		let pos = 0;
 		let i = 0;
 		while (i < tasks.length) {
-			const [transaction, statusTextFn, elem] = tasks[i];
+			const [transaction, statusTextFn, elem, failed = false] = tasks[i];
 			if (!elem) {
 				update = true;
 				tasks[i][2] = mount(Task, {
@@ -19,7 +19,8 @@
 					props: {
 						pos: pos++,
 						transaction,
-						statusTextFn
+						statusTextFn,
+						failed
 					}
 				});
 			} else {

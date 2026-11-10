@@ -295,7 +295,6 @@
 	"workshop_no_search_matches": "Ningún addon coincide con tu búsqueda.",
 	"workshop_load_error": "No se pudieron cargar tus addons del Workshop. {error}",
 	"workshop_incomplete": "Steam devolvió una página vacía antes de cargar todos los addons. Intenta cargar de nuevo.",
-	"workshop_save_error": "No se pudieron guardar tus preferencias del Workshop. Se restauraron tus opciones anteriores. {error}",
 	"workshop_retry": "Intentar de nuevo",
 	"collections_loading": "Cargando tus colecciones…",
 	"collections_load_error": "No se pudieron cargar tus colecciones. {error}",
@@ -490,7 +489,6 @@
 	"installed_no_types": "No hay tipos seleccionados. Marca un tipo en Filtros para mostrar addons.",
 	"installed_search": "Buscar addons instalados",
 	"installed_no_matches": "Ningún addon instalado coincide con tu búsqueda.",
-	"installed_save_error": "No se pudieron guardar tus preferencias. Se restauraron tus opciones anteriores. {error}",
 	"loading": "Cargando...",
 	"gmod_dir": {
 		"name": "Directorio de Garry's Mod",

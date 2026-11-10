@@ -8,7 +8,7 @@
 	import { saveSettings, settings } from '../settings.js';
 	import { formatSize } from '../format.js';
 	import { tippy } from '../tippy.js';
-	import { taskMessage } from '../transactions.js';
+	import { taskError, taskMessage } from '../transactions.js';
 	import { addonName, addonRemoval, addonRemovals, confirmRemoval, deleteRequest, removalJob, removedPaths, stopRemoval } from '../addon-removal.js';
 	import { createSelection } from '../addon-selection.js';
 	import Filter from '@lucide/svelte/icons/list-filter';
@@ -34,7 +34,6 @@
 	let sort = AppSettings.installed_addons_sort;
 	let saved = { types, sort };
 	let saveRequest = 0;
-	let saveError = null;
 	let filtersOpen = false;
 	let filterMenu;
 	let filterButton;
@@ -61,7 +60,6 @@
 		const request = ++saveRequest;
 		types = nextTypes;
 		sort = nextSort;
-		saveError = null;
 		selectAllRequest++;
 		selection.clear();
 		saveSettings({
@@ -71,8 +69,7 @@
 			saved = { types: nextTypes, sort: nextSort };
 			AppSettings.installed_addons_types = nextTypes;
 			AppSettings.installed_addons_sort = nextSort;
-		}, error => {
-			saveError = String(error);
+		}, () => {
 			if (request !== saveRequest) return;
 			types = saved.types;
 			sort = saved.sort;
@@ -148,15 +145,13 @@
 	$: scroller?.remove($removedPaths);
 
 	let selectAllRequest = 0;
-	let selectionError = null;
 	async function selectAll() {
 		const request = ++selectAllRequest;
-		selectionError = null;
 		try {
 			const addons = await invoke('browse_all_installed_addons', { sort, types, query });
 			if (request === selectAllRequest) selection.setAll(addons.map(addon => [addon.installed.path, addon.installed]));
 		} catch (error) {
-			if (request === selectAllRequest) selectionError = $_('select_all_failed', { values: { error: String(error) } });
+			if (request === selectAllRequest) taskError($_('select_all_failed', { values: { error: String(error) } }));
 		}
 	}
 
@@ -262,7 +257,7 @@
 		try {
 			await navigator.clipboard.writeText(ids.map(id => 'https://steamcommunity.com/sharedfiles/filedetails/?id=' + id).join('\n'));
 		} catch (error) {
-			taskMessage($_('links_copy_failed', { values: { error: String(error) } }));
+			taskError($_('links_copy_failed', { values: { error: String(error) } }));
 			return;
 		}
 		taskMessage($_('links_copied', { values: { count: ids.length } }));
@@ -361,12 +356,6 @@
 			<progress max={bulkJob.total} value={bulkJob.completed} aria-labelledby="bulk-job-status"></progress>
 			<button type="button" on:click={stopRemoval}>{$_('stop')}</button>
 		</div>
-	{/if}
-	{#if saveError}
-		<p class="error" role="alert">{$_('installed_save_error', { values: { error: saveError } })}</p>
-	{/if}
-	{#if selectionError}
-		<p class="error" role="alert">{selectionError}</p>
 	{/if}
 	{#if types.length === 0}
 		<p class="status" role="status">{$_('installed_no_types')}</p>
@@ -554,14 +543,9 @@
 		outline: 2px solid var(--text);
 		outline-offset: 2px;
 	}
-	.status, .error {
-		margin: .5rem 1.5rem 0;
-	}
 	.status {
+		margin: .5rem 1.5rem 0;
 		color: var(--text-soft);
-	}
-	.error {
-		color: var(--text-error-soft);
 	}
 	.results {
 		flex: 1;

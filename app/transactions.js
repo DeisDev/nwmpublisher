@@ -25,6 +25,10 @@ export function taskMessage(msg) {
 	tasks.update(tasks => { tasks.push([null, msg, null]); return tasks });
 }
 
+export function taskError(msg) {
+	tasks.update(tasks => { tasks.push([null, msg, null, true]); return tasks });
+}
+
 const completed = new Set();
 function acknowledge(id) {
 	completed.add(id);

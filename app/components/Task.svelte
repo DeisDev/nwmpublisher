@@ -14,6 +14,7 @@
 	export let transaction;
 	export let statusTextFn;
 	export let pos;
+	export let failed = false;
 
 	export let expired = false;
 	export let destroyed = false;
@@ -87,7 +88,8 @@
 	onMount(() => {
 		if (!transaction) {
 			// Task message
-			finish();
+			if (failed) finished = true;
+			else finish();
 		} else {
 			progress = transaction.progress;
 			if (transaction.error) {
@@ -124,9 +126,9 @@
 
 </script>
 
-<div bind:this={taskElem} class="task" class:error={error || cancelled} class:pending={!finished && transaction?.state !== 'unknown'} class:uncertain={transaction?.state === 'unknown'} style="transform: translateY({y}px)" class:expired={expired}>
+<div bind:this={taskElem} class="task" class:error={error || cancelled || failed} class:pending={!finished && transaction?.state !== 'unknown'} class:uncertain={transaction?.state === 'unknown'} style="transform: translateY({y}px)" class:expired={expired}>
 	<div>
-		{#if !error && !cancelled}
+		{#if !error && !cancelled && !failed}
 			<div id="progress" style="width: {finished ? 100 : progress}%"></div>
 		{/if}
 		<div id="content">
@@ -142,6 +144,8 @@
 			{:else if finished}
 				{#if transaction}
 					<span class="error-message" title={warningText(transaction)}>{$_(transaction.warnings?.length || transaction.result?.cleanupWarnings?.length ? 'job_cleanup_warning' : 'done')}</span>
+				{:else if failed}
+					<span class="error-message" role="alert" title={statusTextFn}>{statusTextFn}</span>
 				{:else}
 					{statusTextFn}
 				{/if}
@@ -149,9 +153,9 @@
 				<span bind:this={statusText} role={cancelError ? 'alert' : undefined}>{currentStatus($_)}</span>
 			{/if}
 		</div>
-		{#if error || transaction?.warnings?.length || transaction?.result?.cleanupWarnings?.length}
+		{#if error || failed || transaction?.warnings?.length || transaction?.result?.cleanupWarnings?.length}
 			<div class="error-actions">
-				<JobDiagnostics {transaction} context={{ task: statusTextFn(transaction) }}/>
+				{#if transaction}<JobDiagnostics {transaction} context={{ task: statusTextFn(transaction) }}/>{/if}
 				<button type="button" on:click={expire} aria-label={$_('close')}><Cross class="icon" stroke-width="3"/></button>
 			</div>
 		{/if}

@@ -1,11 +1,18 @@
 import { invoke } from '@tauri-apps/api/core';
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
+import { _ } from 'svelte-i18n';
+import { taskError } from './transactions.js';
 
 export const settings = writable({});
 export const settingsSave = writable({ state: 'saved', error: null });
 let queue = Promise.resolve();
 let pending = 0;
 let batchError = null;
+
+function saveFailed(error) {
+	settingsSave.set({ state: 'failed', error });
+	taskError(get(_)('settings_save_failed') + ': ' + error);
+}
 
 export function saveSettings(patch) {
 	const values = structuredClone(patch);
@@ -20,9 +27,9 @@ export function saveSettings(patch) {
 	}, error => {
 		pending--;
 		batchError = String(error);
-		settingsSave.set({ state: 'failed', error: batchError });
+		saveFailed(batchError);
 		throw error;
 	});
 }
 
-window.addEventListener('settings-save-error', event => settingsSave.set({ state: 'failed', error: String(event.detail) }));
+window.addEventListener('settings-save-error', event => saveFailed(String(event.detail)));

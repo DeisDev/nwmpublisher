@@ -8,6 +8,7 @@
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Loading from './Loading.svelte';
+	import { taskError, taskMessage } from '../transactions.js';
 
 	export let item;
 	export let active = false;
@@ -29,14 +30,12 @@
 	let visibility = null;
 	let error = null;
 	let needsReload = false;
-	let saved = false;
 	let query = '';
 	let searchedQuery = '';
 	let results = [];
 	let total = 0;
 	let page = 0;
 	let searching = false;
-	let searchError = null;
 	let searched = false;
 	let announcement = '';
 
@@ -54,10 +53,8 @@
 			query = '';
 			results = [];
 			searched = false;
-			searchError = null;
 			searching = false;
 			searchId++;
-			saved = false;
 			load(false);
 		}
 		wasActive = open;
@@ -105,26 +102,22 @@
 	function discard() {
 		dependencies = [...original];
 		visibility = originalVisibility;
-		saved = false;
 	}
 
 	function add(entry) {
 		if (locked || entry.banned || entry.id === sessionId || dependencies.some(current => current.id === entry.id)) return;
 		dependencies = [...dependencies, entry];
-		saved = false;
 		announcement = $_('workshop_dependency_added', { values: { title: entry.title ?? entry.id } });
 	}
 
 	function remove(entry) {
 		dependencies = dependencies.filter(current => current.id !== entry.id);
-		saved = false;
 		announcement = $_('workshop_dependency_removed', { values: { title: entry.title ?? entry.id } });
 	}
 
 	function onSearchInput() {
 		searchId++;
 		searching = false;
-		searchError = null;
 		searched = false;
 		results = [];
 	}
@@ -135,7 +128,6 @@
 		const term = more ? searchedQuery : query.trim();
 		const nextPage = more ? page + 1 : 1;
 		searching = true;
-		searchError = null;
 		if (!more) { results = []; searched = false; }
 		try {
 			const response = await invoke('search_required_addons', { query: term, page: nextPage });
@@ -146,7 +138,7 @@
 			searchedQuery = term;
 			searched = true;
 		} catch (err) {
-			if (requestId === searchId) searchError = String(err);
+			if (requestId === searchId) taskError(String(err));
 		} finally {
 			if (requestId === searchId) searching = false;
 		}
@@ -156,7 +148,6 @@
 		if (locked || !dirty || needsReload) return;
 		busy = true;
 		error = null;
-		saved = false;
 		try {
 			const result = await invoke('save_workshop_settings', { request: {
 				addonId: sessionId,
@@ -175,7 +166,7 @@
 			} else {
 				dependencies = [...original];
 				visibility = originalVisibility;
-				saved = true;
+				taskMessage($_('workshop_settings_saved'));
 				await load(true);
 			}
 		} catch (err) {
@@ -200,11 +191,10 @@
 		<div class="error" role="alert"><p>{error}</p><button type="button" disabled={loading || busy || disabled} on:click={() => load(true)}>{$_('workshop_reload_review')}</button></div>
 	{/if}
 	{#if loaded && !canEdit}<p class="notice">{$_('workshop_owner_only')}</p>{/if}
-	{#if saved}<p class="success" role="status">{$_('workshop_settings_saved')}</p>{/if}
 	{#if loaded}
 		<section class="visibility">
 			<label for="workshop-visibility">{$_('workshop_settings_visibility')}</label>
-			<select id="workshop-visibility" bind:value={visibility} disabled={locked} on:change={() => saved = false} aria-describedby="visibility-help">
+			<select id="workshop-visibility" bind:value={visibility} disabled={locked} aria-describedby="visibility-help">
 				{#each visibilityOptions as option}<option value={option}>{$_('workshop_visibility_' + option)}</option>{/each}
 			</select>
 			<p id="visibility-help">{$_('workshop_visibility_help_' + visibility)}</p>
@@ -223,14 +213,13 @@
 				{/each}
 			</ul>
 			{#if removals.length}
-				<div class="removed"><span>{$_('workshop_pending_removals')}</span>{#each removals as entry (entry.id)}<button type="button" disabled={locked} on:click={() => { dependencies = [...dependencies, entry]; saved = false; }}>{entry.title ?? entry.id} · {$_('workshop_undo')}</button>{/each}</div>
+				<div class="removed"><span>{$_('workshop_pending_removals')}</span>{#each removals as entry (entry.id)}<button type="button" disabled={locked} on:click={() => dependencies = [...dependencies, entry]}>{entry.title ?? entry.id} · {$_('workshop_undo')}</button>{/each}</div>
 			{/if}
 			<form on:submit|preventDefault={() => search()}>
 				<label for="dependency-search">{$_('workshop_find_addons')}</label>
 				<div class="search-input"><input id="dependency-search" type="search" bind:value={query} on:input={onSearchInput} disabled={locked} maxlength="512" placeholder={$_('workshop_search_placeholder')}/><button type="submit" disabled={locked || searching || !query.trim()}><Search size="1rem"/>{$_('workshop_search')}</button></div>
 				<p>{$_('workshop_search_help')}</p>
 			</form>
-			{#if searchError}<p class="error" role="alert">{searchError}</p>{/if}
 			{#if searched}
 				<p class="result-count" role="status">{results.length ? $_('workshop_search_results', { values: { count: total.toLocaleString(numberLocale) } }) : $_('workshop_search_empty')}</p>
 				<ul class="addon-list search-results">
@@ -296,7 +285,6 @@
 	.search-results { margin-top: 1rem; }
 	.error { background: var(--error-dark); color: #fff; padding: 1rem; border-radius: 4px; overflow-wrap: anywhere; }
 	.error p { color: inherit; }
-	.success { background: var(--success-dark); color: #fff; padding: 1rem; border-radius: 4px; }
 	.notice { display: flex; gap: .5rem; align-items: center; }
 	footer { flex-shrink: 0; border-top: 1px solid var(--border); padding: 1rem; }
 	.save-status { color: var(--text-muted); font-size: .8em; margin-bottom: .75rem; }

@@ -295,7 +295,6 @@
 	"workshop_no_search_matches": "검색과 일치하는 애드온이 없습니다.",
 	"workshop_load_error": "내 창작마당 애드온을 불러오지 못했습니다. {error}",
 	"workshop_incomplete": "모든 애드온을 불러오기 전에 스팀이 빈 페이지를 반환했습니다. 다시 불러오세요.",
-	"workshop_save_error": "창작마당 설정을 저장하지 못했습니다. 이전 선택으로 복원되었습니다. {error}",
 	"workshop_retry": "다시 시도",
 	"collections_loading": "컬렉션을 불러오는 중…",
 	"collections_load_error": "컬렉션을 불러오지 못했습니다. {error}",
@@ -490,7 +489,6 @@
 	"installed_no_types": "선택된 유형이 없습니다. 애드온을 표시하려면 필터에서 유형을 선택하세요.",
 	"installed_search": "설치된 애드온 검색",
 	"installed_no_matches": "검색과 일치하는 설치된 애드온이 없습니다.",
-	"installed_save_error": "설정을 저장하지 못했습니다. 이전 선택으로 복원되었습니다. {error}",
 	"loading": "로딩...",
 	"gmod_dir": {
 		"name": "게리모드 경로",

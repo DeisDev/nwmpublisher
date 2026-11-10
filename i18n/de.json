@@ -295,7 +295,6 @@
 	"workshop_no_search_matches": "Keine Addons entsprechen deiner Suche.",
 	"workshop_load_error": "Deine Workshop-Addons konnten nicht geladen werden. {error}",
 	"workshop_incomplete": "Steam hat eine leere Seite zurückgegeben, bevor alle Addons geladen waren. Versuche es erneut.",
-	"workshop_save_error": "Deine Workshop-Einstellungen konnten nicht gespeichert werden. Deine vorherigen Auswahlen wurden wiederhergestellt. {error}",
 	"workshop_retry": "Erneut versuchen",
 	"collections_loading": "Deine Kollektionen werden geladen…",
 	"collections_load_error": "Deine Kollektionen konnten nicht geladen werden. {error}",
@@ -490,7 +489,6 @@
 	"installed_no_types": "Keine Typen ausgewählt. Aktiviere unter „Filter“ einen Typ, um Addons anzuzeigen.",
 	"installed_search": "Installierte Addons durchsuchen",
 	"installed_no_matches": "Keine installierten Addons entsprechen deiner Suche.",
-	"installed_save_error": "Deine Einstellungen konnten nicht gespeichert werden. Deine vorherigen Auswahlen wurden wiederhergestellt. {error}",
 	"loading": "Lädt...",
 	"gmod_dir": {
 		"name": "Garry's Mod Ordner",

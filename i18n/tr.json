@@ -295,7 +295,6 @@
 	"workshop_no_search_matches": "Aramanızla eşleşen eklenti yok.",
 	"workshop_load_error": "Atölye eklentileriniz yüklenemedi. {error}",
 	"workshop_incomplete": "Steam, tüm eklentiler yüklenmeden önce boş bir sayfa döndürdü. Yeniden yüklemeyi deneyin.",
-	"workshop_save_error": "Atölye tercihleriniz kaydedilemedi. Önceki seçimleriniz geri yüklendi. {error}",
 	"workshop_retry": "Tekrar dene",
 	"collections_loading": "Koleksiyonlarınız yükleniyor…",
 	"collections_load_error": "Koleksiyonlarınız yüklenemedi. {error}",
@@ -490,7 +489,6 @@
 	"installed_no_types": "Hiçbir tür seçilmedi. Eklentileri göstermek için Filtreler'den bir tür işaretleyin.",
 	"installed_search": "Kurulu eklentilerde ara",
 	"installed_no_matches": "Aramanızla eşleşen kurulu eklenti yok.",
-	"installed_save_error": "Tercihleriniz kaydedilemedi. Önceki seçimleriniz geri yüklendi. {error}",
 	"loading": "Yükleniyor...",
 	"gmod_dir": {
 		"name": "Garry's Mod Dizini",

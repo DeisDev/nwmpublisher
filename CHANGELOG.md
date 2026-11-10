@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Success and failure messages now appear in one place at the bottom of the window instead of inside each page. Failure messages stay until you close them.
+
 ## [3.8.1] - 2026-11-10
 
 ### Added

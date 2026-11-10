@@ -22,7 +22,7 @@
 	import Timestamp from './Timestamp.svelte';
 	import BBCodeEditor from './BBCodeEditor.svelte';
 	import CollectionItemRow from './CollectionItemRow.svelte';
-	import { Transaction, taskMessage } from '../transactions.js';
+	import { Transaction, taskError, taskMessage } from '../transactions.js';
 	import { formatSize } from '../format.js';
 	import { playSound } from '../sounds';
 	import { settings } from '../settings.js';
@@ -31,7 +31,6 @@
 
 	export let collection = null;
 	export let others = [];
-	export let notice = null;
 
 	const dispatch = createEventDispatcher();
 	const visibilityOptions = ['public', 'friends_only', 'private', 'unlisted'];
@@ -57,9 +56,8 @@
 	let saveProgress = null;
 	let stopping = false;
 	let reloading = false;
-	let error = notice;
+	let error = null;
 	let needsReload = false;
-	let saved = false;
 	let destroyed = false;
 	onDestroy(() => { destroyed = true; searchId++; });
 
@@ -156,7 +154,6 @@
 		for (const entry of fresh) next.set(entry.id, entry);
 		entries = next;
 		items = [...items, ...fresh.map(entry => entry.id)];
-		saved = false;
 		return fresh.length;
 	}
 
@@ -165,7 +162,6 @@
 		items = items.filter(item => !remove.has(item));
 		selectedItems = new Set([...selectedItems].filter(item => !remove.has(item)));
 		toSubscribe = new Set([...toSubscribe].filter(item => !remove.has(item)));
-		saved = false;
 	}
 
 	function restoreItem(item) {
@@ -181,7 +177,7 @@
 	}
 
 	function toggleSubscribeOnAdd(checked) {
-		setSubscribeOnAdd(checked).catch(err => { error = $_('workshop_save_error', { values: { error: String(err) } }); });
+		setSubscribeOnAdd(checked).catch(() => {});
 	}
 
 	async function showProblems(problems, title) {
@@ -197,7 +193,6 @@
 	let total = 0;
 	let page = 0;
 	let searching = false;
-	let searchError = null;
 	let searched = false;
 	let searchId = 0;
 	let adding = new Set();
@@ -205,7 +200,6 @@
 	function onSearchInput() {
 		searchId++;
 		searching = false;
-		searchError = null;
 		searched = false;
 		results = [];
 	}
@@ -216,7 +210,6 @@
 		const term = more ? searchedQuery : query.trim();
 		const nextPage = more ? page + 1 : 1;
 		searching = true;
-		searchError = null;
 		if (!more) { results = []; searched = false; }
 		try {
 			const response = await invoke('search_required_addons', { query: term, page: nextPage });
@@ -227,7 +220,7 @@
 			searchedQuery = term;
 			searched = true;
 		} catch (err) {
-			if (request === searchId) searchError = String(err);
+			if (request === searchId) taskError(String(err));
 		} finally {
 			if (request === searchId) searching = false;
 		}
@@ -237,9 +230,9 @@
 		adding = new Set(adding).add(result.id);
 		try {
 			const lookup = await invoke('collection_entries', { references: [result.id] });
-			if (!addItems(lookup.entries)) searchError = $_('collections_cannot_add', { values: { title: result.title ?? result.id } });
+			if (!addItems(lookup.entries)) taskError($_('collections_cannot_add', { values: { title: result.title ?? result.id } }));
 		} catch (err) {
-			searchError = String(err);
+			taskError(String(err));
 		} finally {
 			const next = new Set(adding);
 			next.delete(result.id);
@@ -249,22 +242,18 @@
 
 	let pasteText = '';
 	let pasting = false;
-	let pasteMessage = null;
-	let pasteError = null;
 
 	async function addPasted() {
 		const references = pasteText.split(/[\s,]+/).filter(Boolean);
 		if (locked || pasting || !references.length) return;
 		pasting = true;
-		pasteMessage = null;
-		pasteError = null;
 		try {
 			const lookup = await invoke('collection_entries', { references });
 			const added = addItems(lookup.entries);
-			pasteMessage = $_('collections_paste_result', { values: { added, skipped: references.length - added } });
+			taskMessage($_('collections_paste_result', { values: { added, skipped: references.length - added } }));
 			if (added) pasteText = '';
 		} catch (err) {
-			pasteError = String(err);
+			taskError(String(err));
 		} finally {
 			pasting = false;
 		}
@@ -276,7 +265,6 @@
 			invoke('verify_icon', { path }).then(([dataUrl]) => {
 				if (destroyed) return;
 				preview = { path, dataUrl };
-				saved = false;
 			}, transactionId => new Transaction(transactionId, () => ''));
 		});
 	}
@@ -314,7 +302,6 @@
 		saving = true;
 		stopping = false;
 		error = null;
-		saved = false;
 		try {
 			if (creating) {
 				const created = await invoke('create_collection', { draft: { title, description, visibility, preview: preview?.path ?? null } });
@@ -322,10 +309,14 @@
 				dispatch('created', created);
 				return;
 			}
-			saved = (!collectionDirty || await saveCollection()) && await subscribePending();
+			if ((!collectionDirty || await saveCollection()) && await subscribePending()) taskMessage($_('collections_saved'));
 		} catch (err) {
-			error = String(err);
-			needsReload = !creating;
+			if (creating) {
+				taskError(String(err));
+			} else {
+				error = String(err);
+				needsReload = true;
+			}
 		} finally {
 			saving = false;
 			saveProgress = null;
@@ -336,7 +327,7 @@
 		try {
 			await keepResubscribed();
 		} catch (err) {
-			error = String(err);
+			taskError(String(err));
 			return false;
 		}
 		const before = original.items;
@@ -379,7 +370,7 @@
 		try {
 			result = await invoke('subscribe_workshop_items', { ids, onProgress: new Channel(update => { if (saving) saveProgress = { subscribing: true, ...update }; }) });
 		} catch (err) {
-			error = String(err);
+			taskError(String(err));
 			return false;
 		}
 		if ($subscriptionSnapshot.data) loadSnapshot();
@@ -403,13 +394,12 @@
 	async function reload() {
 		if (creating || saving || reloading) return;
 		reloading = true;
-		error = null;
 		await loadCollections();
 		reloading = false;
 		if (destroyed) return;
 		const latest = $collections.items.find(other => other.id === id);
-		if ($collections.error) error = $collections.error;
-		else if (!latest) error = $_('collections_missing');
+		if ($collections.error) taskError($collections.error);
+		else if (!latest) taskError($_('collections_missing'));
 		else rebase(latest);
 	}
 
@@ -426,6 +416,7 @@
 		if (!keepDescription) { description = original.description; historyKey++; }
 		if (!keepVisibility) visibility = original.visibility;
 		needsReload = false;
+		error = null;
 		loadEntries([...items, ...entries.keys()], true);
 	}
 
@@ -437,18 +428,17 @@
 	}
 
 	let subscribing = null;
-	let subscribeResult = null;
-	let subscribeError = null;
 
 	async function subscribeAll() {
 		if (subscribing) return;
 		subscribing = { completed: 0, total: 0 };
-		subscribeResult = null;
-		subscribeError = null;
 		try {
-			subscribeResult = await invoke('subscribe_collection', { collectionId: id, onProgress: new Channel(update => { if (subscribing) subscribing = update; }) });
+			const result = await invoke('subscribe_collection', { collectionId: id, onProgress: new Channel(update => { if (subscribing) subscribing = update; }) });
+			taskMessage($_('collections_subscribe_result', { values: { subscribed: result.subscribed, already: result.alreadySubscribed, skipped: result.skipped } }));
+			const problems = [...(result.error ? [result.error] : []), ...result.failures.map(failure => `${entries.get(failure.id)?.title ?? failure.id}: ${failure.error}`)];
+			if (problems.length) showProblems(problems, $_('collections'));
 		} catch (err) {
-			subscribeError = String(err);
+			taskError(String(err));
 		} finally {
 			subscribing = null;
 			if ($subscriptionSnapshot.data) loadSnapshot();
@@ -492,11 +482,11 @@
 
 	function toggleMirror(checked) {
 		mirrorSaving = true;
-		setMirror(id, checked).then(() => { if (checked) ensureSnapshot(); }, err => { error = $_('workshop_save_error', { values: { error: String(err) } }); }).finally(() => mirrorSaving = false);
+		setMirror(id, checked).then(() => { if (checked) ensureSnapshot(); }, () => {}).finally(() => mirrorSaving = false);
 	}
 
 	function toggleExtras(checked) {
-		setIncludeExtras(checked).catch(err => { error = $_('workshop_save_error', { values: { error: String(err) } }); });
+		setIncludeExtras(checked).catch(() => {});
 	}
 
 	async function stageSync(add, remove) {
@@ -506,7 +496,7 @@
 			try {
 				local = new Set(await invoke('local_subscribed_ids'));
 			} catch (err) {
-				error = String(err);
+				taskError(String(err));
 				return;
 			}
 			const resubscribed = remove.filter(item => local.has(item));
@@ -562,7 +552,7 @@
 			});
 		} catch (err) {
 			playSound('error');
-			error = errorText(err);
+			taskError(errorText(err));
 			return;
 		} finally {
 			reverseRun = null;
@@ -614,22 +604,12 @@
 			<progress max={subscribing.total || 1} value={subscribing.completed}></progress>
 		</div>
 	{/if}
-	{#if subscribeResult}
-		<div class="panel result" role="status">
-			<p>{$_('collections_subscribe_result', { values: { subscribed: subscribeResult.subscribed, already: subscribeResult.alreadySubscribed, skipped: subscribeResult.skipped } })}</p>
-			{#if subscribeResult.error}<p class="error-text">{subscribeResult.error}</p>{/if}
-			{#each subscribeResult.failures as failure}<p class="error-text">{failure.id}: {failure.error}</p>{/each}
-			<button type="button" class="plain" on:click={() => subscribeResult = null}>{$_('close')}</button>
-		</div>
-	{/if}
-	{#if subscribeError}<p class="message error" role="alert">{subscribeError}</p>{/if}
 	{#if error}
 		<div class="message error" role="alert">
 			<p>{error}</p>
-			{#if needsReload}<button type="button" disabled={reloading} on:click={reload}>{$_('collections_reload_review')}</button>{/if}
+			<button type="button" disabled={reloading} on:click={reload}>{$_('collections_reload_review')}</button>
 		</div>
 	{/if}
-	{#if saved}<p class="message success" role="status">{$_('collections_saved')}</p>{/if}
 
 	{#if !creating}
 		<div class="tabs" role="tablist">
@@ -679,7 +659,6 @@
 					<label for="collection-search">{$_('collections_find_items')}</label>
 					<div class="search-input"><input id="collection-search" type="search" bind:value={query} on:input={onSearchInput} disabled={locked} maxlength="512" placeholder={$_('workshop_search_placeholder')}/><button type="submit" disabled={locked || searching || !query.trim()}><Search size="1rem"/>{$_('workshop_search')}</button></div>
 				</form>
-				{#if searchError}<p class="message error" role="alert">{searchError}</p>{/if}
 				{#if searching}<p class="message status" role="status"><Loading inline size="1rem"/> {$_('workshop_searching')}</p>{/if}
 				{#if searched}
 					<p class="hint" role="status">{results.length ? $_('workshop_search_results', { values: { count: total.toLocaleString(numberLocale) } }) : $_('workshop_search_empty')}</p>
@@ -697,21 +676,19 @@
 					<label for="collection-paste">{$_('collections_paste_label')}</label>
 					<textarea id="collection-paste" rows="3" bind:value={pasteText} disabled={locked || pasting} placeholder={$_('collections_paste_placeholder')}></textarea>
 					<button type="submit" disabled={locked || pasting || !pasteText.trim()}>{#if pasting}<Loading inline size="1rem"/>{:else}<Plus size="1rem"/>{/if}{$_('collections_paste_add')}</button>
-					{#if pasteMessage}<p class="hint" role="status">{pasteMessage}</p>{/if}
-					{#if pasteError}<p class="message error" role="alert">{pasteError}</p>{/if}
 				</form>
 			</section>
 		{:else if tab === 'details'}
 			<div class="details">
 				<div class="field">
 					<label for="collection-title">{$_('collections_title')}</label>
-					<input id="collection-title" type="text" bind:value={title} disabled={locked} on:input={() => { titleTouched = true; saved = false; }} aria-invalid={!!titleError && (titleTouched || !creating)}/>
+					<input id="collection-title" type="text" bind:value={title} disabled={locked} on:input={() => titleTouched = true} aria-invalid={!!titleError && (titleTouched || !creating)}/>
 					<p class="hint">{$_('workshop_description_size', { values: { bytes: titleBytes, max: titleMaxBytes } })}</p>
 					{#if titleError && (titleTouched || !creating)}<p class="error-text">{titleError}</p>{/if}
 				</div>
 				<div class="field">
 					<label for="collection-visibility">{$_('workshop_settings_visibility')}</label>
-					<select id="collection-visibility" bind:value={visibility} disabled={locked} on:change={() => saved = false}>
+					<select id="collection-visibility" bind:value={visibility} disabled={locked}>
 						{#each visibilityOptions as option}<option value={option}>{$_('workshop_visibility_' + option)}</option>{/each}
 					</select>
 					<p class="hint">{$_('collections_visibility_help_' + visibility)}</p>
@@ -728,7 +705,7 @@
 					</div>
 				</div>
 				<div class="description">
-					<BBCodeEditor id="collection-description" label={$_('collections_description')} value={description} on:input={event => { description = event.detail; saved = false; }} disabled={locked} error={descriptionError} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} active={tab === 'details'} historyKey={`collection:${id}:${historyKey}`}/>
+					<BBCodeEditor id="collection-description" label={$_('collections_description')} value={description} on:input={event => description = event.detail} disabled={locked} error={descriptionError} size={$_('workshop_description_size', { values: { bytes: descriptionBytes, max: descriptionMaxBytes } })} active={tab === 'details'} historyKey={`collection:${id}:${historyKey}`}/>
 				</div>
 			</div>
 		{:else if tab === 'problems'}
@@ -974,15 +951,12 @@
 	input[type='checkbox'] { accent-color: var(--neutral); flex-shrink: 0; }
 	option { background: var(--control); color: var(--text); }
 	.panel { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem; margin: 0 1.5rem .5rem; padding: .5rem 1rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-panel); color: var(--text-soft); }
-	.panel.result { flex-direction: column; align-items: flex-start; }
-	.panel p { margin: 0; line-height: 1.5; }
 	progress { flex: 1; min-width: 8rem; height: .5rem; accent-color: var(--neutral); }
 	.message { margin: 0 1.5rem .5rem; line-height: 1.5; overflow-wrap: anywhere; }
 	.body .message { margin-inline: 0; }
 	.message.error { padding: .75rem 1rem; border-radius: 4px; background: var(--error-dark); color: #fff; }
 	.message.error p { margin: 0 0 .5rem; }
 	.message.error p:last-child { margin: 0; }
-	.message.success { padding: .75rem 1rem; border-radius: 4px; background: var(--success-dark); color: #fff; }
 	.message.status { display: flex; align-items: center; gap: .5rem; color: var(--text-soft); }
 	.error-text { color: var(--text-error-soft); margin: .35rem 0 0; font-size: .85rem; }
 	.tabs { display: flex; gap: .25rem; padding: 0 1.5rem; border-bottom: 1px solid var(--border); }

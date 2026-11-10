@@ -295,7 +295,6 @@
 	"workshop_no_search_matches": "Żadne dodatki nie pasują do wyszukiwania.",
 	"workshop_load_error": "Nie udało się wczytać twoich dodatków z Warsztatu. {error}",
 	"workshop_incomplete": "Steam zwrócił pustą stronę, zanim wczytano wszystkie dodatki. Spróbuj wczytać ponownie.",
-	"workshop_save_error": "Nie udało się zapisać twoich preferencji Warsztatu. Przywrócono poprzednie wybory. {error}",
 	"workshop_retry": "Spróbuj ponownie",
 	"collections_loading": "Wczytywanie twoich kolekcji…",
 	"collections_load_error": "Nie udało się wczytać twoich kolekcji. {error}",
@@ -490,7 +489,6 @@
 	"installed_no_types": "Nie wybrano typów. Zaznacz typ w Filtrach, aby pokazać dodatki.",
 	"installed_search": "Szukaj zainstalowanych dodatków",
 	"installed_no_matches": "Żadne zainstalowane dodatki nie pasują do wyszukiwania.",
-	"installed_save_error": "Nie udało się zapisać twoich preferencji. Przywrócono poprzednie wybory. {error}",
 	"loading": "Ładowanie...",
 	"gmod_dir": {
 		"name": "Folder instalacji Garry's Moda",
