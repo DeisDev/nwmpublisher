@@ -2,6 +2,7 @@
 	import { _ } from 'svelte-i18n';
 	import { createEventDispatcher, onDestroy } from 'svelte';
 	import { invoke } from '@tauri-apps/api/core';
+	import { playSound } from '../sounds';
 	import { taskError, taskMessage } from '../transactions.js';
 
 	export let id;
@@ -76,6 +77,7 @@
 			if (request !== loadId) return;
 			setPreferences(next);
 			taskMessage($_(global ? 'changelog_defaults.global_saved' : 'changelog_defaults.addon_saved'));
+			playSound('success');
 			dispatch('saved', next);
 		} catch (error) {
 			if (request === loadId) taskError($_('changelog_defaults.error', { values: { error: String(error) } }));

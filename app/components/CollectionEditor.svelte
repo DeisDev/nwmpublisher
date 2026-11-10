@@ -251,7 +251,10 @@
 			const lookup = await invoke('collection_entries', { references });
 			const added = addItems(lookup.entries);
 			taskMessage($_('collections_paste_result', { values: { added, skipped: references.length - added } }));
-			if (added) pasteText = '';
+			if (added) {
+				pasteText = '';
+				playSound('success');
+			}
 		} catch (err) {
 			taskError(String(err));
 		} finally {
@@ -309,7 +312,10 @@
 				dispatch('created', created);
 				return;
 			}
-			if ((!collectionDirty || await saveCollection()) && await subscribePending()) taskMessage($_('collections_saved'));
+			if ((!collectionDirty || await saveCollection()) && await subscribePending()) {
+				taskMessage($_('collections_saved'));
+				playSound('success');
+			}
 		} catch (err) {
 			if (creating) {
 				taskError(String(err));
@@ -437,6 +443,7 @@
 			taskMessage($_('collections_subscribe_result', { values: { subscribed: result.subscribed, already: result.alreadySubscribed, skipped: result.skipped } }));
 			const problems = [...(result.error ? [result.error] : []), ...result.failures.map(failure => `${entries.get(failure.id)?.title ?? failure.id}: ${failure.error}`)];
 			if (problems.length) showProblems(problems, $_('collections'));
+			else playSound('success');
 		} catch (err) {
 			taskError(String(err));
 		} finally {
@@ -508,7 +515,10 @@
 		}
 		const added = addItems(add.map(item => subscriptionEntries.get(item)).filter(Boolean));
 		removeItems(remove);
-		if (added + remove.length) taskMessage($_('collections_sync_staged', { values: { count: added + remove.length } }));
+		if (added + remove.length) {
+			taskMessage($_('collections_sync_staged', { values: { count: added + remove.length } }));
+			playSound('success');
+		}
 		stagedBySync = new Set([...stagedBySync, ...remove]);
 	}
 

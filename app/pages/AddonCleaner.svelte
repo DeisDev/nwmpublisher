@@ -9,6 +9,7 @@
 	import Modal from '../components/Modal.svelte';
 	import { formatSize } from '../format.js';
 	import { saveSettings } from '../settings.js';
+	import { playSound } from '../sounds';
 	import { taskError, taskMessage } from '../transactions.js';
 
 	let scan = null;
@@ -144,8 +145,12 @@
 			detailsLoading = false;
 			detailsError = null;
 			const summary = $_('cleaner_result', { values: { removed: result.removed.length, failed: result.failed.length } });
-			if (result.failed.length) taskError(summary);
-			else taskMessage(summary);
+			if (result.failed.length) {
+				taskError(summary);
+			} else {
+				taskMessage(summary);
+				playSound('success');
+			}
 		} catch (err) {
 			taskError(errorText(err));
 		} finally {

@@ -4,6 +4,7 @@
 	import ListPlus from '@lucide/svelte/icons/list-plus';
 	import Modal from './Modal.svelte';
 	import Loading from './Loading.svelte';
+	import { playSound } from '../sounds';
 	import { taskMessage } from '../transactions.js';
 	import { collectionPicker, collections, compareTitles, ensureCollections, loadCollections } from '../collections.js';
 
@@ -53,6 +54,7 @@
 			failures = outcomes.filter(outcome => outcome.error).map(outcome => ({ title: titles.get(outcome.id) ?? outcome.id, error: outcome.error }));
 			const added = outcomes.reduce((count, outcome) => count + outcome.changed.length, 0);
 			taskMessage($_('collections_items_added', { values: { count: added } }));
+			if (added) playSound('success');
 			if (!failures.length) $collectionPicker = null;
 		} catch (err) {
 			error = String(err);

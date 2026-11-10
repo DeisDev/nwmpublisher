@@ -8,6 +8,7 @@
 	import ExternalLink from '@lucide/svelte/icons/external-link';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Loading from './Loading.svelte';
+	import { playSound } from '../sounds';
 	import { taskError, taskMessage } from '../transactions.js';
 
 	export let item;
@@ -167,6 +168,7 @@
 				dependencies = [...original];
 				visibility = originalVisibility;
 				taskMessage($_('workshop_settings_saved'));
+				playSound('success');
 				await load(true);
 			}
 		} catch (err) {

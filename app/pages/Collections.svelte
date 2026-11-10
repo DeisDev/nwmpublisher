@@ -21,6 +21,7 @@
 	import CollectionCompare from '../components/CollectionCompare.svelte';
 	import { collections, compareTitles, ensureCollections, includeExtras, loadCollections, loadSnapshot, mirrors, planSync, setIncludeExtras, subscriptionSnapshot } from '../collections.js';
 	import { saveSettings } from '../settings.js';
+	import { playSound } from '../sounds';
 	import { taskError, taskMessage } from '../transactions.js';
 
 	const visibilityOptions = ['public', 'friends_only', 'private', 'unlisted'];
@@ -146,7 +147,10 @@
 			const failures = failureList(outcomes);
 			reportFailures(failures);
 			const changed = outcomes.length - failures.length;
-			if (changed) taskMessage($_('collections_visibility_changed', { values: { count: changed } }));
+			if (changed) {
+				taskMessage($_('collections_visibility_changed', { values: { count: changed } }));
+				playSound('success');
+			}
 		} catch (error) {
 			reportFailures([{ title: $_('collections'), error: String(error) }]);
 		} finally {
@@ -168,7 +172,10 @@
 			const outcomes = await invoke('delete_collections', { collections: ids });
 			reportFailures(failureList(outcomes));
 			const removed = outcomes.filter(outcome => !outcome.error).map(outcome => outcome.id);
-			if (removed.length) taskMessage($_('collections_deleted', { values: { count: removed.length } }));
+			if (removed.length) {
+				taskMessage($_('collections_deleted', { values: { count: removed.length } }));
+				playSound('success');
+			}
 			selected = new Set([...selected].filter(id => !removed.includes(id)));
 			if (view?.kind === 'edit' && removed.includes(view.id)) view = null;
 		} catch (error) {
@@ -220,7 +227,10 @@
 			});
 			const failures = failureList(outcomes);
 			const changed = outcomes.filter(outcome => outcome.changed.length).length;
-			if (changed) taskMessage($_('collections_removed_everywhere', { values: { count: changed } }));
+			if (changed) {
+				taskMessage($_('collections_removed_everywhere', { values: { count: changed } }));
+				playSound('success');
+			}
 			removing = failures.length ? { ...removing, failures, busy: false, progress: null } : null;
 		} catch (error) {
 			removing = { ...removing, error: String(error), busy: false, progress: null };
@@ -283,7 +293,10 @@
 			const failures = failureList(result.outcomes);
 			const changed = result.outcomes.filter(outcome => outcome.changed.length);
 			const removed = changed.reduce((count, outcome) => count + outcome.changed.length, 0);
-			if (removed) taskMessage($_('collections_sync_pruned', { values: { items: removed, collections: changed.length } }));
+			if (removed) {
+				taskMessage($_('collections_sync_pruned', { values: { items: removed, collections: changed.length } }));
+				playSound('success');
+			}
 			const stopped = result.stopped ? $_('collections_sync_prune_stopped', { values: { count: removed } }) : null;
 			const messages = [notice, stopped].filter(Boolean).join(' ') || null;
 			pruning = failures.length || messages ? { ...pruning, busy: false, progress: null, failures, notice: messages } : null;

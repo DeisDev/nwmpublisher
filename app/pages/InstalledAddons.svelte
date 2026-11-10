@@ -8,6 +8,7 @@
 	import { saveSettings, settings } from '../settings.js';
 	import { formatSize } from '../format.js';
 	import { tippy } from '../tippy.js';
+	import { playSound } from '../sounds';
 	import { taskError, taskMessage } from '../transactions.js';
 	import { addonName, addonRemoval, addonRemovals, confirmRemoval, deleteRequest, removalJob, removedPaths, stopRemoval } from '../addon-removal.js';
 	import { createSelection } from '../addon-selection.js';
@@ -243,7 +244,10 @@
 		cancelDestination();
 		try {
 			const queued = await invoke('extract_installed_addons', { paths, destination });
-			if (queued) taskMessage($_('bulk_extract_queued', { values: { count: queued } }));
+			if (queued) {
+				taskMessage($_('bulk_extract_queued', { values: { count: queued } }));
+				playSound('success');
+			}
 			if (queued < paths.length) taskMessage($_('bulk_extract_skipped', { values: { count: paths.length - queued } }));
 		} catch (error) {
 			await message($_('bulk_extract_failed', { values: { error: String(error) } }), { kind: 'error' });
@@ -261,6 +265,7 @@
 			return;
 		}
 		taskMessage($_('links_copied', { values: { count: ids.length } }));
+		playSound('success');
 		if (skipped) taskMessage($_('links_skipped', { values: { count: skipped } }));
 	}
 
