@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.1] - 2026-11-10
+
 ### Added
 
 - Remove the items that need a missing required addon from a collection's Problems tab.
@@ -14,13 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed Reload from Steam not updating a collection's item details and missing required addons.
-
-## [3.8.1] - 2026-11-10
-
-### Fixed
-
 - Fixed some older addons failing to download or extract with "Corrupted GMA file".
+- Fixed Reload from Steam not updating a collection's item details and missing required addons.
 
 ## [3.8.0] - 2026-11-09
 
