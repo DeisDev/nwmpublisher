@@ -292,7 +292,7 @@ impl GMAFile {
 		}
 
 		gma.version = f.read_u8().map_err(|error| GMAError::io("read version", &gma.path, error))?;
-		if !(1..=3).contains(&gma.version) { return Err(GMAError::FormatError); }
+		if gma.version > 3 { return Err(GMAError::FormatError); }
 
 		gma.pointers.metadata = f
 			.seek(SeekFrom::Current(0))

@@ -311,6 +311,27 @@ mod tests {
 	}
 
 	#[test]
+	fn version_zero_archives_are_read_and_newer_versions_are_rejected() {
+		let mut bytes = b"GMAD\x00".to_vec();
+		bytes.extend_from_slice(&[0; 16]);
+		for text in ["Test", "{}", "Author"] { bytes.write_nt_string(text).unwrap(); }
+		bytes.write_i32::<LittleEndian>(1).unwrap();
+		bytes.write_u32::<LittleEndian>(1).unwrap();
+		bytes.write_nt_string("lua/a.lua").unwrap();
+		bytes.write_i64::<LittleEndian>(4).unwrap();
+		bytes.write_u32::<LittleEndian>(crc32fast::hash(b"test")).unwrap();
+		bytes.write_u32::<LittleEndian>(0).unwrap();
+		bytes.extend_from_slice(b"test");
+		let mut gma = GMAFile::read_header(GMAReader::MemBuffer(Cursor::new(bytes.into())), "fixture.gma").unwrap();
+		gma.entries().unwrap();
+		assert_eq!(gma.metadata.as_ref().unwrap().title(), "Test");
+		assert_eq!(gma.entries.as_ref().unwrap()["lua/a.lua"].size, 4);
+
+		let newer = b"GMAD\x04".to_vec();
+		assert!(matches!(GMAFile::read_header(GMAReader::MemBuffer(Cursor::new(newer.into())), "fixture.gma"), Err(GMAError::FormatError)));
+	}
+
+	#[test]
 	fn legacy_absent_and_zero_checksums_are_accepted_but_corruption_is_not() {
 		for footer in [None, Some(0), Some(crc32fast::hash(b"test")), Some(crc32fast::hash(b"st"))] {
 			let mut gma = archive(&[("lua/a.lua", 4, 0)], b"test", footer);
