@@ -102,16 +102,17 @@ pub(crate) enum EntryStatus {
 /// Garry's Mod tags every Workshop item with its type: `addon`, `dupe`, `save` or `demo`.
 #[derive(Serialize, Clone, Copy, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum ItemKind {
+pub enum ItemKind {
 	Addon,
 	Dupe,
 	Save,
 	Demo,
+	Collection,
 	Other,
 }
 
 impl ItemKind {
-	fn of(tags: &[String]) -> Self {
+	pub(super) fn of(tags: &[String]) -> Self {
 		let tagged = |name: &str| tags.iter().any(|tag| tag.eq_ignore_ascii_case(name));
 		[("addon", ItemKind::Addon), ("dupe", ItemKind::Dupe), ("save", ItemKind::Save), ("demo", ItemKind::Demo)]
 			.into_iter()
@@ -271,6 +272,15 @@ pub struct SubscribeOutcome {
 	subscribed: usize,
 	already_subscribed: usize,
 	skipped: usize,
+	failures: Vec<ItemFailure>,
+	stopped: bool,
+	error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnsubscribeOutcome {
+	unsubscribed: usize,
 	failures: Vec<ItemFailure>,
 	stopped: bool,
 	error: Option<String>,
@@ -893,6 +903,45 @@ fn subscribe_to(ids: &[PublishedFileId], stop: &AtomicBool, on_progress: &Channe
 	Ok(outcome)
 }
 
+fn unsubscribe_items(ids: Vec<String>, on_progress: &Channel<CollectionProgress>) -> Result<UnsubscribeOutcome, String> {
+	let ids = unique_ids(&ids)?;
+	let _subscribing = SUBSCRIBE_LOCK.try_lock().ok_or("Already changing subscriptions. Try again when that finishes.")?;
+	SUBSCRIBE_STOP.store(false, Ordering::Release);
+	let mut outcome = UnsubscribeOutcome {
+		unsubscribed: 0,
+		failures: Vec::new(),
+		stopped: false,
+		error: None,
+	};
+	let total = ids.len();
+	for (index, id) in ids.into_iter().enumerate() {
+		if !steam!().connected() {
+			outcome.error = Some("Steam went offline. Connect Steam and try again.".into());
+			break;
+		}
+		match paced(&SUBSCRIBE_STOP, || change_subscription(id, false), |delay| report_retry(on_progress, index, total, delay)) {
+			Ok(Paced::Written) => {
+				outcome.unsubscribed += 1;
+				game_addons!().note_unsubscribed(id);
+			}
+			Ok(Paced::Stopped) => {
+				outcome.stopped = true;
+				break;
+			}
+			Err(error) if error.kind() == WriteFailure::Stop => {
+				outcome.error = Some(error.to_string());
+				break;
+			}
+			Err(error) => outcome.failures.push(ItemFailure {
+				id: id.0.to_string(),
+				error: error.to_string(),
+			}),
+		}
+		report(on_progress, index + 1, total);
+	}
+	Ok(outcome)
+}
+
 async fn blocking<T: Send + 'static>(task: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
 	tauri::async_runtime::spawn_blocking(task).await.map_err(|error| error.to_string())?
 }
@@ -1006,6 +1055,21 @@ pub async fn subscribe_workshop_items(ids: Vec<String>, on_progress: Channel<Col
 			if outcome.stopped { ", stopped" } else { "" }
 		),
 		Err(error) => eprintln!("Could not subscribe to Workshop items: {}", error),
+	}
+	result
+}
+
+#[tauri::command]
+pub async fn unsubscribe_workshop_items(ids: Vec<String>, on_progress: Channel<CollectionProgress>) -> Result<UnsubscribeOutcome, String> {
+	let result = blocking(move || unsubscribe_items(ids, &on_progress)).await;
+	match &result {
+		Ok(outcome) => println!(
+			"Unsubscribed from {} Workshop items ({} failed{})",
+			outcome.unsubscribed,
+			outcome.failures.len(),
+			if outcome.stopped { ", stopped" } else { "" }
+		),
+		Err(error) => eprintln!("Could not unsubscribe from Workshop items: {}", error),
 	}
 	result
 }

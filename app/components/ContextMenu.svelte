@@ -82,7 +82,9 @@
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import CircleMinus from '@lucide/svelte/icons/circle-minus';
 	import ListPlus from '@lucide/svelte/icons/list-plus';
-	import { addToCollections } from '../collections.js';
+	import { chooseCollections } from '../collections.js';
+	import { loadSubscribed, subscribedIds, subscribeItems, unsubscribeItems, browseJob } from '../browse.js';
+	import CirclePlus from '@lucide/svelte/icons/circle-plus';
 	import { addonName, addonRemoval, removalJob, requestDelete, requestUnsubscribe } from '../addon-removal.js';
 	import { settings } from '../settings.js';
 	import { get, writable } from 'svelte/store';
@@ -130,8 +132,9 @@ import { playSound } from '../sounds';
 
 	// Known before the menu shows, so the removal item does not pop in afterwards.
 	let removal = null;
+	let installedPath = null;
 	if (!items && gma) {
-		loading = Promise.all([loading, gma.then(gma => (gma?.path ? addonRemoval(gma.path).catch(() => null) : null), () => null).then(value => (removal = value))]);
+		loading = Promise.all([loading, loadSubscribed(), gma.then(gma => (gma?.path ? addonRemoval(gma.path).catch(() => null) : null), () => null).then(value => (removal = value)), gma.then(gma => (installedPath = gma?.path ?? null), () => null)]);
 	}
 
 	let destroyed = false;
@@ -347,9 +350,22 @@ import { playSound } from '../sounds';
 							<span slot="label">{$_('download')}</span>
 						</ContextMenuItem>
 					{/if}
-					<ContextMenuItem click={() => addToCollections([workshop.id])}>
+					{#if !installedPath && workshop.kind !== 'collection'}
+						{#if $subscribedIds.has(String(workshop.id))}
+							<ContextMenuItem click={() => unsubscribeItems([{ id: workshop.id, title: workshop.title }])} disabled={!!$browseJob}>
+								<span slot="icon"><CircleMinus class="icon" size="1rem"/></span>
+								<span slot="label">{$_('unsubscribe')}</span>
+							</ContextMenuItem>
+						{:else}
+							<ContextMenuItem click={() => subscribeItems([workshop.id])} disabled={!!$browseJob}>
+								<span slot="icon"><CirclePlus class="icon" size="1rem"/></span>
+								<span slot="label">{$_('browse_subscribe')}</span>
+							</ContextMenuItem>
+						{/if}
+					{/if}
+					<ContextMenuItem click={() => chooseCollections([workshop.id])}>
 						<span slot="icon"><ListPlus class="icon" size="1rem"/></span>
-						<span slot="label">{$_('collections_add_to')}</span>
+						<span slot="label">{$_('collections_menu')}</span>
 					</ContextMenuItem>
 					{#if workshop.previewUrl}
 						<div class="divider" role="separator"></div>

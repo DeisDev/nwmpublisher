@@ -317,6 +317,33 @@ pub enum InstalledAddonsSort {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowseView {
+	#[default]
+	Grid,
+	List,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowseColumn {
+	Author,
+	Type,
+	Tags,
+	Size,
+	Subscribers,
+	Favorites,
+	Rating,
+	Created,
+	Updated,
+	Status,
+}
+
+impl BrowseColumn {
+	pub const DEFAULT: [BrowseColumn; 5] = [BrowseColumn::Author, BrowseColumn::Size, BrowseColumn::Subscribers, BrowseColumn::Rating, BrowseColumn::Updated];
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum AddonDeleteMode {
 	#[default]
@@ -361,6 +388,9 @@ pub struct Settings {
 	pub collections_mirrors: Vec<String>,
 	pub installed_addons_sort: InstalledAddonsSort,
 	pub installed_addons_types: Vec<AddonType>,
+	pub browse_view: BrowseView,
+	pub browse_columns: Vec<BrowseColumn>,
+	pub browse_filters_open: bool,
 	pub upscale_addon_icon: bool,
 	pub workshop_update_mode: WorkshopUpdateMode,
 	pub open_workshop_after_publish: bool,
@@ -445,6 +475,9 @@ impl Default for Settings {
 			collections_mirrors: Vec::new(),
 			installed_addons_sort: InstalledAddonsSort::Modified,
 			installed_addons_types: AddonType::ALL.to_vec(),
+			browse_view: BrowseView::Grid,
+			browse_columns: BrowseColumn::DEFAULT.to_vec(),
+			browse_filters_open: true,
 			upscale_addon_icon: true,
 			workshop_update_mode: WorkshopUpdateMode::Description,
 			open_workshop_after_publish: true,
@@ -567,6 +600,8 @@ impl Settings {
 		self.my_workshop_local_paths.retain(|_, dir| dir.is_absolute() && dir.is_dir());
 		let mut mirrors = HashSet::new();
 		self.collections_mirrors.retain(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) && mirrors.insert(id.clone()));
+		let mut columns = HashSet::new();
+		self.browse_columns.retain(|column| columns.insert(*column));
 
 		match &self.extract_destination {
 			ExtractDestination::Directory(path) => {
@@ -1071,7 +1106,7 @@ mod tests {
 		assert!(super::patched_settings(&settings, patch).is_err());
 	}
 	use super::{
-		changelog_key, validate_changelog_key, ChangelogDefaults, ChangelogMode, ChangelogSettings, CollectionsSort, InstalledAddonsSort, Settings, WorkshopSort,
+		changelog_key, validate_changelog_key, BrowseColumn, BrowseView, ChangelogDefaults, ChangelogMode, ChangelogSettings, CollectionsSort, InstalledAddonsSort, Settings, WorkshopSort,
 		WorkshopUpdateMode, WorkshopVisibility,
 	};
 	use crate::gma::AddonType;
@@ -1187,6 +1222,24 @@ mod tests {
 		assert_eq!(loaded.installed_addons_types, [AddonType::Map, AddonType::ServerContent, AddonType::Other]);
 		assert!(loaded.extract_workshop_icon && !loaded.sounds);
 		for patch in [serde_json::json!({"installed_addons_sort": "invalid"}), serde_json::json!({"installed_addons_types": ["Map"]})] {
+			assert!(super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).is_err());
+		}
+	}
+
+	#[test]
+	fn browse_preferences_default_round_trip_and_reject_invalid_values() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
+		assert_eq!(defaults.browse_view, BrowseView::Grid);
+		assert_eq!(defaults.browse_columns, BrowseColumn::DEFAULT.to_vec());
+		assert!(defaults.browse_filters_open);
+		let patch = serde_json::json!({"browse_view": "list", "browse_columns": ["tags", "status", "tags"], "browse_filters_open": false});
+		let mut settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+		settings.sanitize();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert_eq!(loaded.browse_view, BrowseView::List);
+		assert_eq!(loaded.browse_columns, [BrowseColumn::Tags, BrowseColumn::Status]);
+		assert!(!loaded.browse_filters_open);
+		for patch in [serde_json::json!({"browse_view": "table"}), serde_json::json!({"browse_columns": ["title"]}), serde_json::json!({"browse_filters_open": "yes"})] {
 			assert!(super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).is_err());
 		}
 	}

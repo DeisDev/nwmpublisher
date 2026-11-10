@@ -8,6 +8,7 @@
 	import Dead from './Dead.svelte';
 	import { registerContext } from './ContextMenu.svelte';
 	import { onMount } from 'svelte';
+	import { formatDate, formatSize } from '../format.js';
 
 	export let newAddon = false;
 	export let workshopData = null;
@@ -19,6 +20,8 @@
 	export let selecting = false;
 	export let selected = false;
 	export let contextItems = null;
+	export let badge = null;
+	export let details = false;
 
 	let workshop = workshopData;
 	let installed = installedData;
@@ -115,7 +118,8 @@
 				{#if workshop.previewUrl}
 					<div id="preview" class:loading={addonPreviewLoading}>
 						<Loading size="2rem"/>
-						<img src={workshop.previewUrl} alt="Preview" on:load={addonPreviewLoaded}/>
+						<img src={workshop.previewUrl} alt="Preview" loading="lazy" on:load={addonPreviewLoaded}/>
+						{#if badge}<span class="badge">{badge}</span>{/if}
 					</div>
 				{:else}
 					<div id="preview" class="dead"><Dead size="4rem"/></div>
@@ -134,6 +138,7 @@
 				{/await}
 			{:then workshop}
 				<div id="title" class="select">{workshop.title}</div>
+				{#if details}<div class="details">{[workshop.fileSize == null ? null : formatSize(workshop.fileSize), workshop.timeUpdated ? formatDate(workshop.timeUpdated) : null].filter(Boolean).join(' · ')}</div>{/if}
 			{:catch}
 				{#await installed}
 					<div id="title" class="select">{fallbackName ?? '¯\\_(ツ)_/¯'}</div>
@@ -169,6 +174,23 @@
 		margin-top: .8rem;
 		flex: 1;
 		text-align: center;
+	}
+	main .details {
+		margin-top: .3rem;
+		text-align: center;
+		color: var(--text-muted);
+		font-size: .8rem;
+	}
+	main .badge {
+		position: absolute;
+		top: .4rem;
+		inset-inline-end: .4rem;
+		padding: .15rem .5rem;
+		border-radius: 3px;
+		background: var(--neutral-dark);
+		color: #fff;
+		font-size: .75rem;
+		box-shadow: 0 0 3px rgb(0 0 0 / 60%);
 	}
 	main #stats {
 		position: relative;

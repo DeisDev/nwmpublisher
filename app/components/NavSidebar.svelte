@@ -6,6 +6,11 @@
 			component: MyWorkshop,
 		},
 		{
+			name: 'browse_workshop',
+			component: Browse,
+			persist: true,
+		},
+		{
 			name: 'collections',
 			component: Collections,
 			persist: true,
@@ -59,6 +64,7 @@
 	import Downloader, { downloaderJobs } from '../pages/Downloader.svelte';
 	import InstalledAddons from '../pages/InstalledAddons.svelte';
 	import MyWorkshop from '../pages/MyWorkshop.svelte';
+	import Browse from '../pages/Browse.svelte';
 	import Collections from '../pages/Collections.svelte';
 	//import ContentGenerator from '../pages/ContentGenerator.svelte';
 	import SidebarItem from './SidebarItem.svelte';

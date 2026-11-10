@@ -21,3 +21,8 @@ export function formatPercent(ratio, selectedLocale = get(locale)) {
 	const numberLocale = selectedLocale === 'kr' ? 'ko' : (selectedLocale ?? 'en');
 	return new Intl.NumberFormat(numberLocale, { style: 'percent', maximumFractionDigits: 1 }).format(ratio);
 }
+
+export function formatDate(unix, selectedLocale = get(locale)) {
+	const dateLocale = selectedLocale === 'kr' ? 'ko' : (selectedLocale ?? 'en');
+	return new Intl.DateTimeFormat(dateLocale, { dateStyle: 'medium' }).format(new Date(unix * 1000));
+}

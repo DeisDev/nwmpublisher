@@ -70,6 +70,10 @@ pub struct WorkshopItem {
 	pub favorites: Option<u64>,
 	pub views: Option<u64>,
 	pub comments: Option<u64>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub kind: Option<super::collections::ItemKind>,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub num_children: Option<u32>,
 	pub local_file: Option<PathBuf>,
 	//pub search_title: String,
 	#[serde(serialize_with = "super::serialize_opt_steamid", rename = "steamid64")]
@@ -100,6 +104,8 @@ impl From<QueryResult> for WorkshopItem {
 			favorites: None,
 			views: None,
 			comments: None,
+			kind: None,
+			num_children: None,
 			local_file: None,
 			//search_title: result.title.to_lowercase(),
 			dead: false,
@@ -129,6 +135,8 @@ impl From<PublishedFileId> for WorkshopItem {
 			favorites: None,
 			views: None,
 			comments: None,
+			kind: None,
+			num_children: None,
 			local_file: None,
 			//search_title: id.0.to_string(),
 			dead: true,

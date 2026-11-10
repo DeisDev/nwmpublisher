@@ -89,7 +89,7 @@ export function planSync(collection, items, entries, subscriptions, extras) {
 	return plan;
 }
 
-export function addToCollections(ids) {
+export function chooseCollections(ids) {
 	collectionPicker.set({ items: [...new Set(ids.map(String))] });
 }
 

@@ -910,6 +910,12 @@ pub fn get_installed_addon(path: PathBuf) -> Option<Arc<Addon>> {
 }
 
 #[tauri::command]
+pub fn installed_addons_by_id(ids: Vec<String>) -> Vec<Arc<Addon>> {
+	let ids: HashSet<PublishedFileId> = ids.iter().filter_map(|id| id.parse().ok()).map(PublishedFileId).collect();
+	game_addons!().visible_addons().into_iter().filter(|addon| addon.installed().id.is_some_and(|id| ids.contains(&id))).collect()
+}
+
+#[tauri::command]
 pub fn downloader_extract_gmas(paths: Vec<PathBuf>) {
 	let destination = app_data!().settings.read().extract_destination.clone();
 	let options = ExtractOptions::from_settings();

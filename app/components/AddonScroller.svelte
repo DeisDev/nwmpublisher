@@ -1,5 +1,6 @@
 <script>
 	import Addon from "./Addon.svelte";
+	import AddonRow from "./AddonRow.svelte";
 	import { _ } from "svelte-i18n";
 	import { tick } from "svelte";
 	import { fade } from "svelte/transition";
@@ -19,6 +20,13 @@
 	export let onDelete = null;
 	export let emptyMessage = null;
 	export let total = 0;
+	export let view = 'grid';
+	export let columns = [];
+	export let columnLabel = null;
+	export let extra = null;
+	export let more = null;
+
+	const NUMERIC_COLUMNS = ['size', 'subscribers', 'favorites', 'rating'];
 
 	// Removing more cards than this updates the grid at once instead of animating each card out.
 	const ANIMATED_REMOVALS = 20;
@@ -32,6 +40,8 @@
 	let animateChanges = true;
 
 	const key = addon => addon.installed?.path ?? addon.workshop?.id;
+
+	$: rowTemplate = `2.5rem minmax(12rem, 3fr) ${columns.map(column => (column === 'tags' || column === 'author' ? 'minmax(7rem, 1.5fr)' : 'minmax(5.5rem, 1fr)')).join(' ')}`;
 
 	// Cards that stay keep their component, so their previews do not reload.
 	function replaceAddons(replacement, animate) {
@@ -47,7 +57,7 @@
 		const page = reset ? 1 : pages + 1;
 		loading = true;
 
-		next(page).then(([fetchedTotal, fetchedAddons]) => {
+		next(page).then(([fetchedTotal, fetchedAddons, fetchedMore]) => {
 			if (id !== request) return;
 			const hadFocus = !!listbox?.contains(document.activeElement);
 			const focusedIndex = indexOf(focusKey);
@@ -57,17 +67,20 @@
 			if (reset) replaceAddons(merged, false);
 			else addons = merged;
 			pages = page;
-			total = fetchedTotal;
+			total = reset || fetchedMore == null ? fetchedTotal : total + fetchedTotal;
+			more = fetchedMore ?? null;
 			if (reset && scroller) scroller.scrollTop = 0;
 			error = null;
 			loaded = true;
 			loading = false;
 			if (reset && hadFocus) restoreFocus(focusedIndex);
+			if (more) tick().then(infiniScroll);
 		}, reason => {
 			if (id !== request) return;
 			if (reset) {
 				replaceAddons([], false);
 				pages = 0;
+				more = null;
 				error = reason;
 				loaded = true;
 			}
@@ -96,7 +109,9 @@
 		const focusedIndex = indexOf(focusKey);
 		const seen = new Set();
 		replaceAddons(fetched.flatMap(([, page]) => page).filter(addon => !seen.has(key(addon)) && seen.add(key(addon))), true);
-		total = fetched[fetched.length - 1][0];
+		const last = fetched[fetched.length - 1];
+		more = last[2] ?? null;
+		total = more == null ? last[0] : fetched.reduce((count, [pageTotal]) => count + pageTotal, 0);
 		error = null;
 		if (hadFocus) restoreFocus(focusedIndex);
 	}
@@ -115,9 +130,11 @@
 	}
 
 	let scroller;
+	const hasMore = () => (more == null ? addons.length < total : more);
+
 	function infiniScroll() {
 		if (!scroller || loading) return;
-		if (scroller.offsetHeight + scroller.scrollTop >= scroller.scrollHeight * .9 && addons.length < total) {
+		if (scroller.offsetHeight + scroller.scrollTop >= scroller.scrollHeight * .9 && hasMore()) {
 			fetchNext();
 		}
 	}
@@ -161,13 +178,13 @@
 		const fromIndex = indexOf(fromKey);
 		const start = Math.min(fromIndex >= 0 ? fromIndex : toIndex, toIndex);
 		const end = Math.max(fromIndex >= 0 ? fromIndex : toIndex, toIndex);
-		selection.add(addons.slice(start, end + 1).map(addon => [key(addon), addon.installed]));
+		selection.add(addons.slice(start, end + 1).map(addon => [key(addon), addon.installed ?? addon.workshop]));
 	}
 
 	function toggle(index) {
 		const addon = addons[index];
 		anchorKey = key(addon);
-		selection.toggle(anchorKey, addon.installed);
+		selection.toggle(anchorKey, addon.installed ?? addon.workshop);
 	}
 
 	function cardClick(event, index, workshop, installed) {
@@ -242,7 +259,7 @@
 			addRange(anchorKey, target);
 		}
 		focusOption(target);
-		if (target >= addons.length - columns && addons.length < total && !loading) fetchNext();
+		if (target >= addons.length - columns && hasMore() && !loading) fetchNext();
 	}
 
 	function onFocusin(event) {
@@ -265,7 +282,7 @@
 </script>
 
 <main class="scrollbar" on:scroll={infiniScroll} bind:this={scroller}>
-	{#if addons.length !== 0 && total !== 0 && addons.length !== total}
+	{#if more == null && addons.length !== 0 && total !== 0 && addons.length !== total}
 		<p id="amount">{$_('showing_num_addons', { values: { num: addons.length.toLocaleString(), total: total.toLocaleString() }})}</p>
 	{/if}
 
@@ -287,17 +304,41 @@
 	{:else if error}
 		<Dead size="2rem"/>
 		<div id="error">{JSON.stringify(error)}</div>
+	{:else if addons.length === 0 && more}
+		<Loading size="2rem"/>
 	{:else if addons.length === 0}
 		<Dead size="2rem"/>
 		<div id="error">{emptyMessage ?? $_('ERR_NO_ADDONS_FOUND')}</div>
 	{:else if selection}
-		<div id="grid" role="listbox" aria-multiselectable="true" aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
+		{#if view === 'list'}
+			<div class="list-head" style:grid-template-columns={rowTemplate} aria-hidden="true">
+				<span></span><span>{$_('browse_column_title')}</span>
+				{#each columns as column}<span class:end={NUMERIC_COLUMNS.includes(column)}>{columnLabel?.(column) ?? column}</span>{/each}
+			</div>
+		{/if}
+		<div id="grid" class:list={view === 'list'} role="listbox" aria-multiselectable="true" aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
 			{#each addons as addon, index (key(addon))}
 				<div class="option" role="option" aria-selected={!!selected?.has(key(addon))} aria-label={addonName(addon.workshop, addon.installed)} aria-setsize={total} aria-posinset={index + 1} tabindex={index === focusIndex ? 0 : -1} on:mousedown={cardMousedown} on:contextmenu={keyboardMenu} animate:flip={{ duration: animateChanges ? 200 : 0 }} out:fade={{ duration: animateChanges ? 150 : 0 }}>
-					<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={true} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
+					{#if view === 'list'}
+						<AddonRow onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} {selecting} selected={!!selected?.has(key(addon))} workshop={addon.workshop} {columns} template={rowTemplate} {...(extra?.(addon) ?? {})}/>
+					{:else}
+						<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={true} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null} {...(extra?.(addon) ?? {})}/>
+					{/if}
 				</div>
 			{/each}
 		</div>
+		{#if more && loading}<div class="more"><Loading size="1.5rem"/></div>{/if}
+	{:else if view === 'list'}
+		<div class="list-head" style:grid-template-columns={rowTemplate} aria-hidden="true">
+			<span></span><span>{$_('browse_column_title')}</span>
+			{#each columns as column}<span class:end={NUMERIC_COLUMNS.includes(column)}>{columnLabel?.(column) ?? column}</span>{/each}
+		</div>
+		<div id="grid" class="list">
+			{#each addons as addon (key(addon))}
+				<AddonRow {onClick} contextItems={contextItems && (() => contextItems(addon))} workshop={addon.workshop} {columns} template={rowTemplate} {...(extra?.(addon) ?? {})}/>
+			{/each}
+		</div>
+		{#if more && loading}<div class="more"><Loading size="1.5rem"/></div>{/if}
 	{:else}
 		<div id="grid">
 			{#each addons as addon (key(addon))}
@@ -333,10 +374,34 @@
 	.option {
 		height: 100%;
 	}
+	#grid.list {
+		grid-template-columns: minmax(0, 1fr);
+		grid-gap: 0;
+	}
+	.list-head {
+		position: sticky;
+		top: -1.5rem;
+		z-index: 1;
+		display: grid;
+		gap: .75rem;
+		padding: .5rem .75rem;
+		border-bottom: 1px solid var(--border);
+		background: var(--bg-content);
+		color: var(--text-muted);
+		font-size: .8rem;
+		font-weight: 600;
+	}
+	.list-head .end {
+		text-align: end;
+	}
+	.more {
+		position: relative;
+		height: 3rem;
+	}
 	.option:focus {
 		outline: none;
 	}
-	.option:focus-visible > :global(.addon > #card) {
+	.option:focus-visible > :global(.addon > #card), .option:focus-visible > :global(.addon-row) {
 		outline: 2px solid #127cff;
 		outline-offset: 2px;
 	}
