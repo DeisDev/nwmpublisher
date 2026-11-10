@@ -2962,7 +2962,7 @@ dependencies = [
 
 [[package]]
 name = "nwmpublisher"
-version = "3.8.0"
+version = "3.8.1"
 dependencies = [
  "anyhow",
  "atomic_refcell",
