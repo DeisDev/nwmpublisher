@@ -32,4 +32,8 @@ export function saveSettings(patch) {
 	});
 }
 
+export function applyCardSize(size) {
+	document.documentElement.style.setProperty('--addon-card-size', size + 'px');
+}
+
 window.addEventListener('settings-save-error', event => saveFailed(String(event.detail)));

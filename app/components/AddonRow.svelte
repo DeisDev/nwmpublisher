@@ -5,7 +5,7 @@
 	import { registerContext } from './ContextMenu.svelte';
 	import QuickSubscribe from './QuickSubscribe.svelte';
 	import { formatDate, formatPercent, formatSize } from '../format.js';
-	import { ADDON_TYPES, KIND_TAGS, authors, tagLabel } from '../browse.js';
+	import { ADDON_TYPES, KIND_TAGS, authors, subscribedIds, tagLabel } from '../browse.js';
 
 	export let workshop;
 	export let columns = [];
@@ -25,6 +25,7 @@
 	$: otherTags = workshop.tags.filter(tag => !KIND_TAGS.has(tag.toLowerCase()) && !types.includes(tag));
 	$: kindLabel = workshop.kind === 'addon' && types.length ? types.map(tagLabel).join(', ') : $_('browse_kind_' + (workshop.kind ?? 'addon'));
 	$: author = $authors.get(workshop.steamid64);
+	$: subscribed = $subscribedIds.has(String(workshop.id));
 </script>
 
 <div class="addon-row" class:selected class:selecting style:grid-template-columns={template} bind:this={row} on:click={event => onClick?.(event, Promise.resolve(workshop), Promise.resolve(null))} role="presentation">
@@ -48,7 +49,7 @@
 			{/if}
 		</span>
 	{/each}
-	{#if quickSubscribe}<span class="quick">{#if !selecting}<QuickSubscribe {workshop}/>{/if}</span>{/if}
+	{#if quickSubscribe}<span class="quick">{#if !selecting}<QuickSubscribe {workshop}/>{:else if subscribed}<span class="subscribed-mark" title={$_('browse_badge_subscribed')}><Check size="1rem" strokeWidth={3}/></span>{/if}</span>{/if}
 </div>
 
 <style>
@@ -82,6 +83,16 @@
 	.addon-row > .quick {
 		display: flex;
 		overflow: visible;
+	}
+	.subscribed-mark {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 4px;
+		background: var(--success);
+		color: #fff;
 	}
 	.text {
 		overflow: hidden;

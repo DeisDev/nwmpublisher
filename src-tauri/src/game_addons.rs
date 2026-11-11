@@ -330,7 +330,7 @@ impl GameAddons {
 			let settings = app_data!().settings.read();
 			(settings.installed_addons_sort, settings.installed_addons_types.clone())
 		};
-		browse_installed_addons(1, sort, types, String::new()); // Download the first page first
+		browse_installed_addons(1, sort, types, String::new(), None); // Download the first page first
 		steam!().fetch_workshop_items(ids); // Download the rest in the background too
 	}
 
@@ -408,12 +408,20 @@ fn pending_removal(addon: &Addon, unsubscribed: &HashSet<PublishedFileId>) -> bo
 }
 
 /// Keeps the newest-first discovery order, grouping by type when sorting by type.
-fn select_installed_addons(addons: &[Arc<Addon>], sort: InstalledAddonsSort, types: &[AddonType], unsubscribed: &HashSet<PublishedFileId>, query: &str) -> Vec<Arc<Addon>> {
+fn select_installed_addons(
+	addons: &[Arc<Addon>],
+	sort: InstalledAddonsSort,
+	types: &[AddonType],
+	unsubscribed: &HashSet<PublishedFileId>,
+	query: &str,
+	only: Option<&HashSet<PublishedFileId>>,
+) -> Vec<Arc<Addon>> {
 	let addon_type = |addon: &Arc<Addon>| AddonType::of(addon.installed().metadata.as_ref());
 	let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
 	let mut selected: Vec<_> = addons
 		.iter()
 		.filter(|addon| types.contains(&addon_type(addon)) && !pending_removal(addon, unsubscribed) && matches_query(addon.installed(), &words))
+		.filter(|addon| only.is_none_or(|only| addon.installed().id.is_some_and(|id| only.contains(&id))))
 		.cloned()
 		.collect();
 	if sort == InstalledAddonsSort::Type {
@@ -422,10 +430,16 @@ fn select_installed_addons(addons: &[Arc<Addon>], sort: InstalledAddonsSort, typ
 	selected
 }
 
+fn parse_ids(ids: &[String]) -> HashSet<PublishedFileId> {
+	ids.iter().filter_map(|id| id.parse().ok()).map(PublishedFileId).collect()
+}
+
+/// `only_ids` keeps just the addons with those Workshop IDs.
 #[tauri::command]
-pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<AddonType>, query: String) -> (usize, Vec<Arc<Addon>>) {
+pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<AddonType>, query: String, only_ids: Option<Vec<String>>) -> (usize, Vec<Arc<Addon>>) {
 	let unsubscribed = game_addons!().unsubscribed.read().clone();
-	let selected = select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &query);
+	let only = only_ids.as_deref().map(parse_ids);
+	let selected = select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &query, only.as_ref());
 	let start = ((page.max(1) - 1) as usize) * crate::steam::RESULTS_PER_PAGE;
 	let page: Vec<_> = selected.iter().skip(start).take(crate::steam::RESULTS_PER_PAGE).cloned().collect();
 	steam!().fetch_workshop_items(page.iter().filter_map(|addon| addon.installed().id).collect());
@@ -433,9 +447,16 @@ pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<
 }
 
 #[tauri::command]
-pub fn browse_all_installed_addons(sort: InstalledAddonsSort, types: Vec<AddonType>, query: String) -> Vec<Arc<Addon>> {
+pub fn browse_all_installed_addons(sort: InstalledAddonsSort, types: Vec<AddonType>, query: String, only_ids: Option<Vec<String>>) -> Vec<Arc<Addon>> {
 	let unsubscribed = game_addons!().unsubscribed.read().clone();
-	select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &query)
+	let only = only_ids.as_deref().map(parse_ids);
+	select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &query, only.as_ref())
+}
+
+// Async so that waiting for discovery at startup does not hold up the thread that runs sync commands.
+#[tauri::command]
+pub async fn installed_addons_count() -> Result<usize, String> {
+	tauri::async_runtime::spawn_blocking(|| game_addons!().visible_addons().len()).await.map_err(|error| error.to_string())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
@@ -911,7 +932,7 @@ pub fn get_installed_addon(path: PathBuf) -> Option<Arc<Addon>> {
 
 #[tauri::command]
 pub fn installed_addons_by_id(ids: Vec<String>) -> Vec<Arc<Addon>> {
-	let ids: HashSet<PublishedFileId> = ids.iter().filter_map(|id| id.parse().ok()).map(PublishedFileId).collect();
+	let ids = parse_ids(&ids);
 	game_addons!().visible_addons().into_iter().filter(|addon| addon.installed().id.is_some_and(|id| ids.contains(&id))).collect()
 }
 
@@ -1090,16 +1111,16 @@ mod tests {
 		let addons = [addon("weapon1", Some("weapon")), addon("map1", Some("map")), addon("legacy", None), addon("weapon2", Some("Weapon")), addon("map2", Some("map"))];
 		let names = |selected: Vec<Arc<Addon>>| selected.iter().map(|addon| addon.installed().extracted_name.clone()).collect::<Vec<_>>();
 		let none = HashSet::new();
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, "")), ["weapon1", "map1", "legacy", "weapon2", "map2"]);
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &AddonType::ALL, &none, "")), ["map1", "map2", "weapon1", "weapon2", "legacy"]);
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &[AddonType::Other, AddonType::Weapon], &none, "")), ["weapon1", "weapon2", "legacy"]);
-		assert!(select_installed_addons(&addons, InstalledAddonsSort::Modified, &[], &none, "").is_empty());
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, "", None)), ["weapon1", "map1", "legacy", "weapon2", "map2"]);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &AddonType::ALL, &none, "", None)), ["map1", "map2", "weapon1", "weapon2", "legacy"]);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &[AddonType::Other, AddonType::Weapon], &none, "", None)), ["weapon1", "weapon2", "legacy"]);
+		assert!(select_installed_addons(&addons, InstalledAddonsSort::Modified, &[], &none, "", None).is_empty());
 
 		let steam_copy = "steamapps/workshop/content/4000/10/item.gma";
 		let addons = [addon(steam_copy, Some("map")), addon("garrysmod/cache/workshop/10.gma", Some("map")), addon("steamapps/workshop/content/4000/20/item.gma", Some("map"))];
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, "")).len(), 3);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, "", None)).len(), 3);
 		assert_eq!(
-			names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::from([PublishedFileId(10)]), "")),
+			names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::from([PublishedFileId(10)]), "", None)),
 			["garrysmod/cache/workshop/10.gma", "steamapps/workshop/content/4000/20/item.gma"]
 		);
 	}
@@ -1123,7 +1144,7 @@ mod tests {
 		};
 		let addons = [addon("Gm Construct Flatgrass", "addons/gm_construct_flatgrass_123.gma", Some(123)), addon("Ünicode Map", "workshop/content/4000/456/ünicode.gma", Some(456)), addon("Legacy", "addons/legacy.gma", None)];
 		let titles = |query: &str| {
-			select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::new(), query)
+			select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::new(), query, None)
 				.iter()
 				.map(|addon| addon.installed().metadata.as_ref().unwrap().title().to_owned())
 				.collect::<Vec<_>>()

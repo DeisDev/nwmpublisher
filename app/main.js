@@ -1,7 +1,7 @@
 import { switchLanguage } from './i18n.js';
 import { applyTheme } from './theme.js';
 import App from './App.svelte';
-import { settings } from './settings.js';
+import { applyCardSize, settings } from './settings.js';
 import { openInBrowse } from './browse.js';
 import { mount } from 'svelte';
 import { invoke } from '@tauri-apps/api/core';
@@ -70,6 +70,7 @@ __NWMPUBLISHER__(() => {
 	settings.set(AppSettings);
 	if (AppSettings.language) switchLanguage(AppSettings.language);
 	applyTheme(AppSettings.theme);
+	applyCardSize(AppSettings.addon_card_size);
 
 	updateCustomColor('neutral', AppSettings.color_neutral);
 	updateCustomColor('success', AppSettings.color_success);

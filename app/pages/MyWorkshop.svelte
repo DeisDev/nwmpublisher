@@ -1,5 +1,5 @@
 <script>
-	import { Steam } from '../steam';
+	import { Steam, myWorkshopCount } from '../steam';
 	import AddonScroller from '../components/AddonScroller.svelte';
 	import { _ } from 'svelte-i18n';
 	import { writable } from 'svelte/store';
@@ -10,6 +10,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Loading from '../components/Loading.svelte';
+	import CardSize from '../components/CardSize.svelte';
 
 	const visibilityOptions = ['public', 'friends_only', 'private', 'unlisted'];
 	const sortOptions = ['updated_desc', 'updated_asc', 'subscribers_desc', 'subscribers_asc', 'created_desc', 'created_asc', 'title_asc', 'title_desc'];
@@ -72,6 +73,7 @@
 				if (items.length === 0) throw new Error($_('workshop_incomplete'));
 			}
 			addons = fetched;
+			myWorkshopCount.set(fetched.length);
 		} catch (error) {
 			if (requestId === loadId) loadError = String(error);
 		} finally {
@@ -189,6 +191,7 @@
 			<Search size="1rem"/>
 			<input type="search" bind:value={query} bind:this={searchInput} placeholder={$_('my_workshop_search')} aria-label={$_('my_workshop_search')} on:keydown={searchKeydown}/>
 		</div>
+		<div class="end"><CardSize/></div>
 	</div>
 	{#if loading}
 		<p class="status" role="status"><Loading inline size="1rem"/> {$_('workshop_loading', { values: { num: loadedCount, total } })}</p>
@@ -254,6 +257,9 @@
 	button:focus-visible, select:focus-visible, input:focus-visible {
 		outline: 2px solid var(--text);
 		outline-offset: 2px;
+	}
+	.end {
+		margin-inline-start: auto;
 	}
 	.filters {
 		position: relative;

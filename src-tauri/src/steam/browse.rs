@@ -93,6 +93,15 @@ pub enum BrowseStatus {
 	NotSubscribed,
 }
 
+#[derive(Deserialize, Clone, Copy, Debug, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TextScope {
+	#[default]
+	Any,
+	Title,
+	Description,
+}
+
 /// Unix times; a missing end means up to now.
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -128,6 +137,10 @@ pub struct BrowseQuery {
 	trend_days: u32,
 	#[serde(default)]
 	text: String,
+	#[serde(default)]
+	text_scope: TextScope,
+	#[serde(default)]
+	exact_phrase: bool,
 	#[serde(default)]
 	types: Vec<String>,
 	#[serde(default)]
@@ -257,6 +270,7 @@ struct Plan {
 	sort: BrowseSort,
 	trend_days: u32,
 	text: String,
+	text_scope: TextScope,
 	words: Vec<String>,
 	types: Vec<String>,
 	tags: Vec<String>,
@@ -338,11 +352,15 @@ impl Plan {
 			.iter()
 			.map(|id| id.parse().ok().filter(|id| *id != 0).map(PublishedFileId).ok_or_else(|| format!("{id:?} is not a Workshop item ID.")))
 			.collect::<Result<_, _>>()?;
-		// Steam searches text only in queries over all items, so other sources match words here.
-		let words = if query.source == BrowseSource::Everyone {
+		// Steam searches the title and description together, and only in queries over all items, so anything else is matched here.
+		let steam_matches = query.source == BrowseSource::Everyone && query.text_scope == TextScope::Any && !query.exact_phrase;
+		let words: Vec<String> = text.split_whitespace().map(str::to_lowercase).collect();
+		let words = if steam_matches {
 			Vec::new()
+		} else if query.exact_phrase && !words.is_empty() {
+			vec![words.join(" ")]
 		} else {
-			text.split_whitespace().map(str::to_lowercase).collect()
+			words
 		};
 		Ok(Plan {
 			kind: query.kind,
@@ -351,6 +369,7 @@ impl Plan {
 			sort: query.sort,
 			trend_days: query.trend_days,
 			text,
+			text_scope: query.text_scope,
 			words,
 			types: clean_list(&query.types, "types")?,
 			tags: clean_list(&query.tags, "tags")?,
@@ -365,6 +384,11 @@ impl Plan {
 			status: query.status,
 			exclude_ids,
 		})
+	}
+
+	/// Steam cuts descriptions to 255 bytes unless a query asks for all of them.
+	fn long_descriptions(&self) -> bool {
+		!self.words.is_empty() && self.text_scope != TextScope::Title
 	}
 
 	fn user_list(&self) -> bool {
@@ -415,7 +439,15 @@ impl Plan {
 		let kind = if item.collection { self.kind == BrowseKind::Collection } else { self.kind.tag().is_some_and(|tag| ItemKind::of(&workshop.tags) == ItemKind::of(&[tag.to_owned()])) };
 		let tags = if self.match_all { self.tags.iter().all(tagged) } else { self.tags.is_empty() || self.tags.iter().any(tagged) };
 		let size = workshop.file_size.unwrap_or(0);
-		let haystack = || format!("{}\n{}\n{}", workshop.title, workshop.description.as_deref().unwrap_or_default(), workshop.tags.join("\n")).to_lowercase();
+		let description = || workshop.description.as_deref().unwrap_or_default();
+		let haystack = || {
+			match self.text_scope {
+				TextScope::Any => format!("{}\n{}\n{}", workshop.title, description(), workshop.tags.join("\n")),
+				TextScope::Title => workshop.title.clone(),
+				TextScope::Description => description().to_owned(),
+			}
+			.to_lowercase()
+		};
 		kind && !self.exclude_ids.contains(&workshop.id)
 			&& (self.types.is_empty() || self.types.iter().any(tagged))
 			&& tags
@@ -696,6 +728,9 @@ fn fetch_page(plan: &Plan, position: &Position) -> Result<ScannedPage, String> {
 		|query| unsafe {
 			let (ugc, handle) = (query.ugc, query.handle);
 			query.option(sys::SteamAPI_ISteamUGC_SetAllowCachedResponse(ugc, handle, 60), "cache setting")?;
+			if plan.long_descriptions() {
+				query.option(sys::SteamAPI_ISteamUGC_SetReturnLongDescription(ugc, handle, true), "description request")?;
+			}
 			if let Some(kind) = &kind {
 				query.option(sys::SteamAPI_ISteamUGC_AddRequiredTag(ugc, handle, kind.as_ptr()), "item type")?;
 			}
@@ -1168,6 +1203,31 @@ mod tests {
 		assert!(matches(&favorites, &addon));
 		let favorites = query(serde_json::json!({"kind": "addon", "source": "favorites", "sort": "newest", "text": "wire lamp"})).unwrap();
 		assert!(!matches(&favorites, &addon));
+	}
+
+	#[test]
+	fn text_scope_and_exact_phrase_are_matched_in_app() {
+		let mut addon = item(&["Addon", "tool"], false);
+		addon.workshop.description = Some("Adds a lamp and wire gates.".into());
+		let with = |extra: serde_json::Value| {
+			let mut value = serde_json::json!({"kind": "addon", "source": "everyone", "sort": "newest"});
+			value.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+			query(value).unwrap()
+		};
+		let title = with(serde_json::json!({"text": "tools WIRE", "textScope": "title"}));
+		assert!(matches(&title, &addon));
+		assert!(!title.long_descriptions());
+		assert!(!matches(&with(serde_json::json!({"text": "lamp", "textScope": "title"})), &addon));
+		let description = with(serde_json::json!({"text": "gates lamp", "textScope": "description"}));
+		assert!(matches(&description, &addon));
+		assert!(description.long_descriptions());
+		assert!(!matches(&with(serde_json::json!({"text": "tools", "textScope": "description"})), &addon));
+		let phrase = with(serde_json::json!({"text": " Wire  Tools ", "exactPhrase": true}));
+		assert_eq!(phrase.words, ["wire tools"]);
+		assert!(matches(&phrase, &addon));
+		assert!(!matches(&with(serde_json::json!({"text": "tools wire", "exactPhrase": true})), &addon));
+		assert!(with(serde_json::json!({"text": "", "exactPhrase": true, "textScope": "title"})).words.is_empty());
+		assert!(query(serde_json::json!({"kind": "addon", "source": "everyone", "sort": "newest", "textScope": "tags"})).is_err());
 	}
 
 	#[test]

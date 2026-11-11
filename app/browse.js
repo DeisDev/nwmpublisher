@@ -41,6 +41,8 @@ export function defaultQuery() {
 		sort: 'popular',
 		trendDays: 7,
 		text: '',
+		textScope: 'any',
+		exactPhrase: false,
 		types: [],
 		tags: [],
 		matchAll: false,
@@ -95,6 +97,8 @@ export function requestFor(query) {
 		sort: query.sort,
 		trendDays: query.trendDays,
 		text: query.text.trim(),
+		textScope: query.textScope,
+		exactPhrase: query.exactPhrase,
 		status: query.status,
 		created: range(query.created),
 		updated: range(query.updated),
@@ -119,6 +123,8 @@ export function requestFor(query) {
 export function activeFilters(query) {
 	const chips = [];
 	const without = (list, value) => list.filter(item => item !== value);
+	if (query.textScope !== 'any') chips.push({ key: 'scope', label: t('browse_scope_' + query.textScope), clear: { textScope: 'any' } });
+	if (query.exactPhrase) chips.push({ key: 'phrase', label: t('browse_exact_phrase'), clear: { exactPhrase: false } });
 	for (const type of query.types) chips.push({ key: 'type:' + type, label: t('addon_types.' + type), clear: { types: without(query.types, type) } });
 	for (const tag of query.tags) chips.push({ key: 'tag:' + tag, label: tagLabel(tag), clear: { tags: without(query.tags, tag) } });
 	for (const tag of query.excludedTags) chips.push({ key: 'not:' + tag, label: t('browse_chip_excluded', { tag: tagLabel(tag) }), clear: { excludedTags: without(query.excludedTags, tag) } });
@@ -282,9 +288,9 @@ export function stopJob() {
 	return invoke('stop_collection_change');
 }
 
-function reportOutcome(outcome, key, count) {
+function reportOutcome(outcome, key, count, undo = null) {
 	if (count) {
-		taskMessage(t(key, { count }));
+		taskMessage(t(key, { count }), undo);
 		playSound('success');
 	}
 	if (outcome.stopped) taskMessage(t('browse_job_stopped'));
@@ -294,20 +300,27 @@ function reportOutcome(outcome, key, count) {
 	}
 }
 
-export async function subscribeItems(ids, quiet = false) {
+const undoAction = run => ({ label: t('undo'), run });
+
+/** A single new subscription can be undone from its message; `offer` asks about required items that are still missing. */
+export async function subscribeItems(items, { quiet = false, offer = true, undo = true } = {}) {
+	const ids = items.map(String);
 	let outcome;
 	try {
-		outcome = await runJob('subscribe', ids.length, 'subscribe_workshop_items', { ids: ids.map(String) }, true, quiet);
+		outcome = await runJob('subscribe', ids.length, 'subscribe_workshop_items', { ids }, true, quiet);
 	} catch (error) {
 		playSound('error');
 		taskError(t('browse_subscribe_failed', { error: String(error) }));
 		return;
 	}
 	if (!outcome) return;
-	reportOutcome(outcome, 'browse_subscribed', outcome.subscribed);
+	const single = undo && ids.length === 1 && outcome.subscribed === 1;
+	reportOutcome(outcome, 'browse_subscribed', outcome.subscribed, single ? undoAction(() => unsubscribeItems([{ id: ids[0] }], { quiet: true, warn: false, undo: false })) : null);
 	if (outcome.alreadySubscribed) taskMessage(t('browse_already_subscribed', { count: outcome.alreadySubscribed }));
 	if (outcome.skipped) taskMessage(t('browse_skipped', { count: outcome.skipped }));
+	requirements = null;
 	await loadSubscribed();
+	if (offer && outcome.subscribed) offerRequired(ids);
 }
 
 export async function subscribeCollection(id, size) {
@@ -323,13 +336,104 @@ export async function subscribeCollection(id, size) {
 	reportOutcome(outcome, 'browse_subscribed', outcome.subscribed);
 	if (outcome.alreadySubscribed) taskMessage(t('browse_already_subscribed', { count: outcome.alreadySubscribed }));
 	if (outcome.skipped) taskMessage(t('browse_skipped', { count: outcome.skipped }));
+	requirements = null;
 	await loadSubscribed();
 }
 
-/** Installed copies go through the usual removal dialog so their files are handled; other items are unsubscribed directly. */
-export async function unsubscribeItems(items, quiet = false) {
+export const subscriptionPrompt = writable(null);
+
+function ask(prompt) {
+	get(subscriptionPrompt)?.answer(false);
+	return new Promise(resolve => {
+		const answer = value => {
+			subscriptionPrompt.set(null);
+			resolve(value);
+		};
+		subscriptionPrompt.set({ ...prompt, answer });
+	});
+}
+
+const REQUIREMENTS_MAX_AGE = 5 * 60 * 1000;
+let requirements = null;
+
+/** The user's subscriptions, each with the IDs of the items it requires. */
+function loadRequirements() {
+	if (!requirements || Date.now() - requirements.at > REQUIREMENTS_MAX_AGE) {
+		const items = invoke('subscription_snapshot', { refresh: false, onProgress: new Channel(() => {}) }).then(snapshot => snapshot.items);
+		requirements = { at: Date.now(), items };
+		items.catch(() => {
+			if (requirements?.items === items) requirements = null;
+		});
+	}
+	return requirements.items;
+}
+
+/** The subscribed items that require any of these IDs. Steam cannot list every dependant, so only the user's own are known. */
+export async function requiredBy(ids) {
+	const wanted = new Set(ids.map(String));
+	const items = await loadRequirements();
+	const subscribed = get(subscribedIds);
+	return items.filter(item => subscribed.has(item.id) && !wanted.has(item.id) && item.dependencies.some(id => wanted.has(id)));
+}
+
+// The warning is advice, so a failed lookup does not block unsubscribing.
+async function confirmNeeded(ids) {
+	let needing;
+	try {
+		await loadSubscribed();
+		needing = await requiredBy(ids);
+	} catch (error) {
+		console.error('Required by:', error);
+		return true;
+	}
+	return !needing.length || ask({ kind: 'needed', items: needing, count: ids.length });
+}
+
+async function offerRequired(ids) {
+	let missing;
+	try {
+		const subscribed = get(subscribedIds);
+		const { entries } = await invoke('collection_entries', { references: ids.filter(id => subscribed.has(id)) });
+		const required = [...new Set(entries.flatMap(entry => entry.dependencies))].filter(id => !subscribed.has(id));
+		if (!required.length) return;
+		missing = (await invoke('collection_entries', { references: required })).entries.filter(entry => entry.status === 'available');
+	} catch (error) {
+		console.error('Required items:', error);
+		return;
+	}
+	if (missing.length && await ask({ kind: 'required', items: missing })) subscribeItems(missing.map(entry => entry.id));
+}
+
+/** The subscribed items whose required items are neither subscribed nor installed, and those required items. */
+export async function missingRequirements() {
+	await loadSubscribed();
+	const subscribed = get(subscribedIds);
+	const needing = new Map();
+	for (const item of await loadRequirements()) {
+		if (!subscribed.has(item.id)) continue;
+		for (const id of item.dependencies) {
+			if (subscribed.has(id)) continue;
+			if (!needing.has(id)) needing.set(id, []);
+			needing.get(id).push(item.id);
+		}
+	}
+	const ids = [...needing.keys()];
+	if (!ids.length) return { addons: [], items: [] };
+	const [{ entries }, installed] = await Promise.all([invoke('collection_entries', { references: ids }), invoke('installed_addons_by_id', { ids })]);
+	const have = new Set(installed.map(addon => String(addon.installed.id)));
+	const items = entries.filter(entry => entry.status === 'available' && !have.has(entry.id));
+	return { addons: [...new Set(items.flatMap(item => needing.get(item.id)))], items };
+}
+
+/**
+ * Installed copies go through the usual removal dialog so their files are handled; other items are unsubscribed directly.
+ * `warn` asks first when other subscribed items require these, and a single removal can be undone from its message.
+ */
+export async function unsubscribeItems(items, { quiet = false, warn = true, undo = true } = {}) {
 	const ids = items.map(item => String(item.id));
 	const titles = new Map(items.map(item => [String(item.id), item.title]));
+	if (warn && !(await confirmNeeded(ids))) return;
+	const resubscribe = undo && ids.length === 1 ? undoAction(() => subscribeItems(ids, { quiet: true, offer: false, undo: false })) : null;
 	let removable = [];
 	try {
 		const installed = await invoke('installed_addons_by_id', { ids });
@@ -352,7 +456,7 @@ export async function unsubscribeItems(items, quiet = false) {
 			return;
 		}
 		if (!outcome) return;
-		reportOutcome(outcome, 'browse_unsubscribed', outcome.unsubscribed);
+		reportOutcome(outcome, 'browse_unsubscribed', outcome.unsubscribed, resubscribe);
 		await loadSubscribed();
 	}
 	if (removable.length) {
@@ -360,7 +464,7 @@ export async function unsubscribeItems(items, quiet = false) {
 		confirmRemoval(choices, true, () => {
 			loadSubscribed();
 			noteInstalled([...handled]);
-		});
+		}, resubscribe);
 	}
 }
 
@@ -372,8 +476,8 @@ export async function toggleSubscription(item) {
 	if (get(quickBusy) || get(browseJob)) return;
 	quickBusy.set(id);
 	try {
-		if (get(subscribedIds).has(id)) await unsubscribeItems([{ id, title: item.title }], true);
-		else await subscribeItems([id], true);
+		if (get(subscribedIds).has(id)) await unsubscribeItems([{ id, title: item.title }], { quiet: true });
+		else await subscribeItems([id], { quiet: true });
 	} finally {
 		quickBusy.set(null);
 	}

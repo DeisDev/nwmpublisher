@@ -35,6 +35,7 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke<tauri::Wry>) -> bool + Sen
 		crate::appdata::dismiss_legacy_settings,
 		crate::game_addons::browse_installed_addons,
 		crate::game_addons::browse_all_installed_addons,
+		crate::game_addons::installed_addons_count,
 		crate::game_addons::get_installed_addon,
 		crate::game_addons::installed_addon_removal,
 		crate::game_addons::unsubscribe_installed_addons,

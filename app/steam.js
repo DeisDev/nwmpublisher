@@ -65,8 +65,8 @@ class Steam {
 	}
 
 	// Filtered pages are not cached, since the query changes with every keystroke.
-	getInstalledAddons(page, sort, types, query) {
-		if (query) return new DeferredPromise(invoke("browse_installed_addons", { page, sort, types, query }));
+	getInstalledAddons(page, sort, types, query, onlyIds = null) {
+		if (query || onlyIds) return new DeferredPromise(invoke("browse_installed_addons", { page, sort, types, query, onlyIds }));
 		const key = JSON.stringify([page, sort, types]);
 		if (this.InstalledAddons[key] == null) {
 			this.InstalledAddons[key] = new DeferredPromise(invoke("browse_installed_addons", { page, sort, types, query }));
@@ -258,10 +258,18 @@ function getFileTypeInfo(path) {
 
 const steam = new Steam();
 const installedAddonsRevision = writable(0);
+const installedAddonsCount = writable(null);
+const myWorkshopCount = writable(null);
+
+function countInstalledAddons() {
+	invoke('installed_addons_count').then(count => installedAddonsCount.set(count), error => console.error('Installed addons:', error));
+}
+countInstalledAddons();
 
 listen('InstalledAddonsRefreshed', () => {
 	steam.InstalledAddons = {};
 	installedAddonsRevision.update(revision => revision + 1);
+	countInstalledAddons();
 });
 
 invoke('workshop_item_channel').then(transaction_id => {
@@ -273,4 +281,4 @@ invoke('workshop_item_channel').then(transaction_id => {
 	});
 });
 
-export { steam as Steam, getFileTypeInfo, trimPath, installedAddonsRevision }
+export { steam as Steam, getFileTypeInfo, trimPath, installedAddonsRevision, installedAddonsCount, myWorkshopCount }

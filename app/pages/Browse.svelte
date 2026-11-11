@@ -20,9 +20,12 @@
 	import LinkChain from '@lucide/svelte/icons/link';
 	import LinkOut from '@lucide/svelte/icons/external-link';
 	import Eye from '@lucide/svelte/icons/eye';
+	import ScanEye from '@lucide/svelte/icons/scan-eye';
 	import AddonScroller from '../components/AddonScroller.svelte';
 	import BrowseFilters from '../components/BrowseFilters.svelte';
 	import BrowseDetail from '../components/BrowseDetail.svelte';
+	import BrowseQuickLook from '../components/BrowseQuickLook.svelte';
+	import CardSize from '../components/CardSize.svelte';
 	import { installedAddonsRevision } from '../steam';
 	import { saveSettings } from '../settings.js';
 	import { taskError, taskMessage } from '../transactions.js';
@@ -52,6 +55,7 @@
 	let stack = [];
 	let columnsOpen = false;
 	let columnsMenu;
+	let quickLook = null;
 
 	$: next = makePager(query);
 	$: scanned = pageStats.reduce((count, page) => count + (page?.scanned ?? 0), 0);
@@ -168,7 +172,14 @@
 	const visible = () => !!section && section.offsetParent !== null;
 
 	function onKeydown(event) {
-		if (event.defaultPrevented || !visible()) return;
+		if (event.defaultPrevented || !visible() || quickLook) return;
+		if (event.altKey && event.key === 'ArrowLeft') {
+			if (!event.target.closest?.('modal')) {
+				event.preventDefault();
+				goBack();
+			}
+			return;
+		}
 		if (columnsOpen && event.key === 'Escape') {
 			columnsOpen = false;
 			return;
@@ -237,6 +248,32 @@
 		stack = [];
 	}
 
+	/** Steps back through the opened items, then to the page a link came from. */
+	function goBack() {
+		if ($browseOrigin && stack.length <= originDepth) returnToOrigin();
+		else if (stack.length) back();
+	}
+
+	function onMouseup(event) {
+		if (event.button !== 3 || !visible()) return;
+		event.preventDefault();
+		if (quickLook) closeQuickLook();
+		else if (!event.target.closest?.('modal')) goBack();
+	}
+
+	async function closeQuickLook() {
+		if (!quickLook) return;
+		quickLook = null;
+		await tick();
+		scroller?.focusCurrent();
+	}
+
+	function openFromQuickLook() {
+		const item = quickLook;
+		quickLook = null;
+		openItem(String(item.id), item.title);
+	}
+
 	function showAuthor(author) {
 		stack = [];
 		searchText = '';
@@ -301,7 +338,10 @@
 			];
 		}
 		const subscribed = $subscribedIds.has(String(item.id));
-		const menu = [{ icon: Eye, label: $_('open'), click: () => openItem(String(item.id), item.title) }];
+		const menu = [
+			{ icon: Eye, label: $_('open'), click: () => openItem(String(item.id), item.title) },
+			{ icon: ScanEye, label: $_('browse_quick_look'), click: () => quickLook = item },
+		];
 		if (item.kind !== 'collection') {
 			menu.push(subscribed
 				? { icon: CircleMinus, label: $_('unsubscribe'), click: () => unsubscribe([item]), disabled: !!$browseJob }
@@ -318,7 +358,7 @@
 	const columnLabel = column => $_('browse_column_' + column);
 </script>
 
-<svelte:window on:keydown={onKeydown} on:pointerdown={dismissMenus}/>
+<svelte:window on:keydown={onKeydown} on:pointerdown={dismissMenus} on:mouseup={onMouseup}/>
 
 <section class="browse" bind:this={section}>
 	<div class="toolbar">
@@ -374,6 +414,8 @@
 							</fieldset>
 						{/if}
 					</div>
+				{:else}
+					<CardSize/>
 				{/if}
 				{#if selectable}
 					<button type="button" class:active={$selection.active} on:click={toggleSelecting}>
@@ -438,7 +480,7 @@
 					<BrowseFilters {query} {tagOptions} onChange={update}/>
 				{/if}
 				<div class="results">
-					<AddonScroller bind:this={scroller} bind:total bind:more {next} {onClick} selection={selectable ? selection : null} quickSubscribe={selectable} {contextItems} {view} {columns} {columnLabel} {extra} label={$_('browse_workshop')} emptyMessage={$_('browse_no_results')} onSelectAll={selectable ? selectAll : null}/>
+					<AddonScroller bind:this={scroller} bind:total bind:more {next} {onClick} selection={selectable ? selection : null} quickSubscribe={selectable} {contextItems} {view} {columns} {columnLabel} {extra} label={$_('browse_workshop')} emptyMessage={$_('browse_no_results')} onSelectAll={selectable ? selectAll : null} onQuickLook={addon => quickLook = addon.workshop} placeholders={!paused}/>
 				</div>
 			</div>
 		</div>
@@ -451,6 +493,12 @@
 		{/if}
 	</div>
 </section>
+
+{#if quickLook}
+	{#key quickLook.id}
+		<BrowseQuickLook workshop={quickLook} onOpen={openFromQuickLook} onClose={closeQuickLook}/>
+	{/key}
+{/if}
 
 <style>
 	.browse {

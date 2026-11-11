@@ -6,6 +6,7 @@
 			component: MyWorkshop,
 			persist: true,
 			created: true,
+			count: myWorkshopCount,
 		},
 		{
 			name: 'browse_workshop',
@@ -16,11 +17,13 @@
 			name: 'collections',
 			component: Collections,
 			persist: true,
+			count: derived(collections, state => (state.loaded ? state.items.length : null)),
 		},
 		{
 			name: 'installed_addons',
 			component: InstalledAddons,
 			persist: true,
+			count: installedAddonsCount,
 		},
 		{
 			name: 'downloader',
@@ -73,10 +76,12 @@
 		if (item !== browse) browseOrigin.set(null);
 	});
 
+	ensureCollections();
+
 </script>
 
 <script>
-	import { get, writable } from 'svelte/store';
+	import { derived, get, writable } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
 	import Sidebar from './Sidebar.svelte';
 
@@ -92,6 +97,8 @@
 	import Logo from './Logo.svelte';
 	import ReportProblem from './ReportProblem.svelte';
 	import { browseOrigin, browseRequest } from '../browse.js';
+	import { collections, ensureCollections } from '../collections.js';
+	import { installedAddonsCount, myWorkshopCount } from '../steam';
 
 	function selectPage(page) {
 		$pages[page].created = true;
@@ -100,7 +107,7 @@
 
 <Sidebar id="nav-sidebar">
 	{#each $pages as choice, i}
-		<SidebarItem {activeItem} id={i} click={selectPage} jobs={choice.jobs}>{$_(choice.name)}</SidebarItem>
+		<SidebarItem {activeItem} id={i} click={selectPage} jobs={choice.jobs} count={choice.count}>{$_(choice.name)}</SidebarItem>
 	{/each}
 
 	<div id="credits" slot="footer">

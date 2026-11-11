@@ -34,6 +34,20 @@
 
 <aside class="filters scrollbar" aria-label={$_('workshop_filters')}>
 	<fieldset>
+		<legend>{$_('browse_search_in')}</legend>
+		{#each ['any', 'title', 'description'] as scope}
+			<label>
+				<input type="radio" name="browse-text-scope" checked={query.textScope === scope} on:change={() => onChange({ textScope: scope })}/>
+				{$_('browse_scope_' + scope)}
+			</label>
+		{/each}
+		<label>
+			<input type="checkbox" checked={query.exactPhrase} on:change={event => onChange({ exactPhrase: event.currentTarget.checked })}/>
+			{$_('browse_exact_phrase')}
+		</label>
+	</fieldset>
+
+	<fieldset>
 		<legend>{$_('browse_source')}</legend>
 		{#each sources as source}
 			<label>

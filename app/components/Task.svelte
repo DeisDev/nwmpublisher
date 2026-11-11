@@ -15,6 +15,7 @@
 	export let statusTextFn;
 	export let pos;
 	export let failed = false;
+	export let action = null;
 
 	export let expired = false;
 	export let destroyed = false;
@@ -61,12 +62,18 @@
 		if (finished || destroyed || expired) return;
 		finished = true;
 		if (transaction?.warnings?.length || transaction?.result?.cleanupWarnings?.length) return;
-		let delay = setTimeout(expire, 2500);
+		let delay = setTimeout(expire, action ? 6000 : 2500);
 		subscriptions.push(() => clearTimeout(delay));
 	}
 
 	function warningText(transaction) {
 		return transaction?.warnings?.map(warning => translateError(warning)).join('\n') || undefined;
+	}
+
+	function runAction() {
+		if (destroyed || expired) return;
+		expire();
+		action.run();
 	}
 
 	function cancel() {
@@ -159,6 +166,9 @@
 				<button type="button" on:click={expire} aria-label={$_('close')}><Cross class="icon" stroke-width="3"/></button>
 			</div>
 		{/if}
+		{#if action && !expired}
+			<button type="button" class="action" on:click={runAction}>{action.label}</button>
+		{/if}
 		{#if transaction && !finished && !cancelled && !expired}
 			<button type="button" id="cancel" disabled={!transaction.cancellable || transaction.cancelPending} aria-label={$_('cancel')} title={transaction.state === 'submitting' ? $_('publish_cannot_cancel') : $_('cancel')} on:click={cancel}><Cross class="icon" stroke-width="3"/></button>
 		{/if}
@@ -172,6 +182,9 @@
 	.error-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; pointer-events: auto; }
 	.error-actions { display: flex; gap: .25rem; padding-right: .5rem; pointer-events: auto; }
 	.error-actions button { cursor: pointer; color: inherit; background: transparent; border: 0; }
+	.task .action { margin-inline-end: .6rem; padding: .35rem .7rem; border: 0; border-radius: 4px; background: rgb(0 0 0 / 30%); color: inherit; font: inherit; font-weight: 600; line-height: normal; cursor: pointer; pointer-events: auto; }
+	.task .action:hover { background: rgb(0 0 0 / 45%); }
+	.task .action:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
 	.task.error:not(.pending) { z-index: 1; }
 	.task {
 		z-index: 1;

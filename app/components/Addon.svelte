@@ -244,6 +244,10 @@
 	main #subscriptions {
 		flex: 1;
 		text-align: left;
+		white-space: nowrap;
+	}
+	main #score {
+		min-width: 0;
 	}
 	main #subscriptions img {
 		margin-right: .1rem;

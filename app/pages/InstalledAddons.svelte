@@ -23,7 +23,12 @@
 	import LinkChain from '@lucide/svelte/icons/link';
 	import Folder from '@lucide/svelte/icons/folder';
 	import ListPlus from '@lucide/svelte/icons/list-plus';
+	import Link2Off from '@lucide/svelte/icons/link-2-off';
+	import CirclePlus from '@lucide/svelte/icons/circle-plus';
 	import { chooseCollections } from '../collections.js';
+	import { browseJob, missingRequirements, subscribeItems } from '../browse.js';
+	import CardSize from '../components/CardSize.svelte';
+	import Loading from '../components/Loading.svelte';
 	import AddonScroller from '../components/AddonScroller.svelte';
 	import PreviewGMA from '../components/PreviewGMA.svelte';
 	import DestinationSelect from '../components/DestinationSelect.svelte';
@@ -41,7 +46,12 @@
 	let query = '';
 	let searchInput;
 
-	$: next = page => Steam.getInstalledAddons(page, sort, types, query);
+	let missingOnly = false;
+	let missing = null;
+	let missingRequest = 0;
+
+	$: onlyIds = missingOnly && missing ? missing.addons : null;
+	$: next = page => Steam.getInstalledAddons(page, sort, types, query, onlyIds);
 
 	// Removals and rescans reload the shown pages in place instead of starting over at the top.
 	let seenRevision = $installedAddonsRevision;
@@ -151,7 +161,7 @@
 	async function selectAll() {
 		const request = ++selectAllRequest;
 		try {
-			const addons = await invoke('browse_all_installed_addons', { sort, types, query });
+			const addons = await invoke('browse_all_installed_addons', { sort, types, query, onlyIds });
 			if (request === selectAllRequest) selection.setAll(addons.map(addon => [addon.installed.path, addon.installed]));
 		} catch (error) {
 			if (request === selectAllRequest) taskError($_('select_all_failed', { values: { error: String(error) } }));
@@ -161,6 +171,32 @@
 	function toggleSelecting() {
 		if ($selection.active) selection.stop();
 		else selection.start();
+	}
+
+	async function checkMissing() {
+		const request = ++missingRequest;
+		try {
+			const result = await missingRequirements();
+			if (request === missingRequest) missing = result;
+		} catch (error) {
+			if (request !== missingRequest) return;
+			missingOnly = false;
+			taskError($_('installed_missing_failed', { values: { error: String(error) } }));
+		}
+	}
+
+	function toggleMissing() {
+		missingOnly = !missingOnly;
+		missing = null;
+		missingRequest++;
+		selectAllRequest++;
+		selection.clear();
+		if (missingOnly) checkMissing();
+	}
+
+	async function subscribeMissing() {
+		await subscribeItems(missing.items.map(item => item.id), { offer: false });
+		if (missingOnly) checkMissing();
 	}
 
 	let removals = new Map();
@@ -324,16 +360,30 @@
 			<Search size="1rem"/>
 			<input type="search" bind:value={query} bind:this={searchInput} placeholder={$_('installed_search')} aria-label={$_('installed_search')} on:keydown={searchKeydown}/>
 		</div>
-		<button type="button" class="select-mode" class:active={$selection.active} on:click={toggleSelecting}>
-			{#if $selection.active}
-				<Check size="1rem"/>
-				{$_('done')}
-			{:else}
-				<SquareCheck size="1rem"/>
-				{$_('select')}
-			{/if}
-		</button>
+		<button type="button" class:active={missingOnly} aria-pressed={missingOnly} on:click={toggleMissing}><Link2Off size="1rem"/>{$_('installed_missing')}</button>
+		<div class="end">
+			<CardSize/>
+			<button type="button" class:active={$selection.active} on:click={toggleSelecting}>
+				{#if $selection.active}
+					<Check size="1rem"/>
+					{$_('done')}
+				{:else}
+					<SquareCheck size="1rem"/>
+					{$_('select')}
+				{/if}
+			</button>
+		</div>
 	</div>
+	{#if missingOnly && !missing}
+		<p class="status" role="status"><Loading inline size="1rem"/> {$_('installed_missing_checking')}</p>
+	{:else if missingOnly && missing.items.length}
+		<div class="panel">
+			<span>{$_('installed_missing_summary', { values: { count: missing.items.length } })}</span>
+			<div class="selection-actions">
+				<button type="button" disabled={!!$browseJob} on:click={subscribeMissing}>{#if $browseJob}<Loading inline size="1rem"/>{:else}<CirclePlus size="1rem"/>{/if}{$_('browse_subscribe_count', { values: { count: missing.items.length } })}</button>
+			</div>
+		</div>
+	{/if}
 	{#if $selection.active}
 		<div class="panel">
 			<div class="selection-summary">
@@ -368,7 +418,7 @@
 		<p class="status" role="status">{$_('installed_no_types')}</p>
 	{:else}
 		<div class="results">
-			<AddonScroller bind:this={scroller} bind:total {next} {onClick} {selection} {contextItems} label={$_('installed_addons')} emptyMessage={query ? $_('installed_no_matches') : null} onSelectAll={selectAll} onDelete={deleteKey}/>
+			<AddonScroller bind:this={scroller} bind:total {next} {onClick} {selection} {contextItems} label={$_('installed_addons')} emptyMessage={query ? $_('installed_no_matches') : missingOnly ? $_('installed_missing_none') : null} onSelectAll={selectAll} onDelete={deleteKey}/>
 		</div>
 	{/if}
 </section>
@@ -410,7 +460,10 @@
 	.panel button {
 		padding: .45rem .7rem;
 	}
-	.select-mode {
+	.end {
+		display: flex;
+		align-items: center;
+		gap: .75rem;
 		margin-inline-start: auto;
 	}
 	button, select {
@@ -551,6 +604,9 @@
 		outline-offset: 2px;
 	}
 	.status {
+		display: flex;
+		align-items: center;
+		gap: .5rem;
 		margin: .5rem 1.5rem 0;
 		color: var(--text-soft);
 	}

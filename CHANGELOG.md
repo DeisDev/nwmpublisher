@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ctrl-click or middle-click a Workshop link to open it the other way, and use the new Back button in Browse to return to the page you came from.
 - Subscribe with one click from Browse results, and subscribe to an item's required items from its page.
 - Addon context menus now offer both Open (in the app) and Steam Workshop (in your web browser).
+- Browse search can look in the title only or the description only, and match an exact phrase.
+- Subscribing in Browse offers to subscribe to the item's missing required items too.
+- Browse item pages list your subscribed addons that require the item, and unsubscribing from it warns you first.
+- New Missing requirements filter in Installed Addons, with a button that subscribes to the missing items.
+- Undo button on the message shown after you subscribe to or unsubscribe from one item.
+- The mouse back button and Alt+Left go back in Browse.
+- Press Space on a Browse result for a quick look at its images and description.
+- The sidebar shows how many items are in My Workshop, Collections, and Installed Addons.
+- New slider for the card size in addon grids.
+- Browse shows placeholder cards while results load, and its list view always marks subscribed items.
 
 ### Changed
 

@@ -58,7 +58,7 @@ async function runRemoval(unsubscribe, paths, options) {
 	}
 }
 
-export async function unsubscribeAddon(path, name, deleteFiles, permanent) {
+export async function unsubscribeAddon(path, name, deleteFiles, permanent, undo = null) {
 	let outcome;
 	try {
 		[outcome] = await runRemoval(true, [path], { deleteFiles, permanent });
@@ -69,7 +69,7 @@ export async function unsubscribeAddon(path, name, deleteFiles, permanent) {
 	const result = outcome.files;
 	removedPaths.set([path]);
 	const removed = result.removed.length > 0;
-	taskMessage(get(_)(removed ? (permanent ? 'addon_unsubscribed_deleted' : 'addon_unsubscribed_trashed') : 'addon_unsubscribed', { values: { name } }));
+	taskMessage(get(_)(removed ? (permanent ? 'addon_unsubscribed_deleted' : 'addon_unsubscribed_trashed') : 'addon_unsubscribed', { values: { name } }), undo);
 	if (result.failed.length) {
 		playSound('error');
 		const errors = result.failed.map(failure => `${failure.path}: ${errorText(failure.error)}`).join('\n');
@@ -153,7 +153,7 @@ export async function requestDelete(path, name, onDone) {
 	}
 }
 
-/** Always asks first, even for one addon, because it is reached by a single key press or a bulk action. */
-export function confirmRemoval(items, unsubscribe, onDone) {
-	deleteRequest.set({ items, unsubscribe, deleteFiles: !unsubscribe || !!get(settings).unsubscribe_delete_files, onDone });
+/** Always asks first, even for one addon, because it is reached by a single key press or a bulk action. `undo` is offered after unsubscribing a single addon. */
+export function confirmRemoval(items, unsubscribe, onDone, undo = null) {
+	deleteRequest.set({ items, unsubscribe, deleteFiles: !unsubscribe || !!get(settings).unsubscribe_delete_files, onDone, undo });
 }

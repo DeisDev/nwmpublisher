@@ -21,8 +21,9 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-export function taskMessage(msg) {
-	tasks.update(tasks => { tasks.push([null, msg, null]); return tasks });
+/** `action` adds a button to the message, as `{ label, run }`. */
+export function taskMessage(msg, action = null) {
+	tasks.update(tasks => { tasks.push([null, msg, null, false, action]); return tasks });
 }
 
 export function taskError(msg) {

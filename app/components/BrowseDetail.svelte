@@ -11,10 +11,9 @@
 	import ListPlus from '@lucide/svelte/icons/list-plus';
 	import LinkOut from '@lucide/svelte/icons/external-link';
 	import LinkChain from '@lucide/svelte/icons/link';
-	import Play from '@lucide/svelte/icons/play';
 	import Loading from './Loading.svelte';
 	import BBCode from './BBCode.svelte';
-	import BBCodeWidget from './BBCodeWidget.svelte';
+	import BrowseGallery from './BrowseGallery.svelte';
 	import WorkshopStats from './WorkshopStats.svelte';
 	import CollectionItemRow from './CollectionItemRow.svelte';
 	import BrowseCollection from './BrowseCollection.svelte';
@@ -22,7 +21,7 @@
 	import { taskError, taskMessage } from '../transactions.js';
 	import { playSound } from '../sounds.js';
 	import { chooseCollections, collections, ensureCollections, workshopUrl } from '../collections.js';
-	import { KIND_TAGS, authors, browseJob, downloadItems, favoriteIds, loadFavorites, quickBusy, requestAuthor, setFavorite, setVote, subscribeItems, subscribedIds, tagLabel, toggleSubscription, unsubscribeItems } from '../browse.js';
+	import { KIND_TAGS, authors, browseJob, downloadItems, favoriteIds, loadFavorites, quickBusy, requestAuthor, requiredBy, setFavorite, setVote, subscribeItems, subscribedIds, tagLabel, toggleSubscription, unsubscribeItems } from '../browse.js';
 
 	export let reference;
 	export let onOpen;
@@ -32,7 +31,7 @@
 	let details = null;
 	let error = null;
 	let loading = true;
-	let shown = 0;
+	let neededBy = [];
 	let voting = false;
 	let favoriting = false;
 	let destroyed = false;
@@ -43,7 +42,6 @@
 	$: id = workshop ? String(workshop.id) : null;
 	$: collection = workshop?.kind === 'collection';
 	$: media = workshop ? [...(workshop.previewUrl ? [{ type: 'image', value: workshop.previewUrl }] : []), ...details.previews] : [];
-	$: current = media[Math.min(shown, media.length - 1)];
 	$: author = workshop && $authors.get(workshop.steamid64);
 	$: tags = workshop ? workshop.tags.filter(tag => !KIND_TAGS.has(tag.toLowerCase())) : [];
 	$: subscribed = id && $subscribedIds.has(id);
@@ -51,12 +49,12 @@
 	$: memberOf = id ? $collections.items.filter(item => item.fields.items.includes(id)) : [];
 	$: missingRequired = details ? details.dependencies.filter(entry => entry.status === 'available' && !$subscribedIds.has(entry.id)).map(entry => entry.id) : [];
 	$: changing = !!$browseJob || !!$quickBusy;
+	$: loadNeededBy(id, $subscribedIds);
 
 	async function load(reference) {
 		loading = true;
 		error = null;
 		details = null;
-		shown = 0;
 		try {
 			const result = await invoke('browse_item', { reference });
 			if (destroyed || reference !== currentReference()) return;
@@ -70,6 +68,19 @@
 		}
 	}
 	const currentReference = () => reference;
+
+	async function loadNeededBy(item) {
+		if (!item) {
+			neededBy = [];
+			return;
+		}
+		try {
+			const items = await requiredBy([item]);
+			if (!destroyed && item === id) neededBy = items;
+		} catch (err) {
+			console.error('Required by:', err);
+		}
+	}
 
 	ensureCollections();
 	loadFavorites();
@@ -108,27 +119,7 @@
 		</div>
 	{:else if workshop}
 		<div class="top">
-			<div class="gallery">
-				<div class="stage">
-					{#if !current}
-						<div class="empty"></div>
-					{:else if current.type === 'youtube'}
-						<BBCodeWidget widget={{ type: 'youtube', src: 'https://www.youtube.com/embed/' + current.value }} href={'https://www.youtube.com/watch?v=' + current.value}/>
-					{:else}
-						<img src={current.value} alt=""/>
-					{/if}
-				</div>
-				{#if media.length > 1}
-					<div class="thumbs scrollbar">
-						{#each media as item, index}
-							<button type="button" class:active={index === shown} aria-label={$_(item.type === 'youtube' ? 'browse_show_video' : 'browse_show_image', { values: { number: index + 1 } })} on:click={() => shown = index}>
-								<img src={item.type === 'youtube' ? `https://i.ytimg.com/vi/${item.value}/default.jpg` : item.value} alt="" loading="lazy"/>
-								{#if item.type === 'youtube'}<span class="play"><Play size="1rem"/></span>{/if}
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
+			<BrowseGallery {media}/>
 			<div class="summary">
 				<h2 class="select">{workshop.title}</h2>
 				<p class="author">
@@ -212,6 +203,19 @@
 			</section>
 		{/if}
 
+		{#if neededBy.length}
+			<section>
+				<h3>{$_('browse_required_by')} <span class="count">{neededBy.length}</span></h3>
+				<ul>
+					{#each neededBy as entry (entry.id)}
+						<CollectionItemRow id={entry.id} {entry}>
+							<button type="button" on:click={() => onOpen(entry.id)}>{$_('open')}</button>
+						</CollectionItemRow>
+					{/each}
+				</ul>
+			</section>
+		{/if}
+
 		{#if memberOf.length}
 			<section>
 				<h3>{$_('browse_in_your_collections')} <span class="count">{memberOf.length}</span></h3>
@@ -252,61 +256,6 @@
 		.top {
 			grid-template-columns: minmax(0, 1fr);
 		}
-	}
-	.stage {
-		aspect-ratio: 16 / 9;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		overflow: hidden;
-		border-radius: 4px;
-		background: var(--bg-sunken-2);
-		box-shadow: 0 0 2px 1px rgba(0, 0, 0, .5);
-	}
-	.stage img {
-		max-width: 100%;
-		max-height: 100%;
-		object-fit: contain;
-	}
-	.stage :global(.widget), .stage :global(iframe) {
-		width: 100%;
-		height: 100%;
-		border: 0;
-	}
-	.thumbs {
-		display: flex;
-		gap: .5rem;
-		margin-top: .5rem;
-		overflow-x: auto;
-		padding-bottom: .25rem;
-	}
-	.thumbs button {
-		position: relative;
-		flex: 0 0 4.5rem;
-		height: 3.2rem;
-		padding: 0;
-		border: 2px solid transparent;
-		border-radius: 4px;
-		overflow: hidden;
-		background: var(--bg-sunken-2);
-		cursor: pointer;
-	}
-	.thumbs button.active {
-		border-color: var(--neutral);
-	}
-	.thumbs img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-	}
-	.play {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: #fff;
-		background: rgb(0 0 0 / 35%);
 	}
 	h2 {
 		margin: 0 0 .4rem;

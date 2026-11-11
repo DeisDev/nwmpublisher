@@ -1,6 +1,7 @@
 <script>
 	import Addon from "./Addon.svelte";
 	import AddonRow from "./AddonRow.svelte";
+	import AddonPlaceholders from "./AddonPlaceholders.svelte";
 	import { _ } from "svelte-i18n";
 	import { tick } from "svelte";
 	import { fade } from "svelte/transition";
@@ -26,6 +27,8 @@
 	export let extra = null;
 	export let more = null;
 	export let quickSubscribe = false;
+	export let onQuickLook = null;
+	export let placeholders = false;
 
 	const NUMERIC_COLUMNS = ['size', 'subscribers', 'favorites', 'rating'];
 
@@ -234,7 +237,9 @@
 		switch (event.key) {
 			case ' ':
 				event.preventDefault();
-				if (event.shiftKey && anchorKey) addRange(anchorKey, index);
+				if (onQuickLook && !selecting && !event.shiftKey) {
+					if (!event.repeat) onQuickLook(addons[index]);
+				} else if (event.shiftKey && anchorKey) addRange(anchorKey, index);
 				else toggle(index);
 				return;
 			case 'Enter':
@@ -300,6 +305,8 @@
 				<div id="error">{JSON.stringify(error)}</div>
 			{/if}
 		</div>
+	{:else if placeholders && !error && (!loaded || (addons.length === 0 && more))}
+		<div id="grid" class:list={view === 'list'}><AddonPlaceholders {view} template={rowTemplate}/></div>
 	{:else if !loaded}
 		<Loading size="2rem"/>
 	{:else if error}
@@ -328,8 +335,9 @@
 					{/if}
 				</div>
 			{/each}
+			{#if placeholders && more && loading}<AddonPlaceholders {view} count={view === 'list' ? 3 : 6} template={rowTemplate}/>{/if}
 		</div>
-		{#if more && loading}<div class="more"><Loading size="1.5rem"/></div>{/if}
+		{#if more && loading && !placeholders}<div class="more"><Loading size="1.5rem"/></div>{/if}
 	{:else if view === 'list'}
 		<div class="list-head" style:grid-template-columns={rowTemplate} aria-hidden="true">
 			<span></span><span>{$_('browse_column_title')}</span>
@@ -339,13 +347,15 @@
 			{#each addons as addon (key(addon))}
 				<AddonRow {onClick} contextItems={contextItems && (() => contextItems(addon))} workshop={addon.workshop} {columns} template={rowTemplate} {quickSubscribe} {...(extra?.(addon) ?? {})}/>
 			{/each}
+			{#if placeholders && more && loading}<AddonPlaceholders {view} count={view === 'list' ? 3 : 6} template={rowTemplate}/>{/if}
 		</div>
-		{#if more && loading}<div class="more"><Loading size="1.5rem"/></div>{/if}
+		{#if more && loading && !placeholders}<div class="more"><Loading size="1.5rem"/></div>{/if}
 	{:else}
 		<div id="grid">
 			{#each addons as addon (key(addon))}
 				<Addon {onClick} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
 			{/each}
+			{#if placeholders && more && loading}<AddonPlaceholders {view} count={view === 'list' ? 3 : 6} template={rowTemplate}/>{/if}
 		</div>
 	{/if}
 </main>
@@ -365,7 +375,7 @@
 	main #grid {
 		position: relative;
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(var(--addon-card-size, 200px), 1fr));
 		grid-auto-flow: dense;
 		align-items: center;
 		grid-gap: 1rem;

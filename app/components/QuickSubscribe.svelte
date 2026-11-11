@@ -47,7 +47,7 @@
 	.quick-subscribe.subscribed {
 		background: var(--success);
 	}
-	:global(.addon:hover) .quick-subscribe, :global(.addon-row:hover) .quick-subscribe, :global(:focus-visible) > :global(.addon) .quick-subscribe, :global(:focus-visible) > :global(.addon-row) .quick-subscribe, .quick-subscribe.busy {
+	:global(.addon:hover) .quick-subscribe, :global(.addon-row:hover) .quick-subscribe, :global(:focus-visible) > :global(.addon) .quick-subscribe, :global(:focus-visible) > :global(.addon-row) .quick-subscribe, .quick-subscribe.busy, .quick-subscribe.subscribed:not(.overlay) {
 		opacity: 1;
 	}
 	.quick-subscribe:hover:not([aria-disabled='true']) {

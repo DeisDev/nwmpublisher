@@ -1,12 +1,15 @@
 <script>
+	import { _ } from 'svelte-i18n';
+
 	export let id;
 	export let activeItem;
 	export let click = null;
 	export let jobs = null;
+	export let count = null;
 </script>
 
 <item class:active={$activeItem == id} on:click={() => { $activeItem = id; if (click) click(id) }}>
-	<span><slot></slot></span>
+	<span><slot></slot>{#if count && $count != null}<small>{$_('nav_count', { values: { count: $count } })}</small>{/if}</span>
 	{#if jobs}
 		<div class="jobs" class:active={$jobs > 0}>{$jobs}</div>
 	{/if}
@@ -26,6 +29,11 @@
 	}
 	item > span {
 		flex: 1;
+	}
+	small {
+		margin-inline-start: .4em;
+		color: var(--text-muted);
+		font-size: .85em;
 	}
 	item > .jobs {
 		padding: .25em .4em;
