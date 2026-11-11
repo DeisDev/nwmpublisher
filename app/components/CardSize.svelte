@@ -14,7 +14,7 @@
 
 <label class="card-size" title={$_('card_size')}>
 	<Small size="1rem"/>
-	<input type="range" min="140" max="300" step="10" value={size} aria-label={$_('card_size')} on:input={preview} on:change={() => saveSettings({ addon_card_size: size }).catch(() => {})}/>
+	<input type="range" min="140" max="300" step="1" value={size} aria-label={$_('card_size')} on:input={preview} on:change={() => saveSettings({ addon_card_size: size }).catch(() => {})}/>
 	<Large size="1rem"/>
 </label>
 

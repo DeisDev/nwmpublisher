@@ -375,7 +375,8 @@
 	main #grid {
 		position: relative;
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(var(--addon-card-size, 200px), 1fr));
+		grid-template-columns: repeat(auto-fill, var(--addon-card-size, 200px));
+		justify-content: center;
 		grid-auto-flow: dense;
 		align-items: center;
 		grid-gap: 1rem;
