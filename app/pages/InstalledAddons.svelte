@@ -86,8 +86,10 @@
 	}
 
 	let section;
+	const visible = () => !!section && section.offsetParent !== null;
+
 	function onKeydown(event) {
-		if (event.defaultPrevented) return;
+		if (event.defaultPrevented || !visible()) return;
 		if (filtersOpen && event.key === 'Escape') {
 			filtersOpen = false;
 			filterButton.focus();

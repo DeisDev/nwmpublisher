@@ -165,7 +165,7 @@
 					<button type="button" class="icon" title={$_('copy_link')} aria-label={$_('copy_link')} on:click={copyLink}><LinkChain size="1rem"/></button>
 				</div>
 				<p class="links">
-					<a href={workshopUrl(id)} target="_blank" rel="noreferrer">{$_('steam_workshop')}<LinkOut size=".8rem"/></a>
+					<a href={workshopUrl(id)} target="_blank" rel="noreferrer" data-external>{$_('steam_workshop')}<LinkOut size=".8rem"/></a>
 					<a href={'https://steamcommunity.com/sharedfiles/filedetails/comments/' + id} target="_blank" rel="noreferrer">{$_('browse_comments')}<LinkOut size=".8rem"/></a>
 					{#if !collection}<a href={'https://steamcommunity.com/sharedfiles/filedetails/changelog/' + id} target="_blank" rel="noreferrer">{$_('browse_change_notes')}<LinkOut size=".8rem"/></a>{/if}
 				</p>

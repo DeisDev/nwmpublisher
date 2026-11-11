@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - New Browse page to search the whole Garry's Mod Workshop, filter results, open item details, and subscribe, download, or add items to collections.
+- Workshop links now open in the Browse page. A new setting opens them in your web browser instead.
 
 ### Changed
 
 - Success and failure messages now appear in one place at the bottom of the window instead of inside each page. Failure messages stay until you close them.
 - The Collections menu now adds items to and removes them from several collections at once.
+- Installed Addons keeps your place, search, and selection when you switch pages.
 
 ## [3.8.1] - 2026-11-10
 

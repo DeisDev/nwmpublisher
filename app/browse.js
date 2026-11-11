@@ -4,6 +4,7 @@ import { _ } from 'svelte-i18n';
 import { taskError, taskMessage } from './transactions.js';
 import { playSound } from './sounds.js';
 import { addonName, addonRemovals, confirmRemoval } from './addon-removal.js';
+import { bbcodeWidget } from './bbcode.js';
 
 export const KINDS = ['addon', 'collection', 'dupe', 'save', 'demo'];
 export const SOURCES = ['everyone', 'author', 'friends', 'followed', 'favorites'];
@@ -402,6 +403,25 @@ export async function setFavorite(id, favorite) {
 	});
 	taskMessage(t(favorite ? 'browse_favorited' : 'browse_unfavorited'));
 	playSound('success');
+	return true;
+}
+
+export const browseRequest = writable(null);
+
+export function showInBrowse(id) {
+	browseRequest.set(String(id));
+}
+
+/**
+ * Shows a Workshop item link in Browse when the setting allows it, and returns whether it did.
+ * Links in a dialog stay external unless the dialog cancels `workshoplink` because it is closing.
+ */
+export function openInBrowse(href, link) {
+	if (!AppSettings.open_workshop_pages_in_app) return false;
+	const widget = bbcodeWidget(href);
+	if (widget?.type !== 'workshop') return false;
+	if (link.closest('modal') && link.dispatchEvent(new CustomEvent('workshoplink', { bubbles: true, cancelable: true }))) return false;
+	showInBrowse(widget.id);
 	return true;
 }
 

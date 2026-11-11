@@ -28,6 +28,7 @@
 	import ChangelogDefaults from './ChangelogDefaults.svelte';
 	import { writable } from 'svelte/store';
 	import { Transaction } from '../transactions';
+	import { showInBrowse } from '../browse.js';
 	import { formatSize } from '../format.js';
 	import Loading from './Loading.svelte';
 	import WorkshopStats from './WorkshopStats.svelte';
@@ -456,6 +457,10 @@
 					Steam.MyWorkshop = [];
 					if (publishingAddon && $updatingAddon?.id === publishingAddon.id) workshopSettings?.refresh();
 					translationsPublished(publishingAddon, translations, event.data?.translationFailures);
+					if (AppSettings.open_workshop_after_publish && AppSettings.open_workshop_pages_in_app && event.data?.workshopId) {
+						showInBrowse(event.data.workshopId);
+						if ($preparePublish) togglePreparePublish();
+					}
 					if (event.data?.cleanupWarnings?.length) dialog.message($_('publish_cleanup_warning') + '\n' + event.data.cleanupWarnings.join('\n'), { kind: 'warning' });
 					if (event.data?.settingsError) dialog.message($_('changelog_defaults.published_save_error', { values: { error: event.data.settingsError } }), { kind: 'error' });
 				}

@@ -2,12 +2,14 @@
 	import { _ } from 'svelte-i18n';
 	import { invoke } from '@tauri-apps/api/core';
 	import { taskError } from '../transactions.js';
+	import { openInBrowse } from '../browse.js';
 
 	export let href;
 
 	async function follow(event) {
 		if (event.type === 'auxclick' && event.button !== 1) return;
 		event.preventDefault();
+		if (openInBrowse(href, event.currentTarget)) return;
 		try {
 			await invoke('open_url', { url: href });
 		} catch (reason) {

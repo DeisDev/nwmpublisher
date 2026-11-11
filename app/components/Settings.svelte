@@ -160,6 +160,7 @@
 					<Setting {afterChange} id="sounds" type="bool" value={AppSettings.sounds}>{$_('settings.general.sounds')}</Setting>
 					<Setting {afterChange} id="discord_rich_presence" type="bool" value={AppSettings.discord_rich_presence}>{$_('settings.general.discord_rich_presence')}</Setting>
 					{#if discordConfigured === false}<p class="discord-unavailable">{$_('discord.not_configured')}</p>{/if}
+					<Setting {afterChange} id="open_workshop_pages_in_app" type="bool" value={AppSettings.open_workshop_pages_in_app} tooltip={$_('settings.general.open_workshop_pages_in_app_tooltip')}>{$_('settings.general.open_workshop_pages_in_app')}</Setting>
 					<Setting {afterChange} id="open_workshop_after_publish" type="bool" value={AppSettings.open_workshop_after_publish}>{$_('settings.general.open_workshop_after_publish')}</Setting>
 				</div>
 				<div>{$_('open_count', { values: { count: AppData.open_count } })}</div>

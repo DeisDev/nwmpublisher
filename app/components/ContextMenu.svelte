@@ -77,6 +77,7 @@
 	import FolderAdd from '@lucide/svelte/icons/folder-plus';
 	import LinkChain from '@lucide/svelte/icons/link';
 	import LinkOut from '@lucide/svelte/icons/external-link';
+	import Eye from '@lucide/svelte/icons/eye';
 	import Image from '@lucide/svelte/icons/image';
 	import CloudDownload from '@lucide/svelte/icons/cloud-download';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -336,7 +337,7 @@ import { playSound } from '../sounds';
 				{#if workshop && !workshop.dead}
 					<a class="nostyle" href="https://steamcommunity.com/sharedfiles/filedetails/?id={workshop.id}" target="_blank" tabindex="-1">
 						<ContextMenuItem>
-							<span slot="icon"><LinkOut class="icon" size="1rem"/></span>
+							<span slot="icon"><svelte:component this={$settings.open_workshop_pages_in_app ? Eye : LinkOut} class="icon" size="1rem"/></span>
 							<span slot="label">{$_('steam_workshop')}</span>
 						</ContextMenuItem>
 					</a>

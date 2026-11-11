@@ -183,6 +183,11 @@
 		destinationSelect = false;
 		cancel();
 	}
+
+	function leaveForBrowse(event) {
+		event.preventDefault();
+		interceptCancel();
+	}
 </script>
 
 <Modal id="gma-preview" {active} cancel={interceptCancel}>
@@ -194,7 +199,7 @@
 		{:else if !workshop && !gma}
 			<Dead size="2rem"/>
 		{:else}
-			<div id="content">
+			<div id="content" on:workshoplink={leaveForBrowse}>
 				<div class="preview-toolbar">
 					<div class="preview-tabs" role="tablist" aria-label={$_('addon_preview.tabs')}>
 						{#each tabs as tab, index}
@@ -203,7 +208,7 @@
 					</div>
 					<div class="preview-actions">
 						{#if (gma && gma.id) || workshop}
-							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}<LinkOut class="icon" size=".8rem"/></a></div>
+							<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={gma?.id ?? workshop.id}" target="_blank">{$_('steam_workshop')}{#if !$settings.open_workshop_pages_in_app}<LinkOut class="icon" size=".8rem"/>{/if}</a></div>
 						{/if}
 						{#if removal === 'unsubscribe'}
 							<button type="button" class="removal-btn" disabled={removing || !!$removalJob} on:click={() => unsubscribe(workshop, gma)}>{$_($settings.unsubscribe_delete_files ? 'addon_unsubscribe_delete' : 'addon_unsubscribe')}</button>

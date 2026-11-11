@@ -394,6 +394,7 @@ pub struct Settings {
 	pub upscale_addon_icon: bool,
 	pub workshop_update_mode: WorkshopUpdateMode,
 	pub open_workshop_after_publish: bool,
+	pub open_workshop_pages_in_app: bool,
 	pub changelogs: ChangelogSettings,
 	pub translations: HashMap<String, Translations>,
 
@@ -481,6 +482,7 @@ impl Default for Settings {
 			upscale_addon_icon: true,
 			workshop_update_mode: WorkshopUpdateMode::Description,
 			open_workshop_after_publish: true,
+			open_workshop_pages_in_app: true,
 			changelogs: ChangelogSettings::default(),
 			translations: HashMap::new(),
 
@@ -1248,6 +1250,7 @@ mod tests {
 	fn automatic_open_preferences_preserve_legacy_settings() {
 		let settings: Settings = serde_json::from_str(r#"{"sounds":false,"ignore_globs":["*.bak"],"create_folder_on_extract":false}"#).unwrap();
 		assert!(settings.open_workshop_after_publish);
+		assert!(settings.open_workshop_pages_in_app);
 		assert!(settings.open_folder_after_extract);
 		assert!(!settings.addon_cleaner_permanent_delete);
 		assert!(!settings.sounds);

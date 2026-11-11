@@ -18,6 +18,7 @@
 		{
 			name: 'installed_addons',
 			component: InstalledAddons,
+			persist: true,
 		},
 		{
 			name: 'downloader',
@@ -52,6 +53,16 @@
 
 	export const activeItem = writable(0);
 
+	browseRequest.subscribe(reference => {
+		if (!reference) return;
+		const browse = pagesManifest.findIndex(page => page.component === Browse);
+		pages.update(pages => {
+			pages[browse].created = true;
+			return pages;
+		});
+		activeItem.set(browse);
+	});
+
 </script>
 
 <script>
@@ -70,6 +81,7 @@
 	import SidebarItem from './SidebarItem.svelte';
 	import Logo from './Logo.svelte';
 	import ReportProblem from './ReportProblem.svelte';
+	import { browseRequest } from '../browse.js';
 
 	function selectPage(page) {
 		$pages[page].created = true;

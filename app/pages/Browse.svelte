@@ -1,5 +1,5 @@
 <script>
-	import { onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import { _ } from 'svelte-i18n';
 	import { invoke } from '@tauri-apps/api/core';
 	import Search from '@lucide/svelte/icons/search';
@@ -29,7 +29,7 @@
 	import { createSelection } from '../addon-selection.js';
 	import { chooseCollections, workshopUrl } from '../collections.js';
 	import {
-		COLUMNS, KINDS, KIND_TAGS, TREND_DAYS, activeFilters, browseJob, browsePager, defaultQuery, downloadItems, installedIds, itemReference,
+		COLUMNS, KINDS, KIND_TAGS, TREND_DAYS, activeFilters, browseJob, browsePager, browseRequest, defaultQuery, downloadItems, installedIds, itemReference,
 		loadSubscribed, normalizeQuery, sortsFor, stopJob, subscribeItems, subscribedIds, unsubscribeItems,
 	} from '../browse.js';
 
@@ -198,6 +198,12 @@
 	function openItem(reference, title = null) {
 		stack = [...stack, { reference: String(reference), title }];
 	}
+
+	onDestroy(browseRequest.subscribe(reference => {
+		if (!reference) return;
+		browseRequest.set(null);
+		if (stack[stack.length - 1]?.reference !== reference) openItem(reference);
+	}));
 
 	function itemLoaded(index, workshop) {
 		if (stack[index]) {
