@@ -178,6 +178,12 @@
 	let resizeTimeout;
 	onMount(() => {
 		const observer = new ResizeObserver(() => {
+			// The page stays mounted while another page is shown, where it has no size.
+			if (!sizeRef.clientWidth) {
+				hideTooltip(true);
+				return;
+			}
+			analyzeIfStale();
 			if (!analysis) return;
 			if (layoutBounds[0] === sizeRef.clientWidth && layoutBounds[1] === sizeRef.clientHeight) return;
 			clearTimeout(resizeTimeout);
@@ -716,10 +722,12 @@
 		}
 	});
 	let analyzedRevision = $installedAddonsRevision;
-	$: if ($installedAddonsRevision !== analyzedRevision) {
+	function analyzeIfStale() {
+		if ($installedAddonsRevision === analyzedRevision || !sizeRef?.clientWidth) return;
 		analyzedRevision = $installedAddonsRevision;
 		analyze({ silent: analysis != null });
 	}
+	$: $installedAddonsRevision, analyzeIfStale();
 	onDestroy(() => transaction?.cancel());
 
 	let popper;
@@ -934,6 +942,7 @@
 	}
 
 	function windowKeydown(e) {
+		if (!main || main.offsetParent === null) return;
 		if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f' && (e.target === document.body || main?.contains(e.target))) {
 			e.preventDefault();
 			searchInput?.focus();

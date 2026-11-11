@@ -113,7 +113,7 @@
 	}
 
 	function onKeydown(event) {
-		if (event.defaultPrevented) return;
+		if (event.defaultPrevented || !section || section.offsetParent === null) return;
 		if (filtersOpen && event.key === 'Escape') {
 			filtersOpen = false;
 			filterButton.focus();

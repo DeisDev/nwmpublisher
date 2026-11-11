@@ -6,6 +6,7 @@
 	import { tippyFollow } from '../tippy';
 	import Loading from './Loading.svelte';
 	import Dead from './Dead.svelte';
+	import QuickSubscribe from './QuickSubscribe.svelte';
 	import { registerContext } from './ContextMenu.svelte';
 	import { onMount } from 'svelte';
 	import { formatDate, formatSize } from '../format.js';
@@ -22,6 +23,7 @@
 	export let contextItems = null;
 	export let badge = null;
 	export let details = false;
+	export let quickSubscribe = false;
 
 	let workshop = workshopData;
 	let installed = installedData;
@@ -120,9 +122,13 @@
 						<Loading size="2rem"/>
 						<img src={workshop.previewUrl} alt="Preview" loading="lazy" on:load={addonPreviewLoaded}/>
 						{#if badge}<span class="badge">{badge}</span>{/if}
+						{#if quickSubscribe && !selecting}<QuickSubscribe {workshop} overlay/>{/if}
 					</div>
 				{:else}
-					<div id="preview" class="dead"><Dead size="4rem"/></div>
+					<div id="preview" class="dead">
+						<Dead size="4rem"/>
+						{#if quickSubscribe && !selecting}<QuickSubscribe {workshop} overlay/>{/if}
+					</div>
 				{/if}
 			{:catch}
 				<div id="preview" class="dead"><Dead size="4rem"/></div>
@@ -265,7 +271,7 @@
 	main #preview:not(.dead):not(.loading):not(.new) > :global(svg) {
 		display: none;
 	}
-	main #preview.dead :global(svg), main #preview.loading :global(svg), main #preview.new :global(svg) {
+	main #preview.dead > :global(svg), main #preview.loading > :global(svg), main #preview.new > :global(svg) {
 		position: absolute;
 		margin: auto;
 		left: 0;
@@ -273,14 +279,14 @@
 		right: 0;
 		bottom: 0;
 	}
-	main #preview.dead :global(svg), main #preview.loading :global(svg) {
+	main #preview.dead > :global(svg), main #preview.loading > :global(svg) {
 		color: var(--preview-icon);
 	}
-	main #preview.new :global(svg) {
+	main #preview.new > :global(svg) {
 		color: var(--preview-icon-new);
 		transition: color .1s;
 	}
-	main:hover #preview.new :global(svg) {
+	main:hover #preview.new > :global(svg) {
 		color: var(--text);
 	}
 	main.previewing #card {

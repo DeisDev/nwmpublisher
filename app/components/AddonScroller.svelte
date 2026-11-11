@@ -25,6 +25,7 @@
 	export let columnLabel = null;
 	export let extra = null;
 	export let more = null;
+	export let quickSubscribe = false;
 
 	const NUMERIC_COLUMNS = ['size', 'subscribers', 'favorites', 'rating'];
 
@@ -41,7 +42,7 @@
 
 	const key = addon => addon.installed?.path ?? addon.workshop?.id;
 
-	$: rowTemplate = `2.5rem minmax(12rem, 3fr) ${columns.map(column => (column === 'tags' || column === 'author' ? 'minmax(7rem, 1.5fr)' : 'minmax(5.5rem, 1fr)')).join(' ')}`;
+	$: rowTemplate = `2.5rem minmax(12rem, 3fr) ${columns.map(column => (column === 'tags' || column === 'author' ? 'minmax(7rem, 1.5fr)' : 'minmax(5.5rem, 1fr)')).join(' ')}${quickSubscribe ? ' 1.75rem' : ''}`;
 
 	// Cards that stay keep their component, so their previews do not reload.
 	function replaceAddons(replacement, animate) {
@@ -314,15 +315,16 @@
 			<div class="list-head" style:grid-template-columns={rowTemplate} aria-hidden="true">
 				<span></span><span>{$_('browse_column_title')}</span>
 				{#each columns as column}<span class:end={NUMERIC_COLUMNS.includes(column)}>{columnLabel?.(column) ?? column}</span>{/each}
+				{#if quickSubscribe}<span></span>{/if}
 			</div>
 		{/if}
 		<div id="grid" class:list={view === 'list'} role="listbox" aria-multiselectable="true" aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
 			{#each addons as addon, index (key(addon))}
 				<div class="option" role="option" aria-selected={!!selected?.has(key(addon))} aria-label={addonName(addon.workshop, addon.installed)} aria-setsize={total} aria-posinset={index + 1} tabindex={index === focusIndex ? 0 : -1} on:mousedown={cardMousedown} on:contextmenu={keyboardMenu} animate:flip={{ duration: animateChanges ? 200 : 0 }} out:fade={{ duration: animateChanges ? 150 : 0 }}>
 					{#if view === 'list'}
-						<AddonRow onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} {selecting} selected={!!selected?.has(key(addon))} workshop={addon.workshop} {columns} template={rowTemplate} {...(extra?.(addon) ?? {})}/>
+						<AddonRow onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} {selecting} selected={!!selected?.has(key(addon))} workshop={addon.workshop} {columns} template={rowTemplate} {quickSubscribe} {...(extra?.(addon) ?? {})}/>
 					{:else}
-						<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={true} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null} {...(extra?.(addon) ?? {})}/>
+						<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={true} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null} {quickSubscribe} {...(extra?.(addon) ?? {})}/>
 					{/if}
 				</div>
 			{/each}
@@ -335,7 +337,7 @@
 		</div>
 		<div id="grid" class="list">
 			{#each addons as addon (key(addon))}
-				<AddonRow {onClick} contextItems={contextItems && (() => contextItems(addon))} workshop={addon.workshop} {columns} template={rowTemplate} {...(extra?.(addon) ?? {})}/>
+				<AddonRow {onClick} contextItems={contextItems && (() => contextItems(addon))} workshop={addon.workshop} {columns} template={rowTemplate} {quickSubscribe} {...(extra?.(addon) ?? {})}/>
 			{/each}
 		</div>
 		{#if more && loading}<div class="more"><Loading size="1.5rem"/></div>{/if}

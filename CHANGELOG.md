@@ -11,9 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - New Browse page to search the whole Garry's Mod Workshop, filter results, open item details, and subscribe, download, or add items to collections.
 - Workshop links now open in the Browse page. A new setting opens them in your web browser instead.
+- Ctrl-click or middle-click a Workshop link to open it the other way, and use the new Back button in Browse to return to the page you came from.
+- Subscribe with one click from Browse results, and subscribe to an item's required items from its page.
+- Addon context menus now offer both Open (in the app) and Steam Workshop (in your web browser).
 
 ### Changed
 
+- My Workshop and the Addon Size Analyzer keep your place when you switch pages.
+- The Downloader's Open Workshop button now opens the Browse page.
 - Success and failure messages now appear in one place at the bottom of the window instead of inside each page. Failure messages stay until you close them.
 - The Collections menu now adds items to and removes them from several collections at once.
 - Installed Addons keeps your place, search, and selection when you switch pages.

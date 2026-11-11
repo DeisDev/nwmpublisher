@@ -59,7 +59,8 @@ function openExternalLink(e) {
 	const link = e.target.closest?.('a[target="_blank"][href]');
 	if (e.defaultPrevented || !link || !/^https?:/i.test(link.href)) return;
 	e.preventDefault();
-	if (!('external' in link.dataset) && openInBrowse(link.href, link)) return;
+	const invert = e.type === 'auxclick' || e.ctrlKey || e.metaKey;
+	if (!('external' in link.dataset) && openInBrowse(link.href, link, invert)) return;
 	invoke('open_url', { url: link.href }).catch(error => console.error('Failed to open link:', link.href, error));
 }
 document.addEventListener('click', openExternalLink);

@@ -264,12 +264,12 @@ function failureLines(failures) {
 	return failures.map(failure => `${failure.id}: ${failure.error}`).join('\n');
 }
 
-async function runJob(action, total, command, args, stoppable = true) {
+async function runJob(action, total, command, args, stoppable = true, quiet = false) {
 	if (get(browseJob)) {
 		taskError(t('browse_job_busy'));
 		return null;
 	}
-	browseJob.set({ action, completed: 0, total, retryIn: null, stoppable });
+	browseJob.set({ action, completed: 0, total, retryIn: null, stoppable, quiet });
 	const onProgress = new Channel(progress => browseJob.update(job => job && { ...job, ...progress }));
 	try {
 		return await invoke(command, { ...args, onProgress });
@@ -294,10 +294,10 @@ function reportOutcome(outcome, key, count) {
 	}
 }
 
-export async function subscribeItems(ids) {
+export async function subscribeItems(ids, quiet = false) {
 	let outcome;
 	try {
-		outcome = await runJob('subscribe', ids.length, 'subscribe_workshop_items', { ids: ids.map(String) });
+		outcome = await runJob('subscribe', ids.length, 'subscribe_workshop_items', { ids: ids.map(String) }, true, quiet);
 	} catch (error) {
 		playSound('error');
 		taskError(t('browse_subscribe_failed', { error: String(error) }));
@@ -327,7 +327,7 @@ export async function subscribeCollection(id, size) {
 }
 
 /** Installed copies go through the usual removal dialog so their files are handled; other items are unsubscribed directly. */
-export async function unsubscribeItems(items) {
+export async function unsubscribeItems(items, quiet = false) {
 	const ids = items.map(item => String(item.id));
 	const titles = new Map(items.map(item => [String(item.id), item.title]));
 	let removable = [];
@@ -345,7 +345,7 @@ export async function unsubscribeItems(items) {
 	if (direct.length) {
 		let outcome;
 		try {
-			outcome = await runJob('unsubscribe', direct.length, 'unsubscribe_workshop_items', { ids: direct });
+			outcome = await runJob('unsubscribe', direct.length, 'unsubscribe_workshop_items', { ids: direct }, true, quiet);
 		} catch (error) {
 			playSound('error');
 			taskError(t('browse_unsubscribe_failed', { error: String(error) }));
@@ -361,6 +361,21 @@ export async function unsubscribeItems(items) {
 			loadSubscribed();
 			noteInstalled([...handled]);
 		});
+	}
+}
+
+export const quickBusy = writable(null);
+
+/** One-click subscribe or unsubscribe for a single item; its job runs without the progress panel. */
+export async function toggleSubscription(item) {
+	const id = String(item.id);
+	if (get(quickBusy) || get(browseJob)) return;
+	quickBusy.set(id);
+	try {
+		if (get(subscribedIds).has(id)) await unsubscribeItems([{ id, title: item.title }], true);
+		else await subscribeItems([id], true);
+	} finally {
+		quickBusy.set(null);
 	}
 }
 
@@ -406,22 +421,28 @@ export async function setFavorite(id, favorite) {
 	return true;
 }
 
+const WORKSHOP_HOME = /^https?:\/\/steamcommunity\.com\/app\/4000\/workshop\/?$/i;
+
 export const browseRequest = writable(null);
 
-export function showInBrowse(id) {
-	browseRequest.set(String(id));
+/** The page a link left for Browse, as `{ name, back }`, until Browse is left again. */
+export const browseOrigin = writable(null);
+
+/** Switches to Browse and opens the item there; without an ID it only switches. */
+export function showInBrowse(id = null) {
+	browseRequest.set({ reference: id == null ? null : String(id) });
 }
 
 /**
- * Shows a Workshop item link in Browse when the setting allows it, and returns whether it did.
+ * Shows a Workshop link in Browse when the setting allows it, and returns whether it did; `invert` flips the setting for one click.
  * Links in a dialog stay external unless the dialog cancels `workshoplink` because it is closing.
  */
-export function openInBrowse(href, link) {
-	if (!AppSettings.open_workshop_pages_in_app) return false;
+export function openInBrowse(href, link, invert = false) {
+	if (!!AppSettings.open_workshop_pages_in_app === invert) return false;
 	const widget = bbcodeWidget(href);
-	if (widget?.type !== 'workshop') return false;
+	if (widget?.type !== 'workshop' && !WORKSHOP_HOME.test(href)) return false;
 	if (link.closest('modal') && link.dispatchEvent(new CustomEvent('workshoplink', { bubbles: true, cancelable: true }))) return false;
-	showInBrowse(widget.id);
+	showInBrowse(widget?.type === 'workshop' ? widget.id : null);
 	return true;
 }
 

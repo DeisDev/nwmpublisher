@@ -9,6 +9,7 @@
 	import Columns3 from '@lucide/svelte/icons/columns-3';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import SquareCheck from '@lucide/svelte/icons/square-check';
 	import Check from '@lucide/svelte/icons/check';
 	import X from '@lucide/svelte/icons/x';
@@ -29,7 +30,7 @@
 	import { createSelection } from '../addon-selection.js';
 	import { chooseCollections, workshopUrl } from '../collections.js';
 	import {
-		COLUMNS, KINDS, KIND_TAGS, TREND_DAYS, activeFilters, browseJob, browsePager, browseRequest, defaultQuery, downloadItems, installedIds, itemReference,
+		COLUMNS, KINDS, KIND_TAGS, TREND_DAYS, activeFilters, browseJob, browseOrigin, browsePager, browseRequest, defaultQuery, downloadItems, installedIds, itemReference,
 		loadSubscribed, normalizeQuery, sortsFor, stopJob, subscribeItems, subscribedIds, unsubscribeItems,
 	} from '../browse.js';
 
@@ -199,11 +200,23 @@
 		stack = [...stack, { reference: String(reference), title }];
 	}
 
-	onDestroy(browseRequest.subscribe(reference => {
-		if (!reference) return;
+	let origin = null;
+	let originDepth = 0;
+
+	onDestroy(browseRequest.subscribe(request => {
+		if (!request) return;
 		browseRequest.set(null);
-		if (stack[stack.length - 1]?.reference !== reference) openItem(reference);
+		if ($browseOrigin !== origin) {
+			origin = $browseOrigin;
+			originDepth = stack.length;
+		}
+		if (request.reference && stack[stack.length - 1]?.reference !== request.reference) openItem(request.reference);
 	}));
+
+	function returnToOrigin() {
+		stack = stack.slice(0, originDepth);
+		$browseOrigin.back();
+	}
 
 	function itemLoaded(index, workshop) {
 		if (stack[index]) {
@@ -310,6 +323,9 @@
 <section class="browse" bind:this={section}>
 	<div class="toolbar">
 		<div class="heading">
+			{#if $browseOrigin}
+				<button type="button" class="plain origin" on:click={returnToOrigin}><ArrowLeft size="1rem"/>{$_('browse_back_to', { values: { page: $_($browseOrigin.name) } })}</button>
+			{/if}
 			{#if opened}
 				<button type="button" class="plain crumb" on:click={closeAll}>{$_('browse_workshop')}</button>
 				{#if stack.length > 1}
@@ -410,7 +426,7 @@
 					</div>
 				</div>
 			{/if}
-			{#if $browseJob}
+			{#if $browseJob && (!$browseJob.quiet || $browseJob.retryIn)}
 				<div class="panel job">
 					<span id="browse-job-status">{$browseJob.retryIn ? $_('collections_save_throttled', { values: { seconds: $browseJob.retryIn } }) : $_($browseJob.action === 'subscribe' ? 'collections_subscribing' : 'bulk_unsubscribing', { values: { completed: $browseJob.completed, total: $browseJob.total } })}</span>
 					<progress max={$browseJob.total} value={$browseJob.completed} aria-labelledby="browse-job-status"></progress>
@@ -422,7 +438,7 @@
 					<BrowseFilters {query} {tagOptions} onChange={update}/>
 				{/if}
 				<div class="results">
-					<AddonScroller bind:this={scroller} bind:total bind:more {next} {onClick} selection={selectable ? selection : null} {contextItems} {view} {columns} {columnLabel} {extra} label={$_('browse_workshop')} emptyMessage={$_('browse_no_results')} onSelectAll={selectable ? selectAll : null}/>
+					<AddonScroller bind:this={scroller} bind:total bind:more {next} {onClick} selection={selectable ? selection : null} quickSubscribe={selectable} {contextItems} {view} {columns} {columnLabel} {extra} label={$_('browse_workshop')} emptyMessage={$_('browse_no_results')} onSelectAll={selectable ? selectAll : null}/>
 				</div>
 			</div>
 		</div>
@@ -615,6 +631,11 @@
 	button.crumb {
 		padding-inline: .25rem;
 		color: var(--text);
+	}
+	button.origin {
+		flex-shrink: 0;
+		margin-inline-end: .35rem;
+		padding-inline: .5rem;
 	}
 	button:focus-visible, select:focus-visible, input:focus-visible {
 		outline: 2px solid var(--text);

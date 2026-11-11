@@ -22,7 +22,7 @@
 	import { taskError, taskMessage } from '../transactions.js';
 	import { playSound } from '../sounds.js';
 	import { chooseCollections, collections, ensureCollections, workshopUrl } from '../collections.js';
-	import { KIND_TAGS, authors, browseJob, downloadItems, favoriteIds, loadFavorites, requestAuthor, setFavorite, setVote, subscribeItems, subscribedIds, tagLabel, unsubscribeItems } from '../browse.js';
+	import { KIND_TAGS, authors, browseJob, downloadItems, favoriteIds, loadFavorites, quickBusy, requestAuthor, setFavorite, setVote, subscribeItems, subscribedIds, tagLabel, toggleSubscription, unsubscribeItems } from '../browse.js';
 
 	export let reference;
 	export let onOpen;
@@ -49,6 +49,8 @@
 	$: subscribed = id && $subscribedIds.has(id);
 	$: favorite = id && !!$favoriteIds?.has(id);
 	$: memberOf = id ? $collections.items.filter(item => item.fields.items.includes(id)) : [];
+	$: missingRequired = details ? details.dependencies.filter(entry => entry.status === 'available' && !$subscribedIds.has(entry.id)).map(entry => entry.id) : [];
+	$: changing = !!$browseJob || !!$quickBusy;
 
 	async function load(reference) {
 		loading = true;
@@ -187,11 +189,23 @@
 
 		{#if details.dependencies.length}
 			<section>
-				<h3>{$_('browse_required_addons')} <span class="count">{details.dependencies.length}</span></h3>
+				<div class="section-head">
+					<h3>{$_('browse_required_addons')} <span class="count">{details.dependencies.length}</span></h3>
+					{#if missingRequired.length}
+						<button type="button" disabled={changing} on:click={() => subscribeItems(missingRequired)}><CirclePlus size="1rem"/>{$_('browse_subscribe_count', { values: { count: missingRequired.length } })}</button>
+					{/if}
+				</div>
 				<ul>
 					{#each details.dependencies as entry (entry.id)}
 						<CollectionItemRow id={entry.id} {entry}>
-							{#if entry.status === 'available'}<button type="button" on:click={() => onOpen(entry.id)}>{$_('open')}</button>{/if}
+							{#if entry.status === 'available'}
+								{#if $subscribedIds.has(entry.id)}
+									<button type="button" disabled={changing} on:click={() => toggleSubscription(entry)}><CircleMinus size="1rem"/>{$_('unsubscribe')}</button>
+								{:else}
+									<button type="button" class="primary" disabled={changing} on:click={() => toggleSubscription(entry)}><CirclePlus size="1rem"/>{$_('browse_subscribe')}</button>
+								{/if}
+								<button type="button" on:click={() => onOpen(entry.id)}>{$_('open')}</button>
+							{/if}
 						</CollectionItemRow>
 					{/each}
 				</ul>
@@ -405,6 +419,17 @@
 	h3 {
 		margin: 0 0 .6rem;
 		font-size: 1rem;
+	}
+	.section-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: .5rem;
+		margin-bottom: .6rem;
+	}
+	.section-head h3 {
+		margin: 0;
 	}
 	.count {
 		color: var(--text-muted);

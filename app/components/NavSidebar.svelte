@@ -4,6 +4,8 @@
 		{
 			name: 'my_workshop',
 			component: MyWorkshop,
+			persist: true,
+			created: true,
 		},
 		{
 			name: 'browse_workshop',
@@ -29,6 +31,7 @@
 		{
 			name: 'size_analyzer',
 			component: AddonSizeAnalyzer,
+			persist: true,
 		},
 		{
 			name: 'addon_cleaner',
@@ -53,9 +56,12 @@
 
 	export const activeItem = writable(0);
 
-	browseRequest.subscribe(reference => {
-		if (!reference) return;
-		const browse = pagesManifest.findIndex(page => page.component === Browse);
+	const browse = pagesManifest.findIndex(page => page.component === Browse);
+
+	browseRequest.subscribe(request => {
+		if (!request) return;
+		const from = get(activeItem);
+		if (from !== browse) browseOrigin.set({ name: pagesManifest[from].name, back: () => activeItem.set(from) });
 		pages.update(pages => {
 			pages[browse].created = true;
 			return pages;
@@ -63,10 +69,14 @@
 		activeItem.set(browse);
 	});
 
+	activeItem.subscribe(item => {
+		if (item !== browse) browseOrigin.set(null);
+	});
+
 </script>
 
 <script>
-	import { writable } from 'svelte/store';
+	import { get, writable } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
 	import Sidebar from './Sidebar.svelte';
 
@@ -81,7 +91,7 @@
 	import SidebarItem from './SidebarItem.svelte';
 	import Logo from './Logo.svelte';
 	import ReportProblem from './ReportProblem.svelte';
-	import { browseRequest } from '../browse.js';
+	import { browseOrigin, browseRequest } from '../browse.js';
 
 	function selectPage(page) {
 		$pages[page].created = true;

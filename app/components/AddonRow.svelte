@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
 	import { registerContext } from './ContextMenu.svelte';
+	import QuickSubscribe from './QuickSubscribe.svelte';
 	import { formatDate, formatPercent, formatSize } from '../format.js';
 	import { ADDON_TYPES, KIND_TAGS, authors, tagLabel } from '../browse.js';
 
@@ -14,6 +15,7 @@
 	export let selecting = false;
 	export let selected = false;
 	export let badge = null;
+	export let quickSubscribe = false;
 
 	let row;
 	onMount(() => registerContext(row, () => [Promise.resolve(workshop), Promise.resolve(null), false, contextItems?.()]));
@@ -46,6 +48,7 @@
 			{/if}
 		</span>
 	{/each}
+	{#if quickSubscribe}<span class="quick">{#if !selecting}<QuickSubscribe {workshop}/>{/if}</span>{/if}
 </div>
 
 <style>
@@ -75,6 +78,10 @@
 		display: flex;
 		align-items: center;
 		gap: .6rem;
+	}
+	.addon-row > .quick {
+		display: flex;
+		overflow: visible;
 	}
 	.text {
 		overflow: hidden;

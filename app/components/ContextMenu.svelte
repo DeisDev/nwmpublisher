@@ -84,7 +84,7 @@
 	import CircleMinus from '@lucide/svelte/icons/circle-minus';
 	import ListPlus from '@lucide/svelte/icons/list-plus';
 	import { chooseCollections } from '../collections.js';
-	import { loadSubscribed, subscribedIds, subscribeItems, unsubscribeItems, browseJob } from '../browse.js';
+	import { loadSubscribed, showInBrowse, subscribedIds, subscribeItems, unsubscribeItems, browseJob } from '../browse.js';
 	import CirclePlus from '@lucide/svelte/icons/circle-plus';
 	import { addonName, addonRemoval, removalJob, requestDelete, requestUnsubscribe } from '../addon-removal.js';
 	import { settings } from '../settings.js';
@@ -335,9 +335,13 @@ import { playSound } from '../sounds';
 		{#if workshop && !items}
 			{#await workshop then workshop}
 				{#if workshop && !workshop.dead}
-					<a class="nostyle" href="https://steamcommunity.com/sharedfiles/filedetails/?id={workshop.id}" target="_blank" tabindex="-1">
+					<ContextMenuItem click={() => showInBrowse(workshop.id)}>
+						<span slot="icon"><Eye class="icon" size="1rem"/></span>
+						<span slot="label">{$_('open')}</span>
+					</ContextMenuItem>
+					<a class="nostyle" href="https://steamcommunity.com/sharedfiles/filedetails/?id={workshop.id}" target="_blank" tabindex="-1" data-external>
 						<ContextMenuItem>
-							<span slot="icon"><svelte:component this={$settings.open_workshop_pages_in_app ? Eye : LinkOut} class="icon" size="1rem"/></span>
+							<span slot="icon"><LinkOut class="icon" size="1rem"/></span>
 							<span slot="label">{$_('steam_workshop')}</span>
 						</ContextMenuItem>
 					</a>
