@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- New Browse page to search the whole Garry's Mod Workshop, filter results, open item details, and subscribe, download, or add items to collections.
+- New Browse page to search the whole Garry's Mod Workshop, find items that require a given addon, filter results by colour-coded tags and more, open item details, and subscribe, download, or add items to collections.
 - Workshop links now open in the Browse page. A new setting opens them in your web browser instead, and Ctrl-click or middle-click opens a link the other way.
 - Subscribing offers to subscribe to an item's missing required items too, and unsubscribing warns you when your other addons need the item.
 - New Missing requirements filter in Installed Addons, with a button that subscribes to the missing items.
@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Success and failure messages now appear in one place at the bottom of the window instead of inside each page. Failure messages stay until you close them.
 - The Collections menu now adds items to and removes them from several collections at once.
 - Arrow keys, Page Up, Page Down, Home, and End now move through My Workshop, Collections, and Installed Addons without clicking an item first.
+- Refreshed the look of the sidebar, tooltips, and Downloader.
 
 ## [3.8.1] - 2026-11-10
 

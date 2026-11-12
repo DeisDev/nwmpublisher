@@ -27,6 +27,7 @@
 	export let reference;
 	export let onOpen;
 	export let onAuthor;
+	export let onRequiring;
 	export let onLoaded = null;
 
 	let details = null;
@@ -142,9 +143,10 @@
 				<p class="author">
 					{$_('browse_by', { values: { name: author?.name ?? workshop.steamid64 } })}
 					{#if workshop.steamid64}<button type="button" class="plain" on:click={() => onAuthor({ id: workshop.steamid64, name: author?.name ?? null })}>{$_('browse_more_by_author')}</button>{/if}
+					{#if !collection}<button type="button" class="plain" on:click={() => onRequiring(workshop)}>{$_('browse_find_requiring')}</button>{/if}
 				</p>
 				{#if tags.length}
-					<div class="tags">{#each tags as tag}<span class="chip">{tagLabel(tag)}</span>{/each}</div>
+					<div class="tags">{#each tags as tag}<span class="tag-chip" data-tag={tag.toLowerCase()}>{tagLabel(tag)}</span>{/each}</div>
 				{/if}
 				<dl class="facts">
 					{#if collection}
@@ -296,13 +298,6 @@
 		flex-wrap: wrap;
 		gap: .35rem;
 		margin-bottom: .75rem;
-	}
-	.chip {
-		padding: .15rem .5rem;
-		border: 1px solid var(--border);
-		border-radius: 4px;
-		background: var(--control);
-		font-size: .8rem;
 	}
 	.facts {
 		display: flex;

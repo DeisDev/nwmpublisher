@@ -17,6 +17,7 @@
 
 <style>
 	item {
+		position: relative;
 		display: flex;
 		padding: .5rem;
 		padding-left: .7rem;
@@ -26,6 +27,12 @@
 		align-items: center;
 		height: calc(1.181em + .5rem + .5rem);
 		max-height: calc(1.181em + .5rem + .5rem);
+		color: var(--text-soft);
+		transition: background-color .12s, color .12s;
+	}
+	item:hover {
+		background-color: var(--fill);
+		color: var(--text);
 	}
 	item > span {
 		flex: 1;
@@ -56,6 +63,16 @@
 	}
 	item.active {
 		background-color: var(--bg-hover);
+		color: var(--text);
+	}
+	item.active::before {
+		content: '';
+		position: absolute;
+		inset-block: .45rem;
+		inset-inline-start: 0;
+		width: 3px;
+		border-radius: 3px;
+		background: var(--neutral);
 	}
 	item:not(:last-child) {
 		margin-bottom: .5rem;

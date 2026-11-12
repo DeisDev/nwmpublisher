@@ -16,7 +16,7 @@
 	}
 
 	const same = (left, right) => left.toLowerCase() === right.toLowerCase();
-	const stateOf = tag => (query.tags.some(value => same(value, tag)) ? 'include' : query.excludedTags.some(value => same(value, tag)) ? 'exclude' : 'off');
+	$: stateOf = tag => (query.tags.some(value => same(value, tag)) ? 'include' : query.excludedTags.some(value => same(value, tag)) ? 'exclude' : 'off');
 
 	function cycleTag(tag) {
 		const state = stateOf(tag);
@@ -45,6 +45,7 @@
 			<input type="checkbox" checked={query.exactPhrase} on:change={event => onChange({ exactPhrase: event.currentTarget.checked })}/>
 			{$_('browse_exact_phrase')}
 		</label>
+		{#if query.kind !== 'collection'}<p class="help">{$_('browse_requires_help')}</p>{/if}
 	</fieldset>
 
 	<fieldset>
@@ -63,6 +64,7 @@
 			{#each ADDON_TYPES as type}
 				<label>
 					<input type="checkbox" checked={query.types.includes(type)} on:change={event => toggleType(type, event.currentTarget.checked)}/>
+					<span class="swatch" data-tag={type.toLowerCase()}></span>
 					{$_('addon_types.' + type)}
 				</label>
 			{/each}
@@ -76,7 +78,7 @@
 			<div class="tags">
 				{#each tags as tag}
 					{@const state = stateOf(tag)}
-					<button type="button" class="tag-filter {state}" aria-label={$_('browse_tag_' + state, { values: { tag: tagLabel(tag) } })} on:click={() => cycleTag(tag)}>
+					<button type="button" class="tag-chip {state}" data-tag={tag.toLowerCase()} aria-label={$_('browse_tag_' + state, { values: { tag: tagLabel(tag) } })} on:click={() => cycleTag(tag)}>
 						{#if state === 'include'}<Check size=".85rem"/>{:else if state === 'exclude'}<X size=".85rem"/>{/if}
 						{tagLabel(tag)}
 					</button>
@@ -180,31 +182,28 @@
 		gap: .35rem;
 		margin-bottom: .3rem;
 	}
-	.tag-filter {
-		display: inline-flex;
-		align-items: center;
+	.tag-chip {
 		gap: .25rem;
 		padding: .25rem .55rem;
-		border: 1px solid var(--border-strong);
-		border-radius: 4px;
-		background: var(--control);
-		color: var(--text);
-		font: inherit;
 		font-size: .85rem;
 		cursor: pointer;
+		transition: background-color .12s, border-color .12s;
 	}
-	.tag-filter:hover {
-		background: var(--control-hover);
+	.tag-chip.off:hover {
+		background: color-mix(in srgb, var(--tag-shade) 32%, transparent);
 	}
-	.tag-filter.include {
-		border-color: var(--neutral);
-		background: var(--neutral-dark);
-		color: #fff;
+	.tag-chip.include:hover {
+		filter: brightness(1.1);
 	}
-	.tag-filter.exclude {
-		border-color: var(--error);
-		color: var(--text-error-soft);
-		text-decoration: line-through;
+	.tag-chip.exclude:hover {
+		background: color-mix(in srgb, var(--error) 15%, transparent);
+	}
+	.swatch {
+		flex-shrink: 0;
+		width: .6rem;
+		height: .6rem;
+		border-radius: 50%;
+		background: var(--tag, var(--text-muted));
 	}
 	.range {
 		display: grid;

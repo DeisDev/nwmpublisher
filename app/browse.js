@@ -47,6 +47,7 @@ export function defaultQuery() {
 		tags: [],
 		matchAll: false,
 		excludedTags: [],
+		requires: [],
 		created: { start: '', end: '' },
 		updated: { start: '', end: '' },
 		sizeMin: '',
@@ -67,6 +68,7 @@ export function normalizeQuery(query) {
 	if (next.kind === 'collection') {
 		next.tags = [];
 		next.excludedTags = [];
+		next.requires = [];
 		next.sizeMin = '';
 		next.sizeMax = '';
 	}
@@ -110,6 +112,7 @@ export function requestFor(query) {
 		request.tags = query.tags;
 		request.matchAll = query.matchAll;
 		request.excludedTags = query.excludedTags;
+		request.requires = query.requires.map(item => item.id);
 		const sizeMin = number(query.sizeMin);
 		const sizeMax = number(query.sizeMax);
 		request.sizeMin = sizeMin == null ? null : Math.round(sizeMin * MIB);
@@ -128,6 +131,7 @@ export function activeFilters(query) {
 	for (const type of query.types) chips.push({ key: 'type:' + type, label: t('addon_types.' + type), clear: { types: without(query.types, type) } });
 	for (const tag of query.tags) chips.push({ key: 'tag:' + tag, label: tagLabel(tag), clear: { tags: without(query.tags, tag) } });
 	for (const tag of query.excludedTags) chips.push({ key: 'not:' + tag, label: t('browse_chip_excluded', { tag: tagLabel(tag) }), clear: { excludedTags: without(query.excludedTags, tag) } });
+	for (const item of query.requires) chips.push({ key: 'requires:' + item.id, label: t('browse_chip_requires', { name: item.title ?? item.id }), clear: { requires: query.requires.filter(other => other !== item) } });
 	if (query.tags.length > 1 && query.matchAll) chips.push({ key: 'all', label: t('browse_match_all'), clear: { matchAll: false } });
 	for (const field of ['created', 'updated']) {
 		const { start, end } = query[field];
@@ -548,6 +552,24 @@ export function openInBrowse(href, link, invert = false) {
 	if (link.closest('modal') && link.dispatchEvent(new CustomEvent('workshoplink', { bubbles: true, cancelable: true }))) return false;
 	showInBrowse(widget?.type === 'workshop' ? widget.id : null);
 	return true;
+}
+
+function workshopId(value) {
+	if (/^\d{1,20}$/.test(value)) return value;
+	return value.match(/steamcommunity\.com\/(?:sharedfiles|workshop)\/filedetails\/?\?(?:.*&)?id=(\d+)/i)?.[1] ?? null;
+}
+
+/** Splits `requires:<ID or link>` words out of search text; `invalid` holds the values that are neither. */
+export function splitRequires(text) {
+	const ids = [];
+	const invalid = [];
+	const rest = text.replace(/(^|\s)requires:(\S*)/gi, (_match, space, value) => {
+		const id = workshopId(value);
+		if (id && !/^0+$/.test(id)) ids.push(id);
+		else invalid.push(value);
+		return space;
+	});
+	return { text: rest.replace(/\s+/g, ' ').trim(), ids, invalid };
 }
 
 /** A pasted link or bare item ID opens that item instead of searching. */

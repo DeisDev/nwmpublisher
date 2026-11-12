@@ -27,6 +27,7 @@ const TEXT_MAX_BYTES: usize = 256;
 const TAG_MAX_BYTES: usize = 64;
 const TAGS_MAX: usize = 32;
 const EXCLUDED_IDS_MAX: usize = 5000;
+const REQUIRES_MAX: usize = 10;
 const USERS_MAX: usize = 100;
 const SUPERSEDED: &str = "A newer search replaced this one.";
 const USER_PAGE_PREFIX: &str = "page:";
@@ -165,6 +166,8 @@ pub struct BrowseQuery {
 	status: BrowseStatus,
 	#[serde(default)]
 	exclude_ids: Vec<String>,
+	#[serde(default)]
+	requires: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -284,6 +287,13 @@ struct Plan {
 	min_rating: Option<f32>,
 	status: BrowseStatus,
 	exclude_ids: HashSet<PublishedFileId>,
+	requires: HashSet<PublishedFileId>,
+}
+
+fn item_ids(ids: &[String]) -> Result<HashSet<PublishedFileId>, String> {
+	ids.iter()
+		.map(|id| id.parse().ok().filter(|id| *id != 0).map(PublishedFileId).ok_or_else(|| format!("{id:?} is not a Workshop item ID.")))
+		.collect()
 }
 
 impl Plan {
@@ -347,11 +357,14 @@ impl Plan {
 		if query.exclude_ids.len() > EXCLUDED_IDS_MAX {
 			return Err("Too many items to skip. Search again.".into());
 		}
-		let exclude_ids = query
-			.exclude_ids
-			.iter()
-			.map(|id| id.parse().ok().filter(|id| *id != 0).map(PublishedFileId).ok_or_else(|| format!("{id:?} is not a Workshop item ID.")))
-			.collect::<Result<_, _>>()?;
+		if query.requires.len() > REQUIRES_MAX {
+			return Err(format!("Search for up to {REQUIRES_MAX} required items at once."));
+		}
+		if query.kind == BrowseKind::Collection && !query.requires.is_empty() {
+			return Err("Collections cannot be filtered by required items.".into());
+		}
+		let exclude_ids = item_ids(&query.exclude_ids)?;
+		let requires = item_ids(&query.requires)?;
 		// Steam searches the title and description together, and only in queries over all items, so anything else is matched here.
 		let steam_matches = query.source == BrowseSource::Everyone && query.text_scope == TextScope::Any && !query.exact_phrase;
 		let words: Vec<String> = text.split_whitespace().map(str::to_lowercase).collect();
@@ -383,6 +396,7 @@ impl Plan {
 			min_rating: query.min_rating,
 			status: query.status,
 			exclude_ids,
+			requires,
 		})
 	}
 
@@ -449,6 +463,7 @@ impl Plan {
 			.to_lowercase()
 		};
 		kind && !self.exclude_ids.contains(&workshop.id)
+			&& self.requires.iter().all(|id| item.children.contains(id))
 			&& (self.types.is_empty() || self.types.iter().any(tagged))
 			&& tags
 			&& !self.excluded_tags.iter().any(tagged)
@@ -694,10 +709,10 @@ fn read_item(query: &QueryHandle, index: u32, children: bool, previews: bool) ->
 	}))
 }
 
-fn read_page(query: &QueryHandle, completed: &sys::SteamUGCQueryCompleted_t) -> Result<Vec<ScannedItem>, String> {
+fn read_page(query: &QueryHandle, completed: &sys::SteamUGCQueryCompleted_t, children: bool) -> Result<Vec<ScannedItem>, String> {
 	let mut items = Vec::with_capacity(completed.m_unNumResultsReturned as usize);
 	for index in 0..completed.m_unNumResultsReturned {
-		items.extend(read_item(query, index, false, false)?);
+		items.extend(read_item(query, index, children, false)?);
 	}
 	Ok(items)
 }
@@ -730,6 +745,9 @@ fn fetch_page(plan: &Plan, position: &Position) -> Result<ScannedPage, String> {
 			query.option(sys::SteamAPI_ISteamUGC_SetAllowCachedResponse(ugc, handle, 60), "cache setting")?;
 			if plan.long_descriptions() {
 				query.option(sys::SteamAPI_ISteamUGC_SetReturnLongDescription(ugc, handle, true), "description request")?;
+			}
+			if !plan.requires.is_empty() {
+				query.option(sys::SteamAPI_ISteamUGC_SetReturnChildren(ugc, handle, true), "required items request")?;
 			}
 			if let Some(kind) = &kind {
 				query.option(sys::SteamAPI_ISteamUGC_AddRequiredTag(ugc, handle, kind.as_ptr()), "item type")?;
@@ -766,7 +784,7 @@ fn fetch_page(plan: &Plan, position: &Position) -> Result<ScannedPage, String> {
 			Ok(())
 		},
 		|query, completed| {
-			let items = read_page(query, completed)?;
+			let items = read_page(query, completed, !plan.requires.is_empty())?;
 			let returned = completed.m_unNumResultsReturned;
 			let next = match position {
 				Position::Page(page) => ((*page as u64) * (RESULTS_PER_PAGE as u64) < completed.m_unTotalMatchingResults as u64 && returned > 0).then(|| Position::Page(page + 1)),
@@ -1228,6 +1246,20 @@ mod tests {
 		assert!(!matches(&with(serde_json::json!({"text": "tools wire", "exactPhrase": true})), &addon));
 		assert!(with(serde_json::json!({"text": "", "exactPhrase": true, "textScope": "title"})).words.is_empty());
 		assert!(query(serde_json::json!({"kind": "addon", "source": "everyone", "sort": "newest", "textScope": "tags"})).is_err());
+	}
+
+	#[test]
+	fn required_items_must_all_be_children() {
+		let mut addon = item(&["Addon", "tool"], false);
+		addon.children = vec![PublishedFileId(160250458), PublishedFileId(104691717)];
+		let with = |requires: serde_json::Value| query(serde_json::json!({"kind": "addon", "source": "everyone", "sort": "newest", "requires": requires}));
+		assert!(matches(&with(serde_json::json!(["104691717"])).unwrap(), &addon));
+		assert!(matches(&with(serde_json::json!(["104691717", "160250458"])).unwrap(), &addon));
+		assert!(!matches(&with(serde_json::json!(["104691717", "1"])).unwrap(), &addon));
+		assert!(!matches(&with(serde_json::json!(["104691717"])).unwrap(), &item(&["Addon"], false)));
+		assert!(with(serde_json::json!(["0"])).is_err());
+		assert!(with(serde_json::json!(["wiremod"])).is_err());
+		assert!(query(serde_json::json!({"kind": "collection", "source": "everyone", "sort": "newest", "requires": ["104691717"]})).is_err());
 	}
 
 	#[test]

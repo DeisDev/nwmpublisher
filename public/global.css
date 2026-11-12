@@ -212,14 +212,27 @@ body::-webkit-scrollbar, .hide-scroll::-webkit-scrollbar { /* WebKit */
 	background-color: var(--scrollbar-thumb-hover);
 }
 
+::selection {
+	background: hsla(var(--neutral-custom), 50%, .4);
+}
+
+button, select, input, textarea {
+	transition: background-color .12s, border-color .12s, color .12s, box-shadow .12s;
+}
+@media (prefers-reduced-motion: reduce) {
+	button, select, input, textarea {
+		transition: none;
+	}
+}
+
 .icon, .icon + *, .icon ~ * {
 	vertical-align: middle;
 }
 
 .tippy-box {
 	background-color: #0F0F0F !important;
-	border-top-left-radius: 5px !important;
-	border-top-right-radius: 5px !important;
+	border-radius: 5px !important;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
 	font-size: .9em !important;
 }
 .tippy-box[data-placement^='top'] > .tippy-arrow::before {
@@ -240,7 +253,7 @@ body::-webkit-scrollbar, .hide-scroll::-webkit-scrollbar { /* WebKit */
 
 .tag {
 	position: relative;
-	color: black;
+	color: var(--tag-text, #000);
 	padding: 2px;
 	padding-right: 13px;
 	padding-left: 5px;
@@ -259,7 +272,7 @@ body::-webkit-scrollbar, .hide-scroll::-webkit-scrollbar { /* WebKit */
 	height: 0;
 	border-style: solid;
 	border-width: 9px 0 9px 9px;
-	border-color: transparent transparent transparent #fff;
+	border-color: transparent transparent transparent var(--tag, #fff);
 	-webkit-transform: rotate(360deg);
 }
 .tag::before {
@@ -269,7 +282,7 @@ body::-webkit-scrollbar, .hide-scroll::-webkit-scrollbar { /* WebKit */
 	right: 9px;
 	width: calc(100% - 9px);
 	height: 100%;
-	background-color: #fff;
+	background-color: var(--tag, #fff);
 	z-index: -1;
 }
 .tag:not(:last-child) {
@@ -297,86 +310,65 @@ body::-webkit-scrollbar, .hide-scroll::-webkit-scrollbar { /* WebKit */
 	outline: 2px solid #127cff;
 }
 
-.tag.addon { color: #fff !important }
-.tag.addon::before { background-color: #006cc7 !important }
-.tag.addon::after { border-left-color: #006cc7 !important }
+.tag.addon, [data-tag='addon'] { --tag: #006cc7; --tag-text: #fff }
+.tag.weapon, [data-tag='weapon'] { --tag: #8c0101; --tag-text: #fff }
+.tag.servercontent, [data-tag='servercontent'] { --tag: #000; --tag-text: #fff }
+.tag.fun, [data-tag='fun'] { --tag: #368c01; --tag-text: #fff }
+.tag.roleplay, [data-tag='roleplay'] { --tag: #00d4d4; --tag-text: #000 }
+.tag.realism, [data-tag='realism'] { --tag: #8400d6; --tag-text: #fff }
+.tag.vehicle, [data-tag='vehicle'] { --tag: #5d3131; --tag-text: #fff }
+.tag.movie, [data-tag='movie'] { --tag: #47ab94; --tag-text: #fff }
+.tag.cartoon, [data-tag='cartoon'] { --tag: #642865; --tag-text: #fff }
+.tag.scenic, [data-tag='scenic'] { --tag: #fb9e9e; --tag-text: #000 }
+.tag.water, [data-tag='water'] { --tag: #4754ab; --tag-text: #fff }
+.tag.comic, [data-tag='comic'] { --tag: #c2185b; --tag-text: #fff }
+.tag.build, [data-tag='build'] { --tag: #3e6e79; --tag-text: #fff }
+.tag.tool, [data-tag='tool'] { --tag: #b98528; --tag-text: #fff }
+.tag.gamemode, [data-tag='gamemode'] { --tag: #88cc86; --tag-text: #000 }
+.tag.map, [data-tag='map'] { --tag: #804100; --tag-text: #fff }
+.tag.npc, [data-tag='npc'] { --tag: #fdfa8e; --tag-text: #000 }
+.tag.effects, [data-tag='effects'] { --tag: #27c500; --tag-text: #000 }
+.tag.model, [data-tag='model'] { --tag: #80007c; --tag-text: #fff }
+.tag.entity, [data-tag='entity'] { --tag: #d35400; --tag-text: #fff }
+.tag.other, [data-tag='other'] { --tag: #6b7280; --tag-text: #fff }
 
-.tag.weapon { color: #fff !important }
-.tag.weapon::before { background-color: #8c0101 !important }
-.tag.weapon::after { border-left-color: #8c0101 !important }
-
-.tag.servercontent { color: #fff !important }
-.tag.servercontent::before { background-color: #000 !important }
-.tag.servercontent::after { border-left-color: #000 !important }
-
-.tag.fun { color: #fff !important }
-.tag.fun::before { background-color: #368c01 !important }
-.tag.fun::after { border-left-color: #368c01 !important }
-
-.tag.roleplay { color: #000 !important }
-.tag.roleplay::before { background-color: #00d4d4 !important }
-.tag.roleplay::after { border-left-color: #00d4d4 !important }
-
-.tag.realism { color: #fff !important }
-.tag.realism::before { background-color: #8400d6 !important }
-.tag.realism::after { border-left-color: #8400d6 !important }
-
-.tag.vehicle { color: #fff !important }
-.tag.vehicle::before { background-color: #5d3131 !important }
-.tag.vehicle::after { border-left-color: #5d3131 !important }
-
-.tag.movie { color: #fff !important }
-.tag.movie::before { background-color: #47ab94 !important }
-.tag.movie::after { border-left-color: #47ab94 !important }
-
-.tag.cartoon { color: #fff !important }
-.tag.cartoon::before { background-color: #642865 !important }
-.tag.cartoon::after { border-left-color: #642865 !important }
-
-.tag.scenic { color: #000 !important }
-.tag.scenic::before { background-color: #fb9e9e !important }
-.tag.scenic::after { border-left-color: #fb9e9e !important }
-
-.tag.water { color: #fff !important }
-.tag.water::before { background-color: #4754ab !important }
-.tag.water::after { border-left-color: #4754ab !important }
-
-.tag.comic { color: #fff !important }
-.tag.comic::before { background-color: #642865 !important }
-.tag.comic::after { border-left-color: #642865 !important }
-
-.tag.build { color: #fff !important }
-.tag.build::before { background-color: #3e6e79 !important }
-.tag.build::after { border-left-color: #3e6e79 !important }
-
-.tag.tool { color: #fff !important }
-.tag.tool::before { background-color: #b98528 !important }
-.tag.tool::after { border-left-color: #b98528 !important }
-
-.tag.gamemode { color: #000 !important }
-.tag.gamemode::before { background-color: #88cc86 !important }
-.tag.gamemode::after { border-left-color: #88cc86 !important }
-
-.tag.map { color: #fff !important }
-.tag.map::before { background-color: #804100 !important }
-.tag.map::after { border-left-color: #804100 !important }
-
-.tag.npc { color: #000 !important }
-.tag.npc::before { background-color: #fdfa8e !important }
-.tag.npc::after { border-left-color: #fdfa8e !important }
-
-.tag.effects { color: #000 !important }
-.tag.effects::before { background-color: #27c500 !important }
-.tag.effects::after { border-left-color: #27c500 !important }
-
-.tag.model { color: #fff !important }
-.tag.model::before { background-color: #80007c !important }
-.tag.model::after { border-left-color: #80007c !important }
-
-.tag.entity { color: #fff !important }
-.tag.entity::before { background-color: #d35400 !important }
-.tag.entity::after { border-left-color: #d35400 !important }
-
-.tag.other { color: #fff !important }
-.tag.other::before { background-color: #6b7280 !important }
-.tag.other::after { border-left-color: #6b7280 !important }
+/* Workshop tags in Browse; [data-tag] gives each its colour from the rules above. */
+.tag-chip {
+	--tag-shade: var(--tag, #6b7280);
+	display: inline-flex;
+	align-items: center;
+	gap: .35rem;
+	padding: .2rem .55rem;
+	border: 1px solid color-mix(in srgb, var(--tag-shade) 60%, transparent);
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--tag-shade) 16%, transparent);
+	color: var(--text);
+	font: inherit;
+	font-size: .8rem;
+	line-height: 1.3;
+}
+.tag-chip::before {
+	content: '';
+	flex-shrink: 0;
+	width: .55em;
+	height: .55em;
+	border-radius: 50%;
+	background: var(--tag-shade);
+}
+.tag-chip.include {
+	border-color: var(--tag-shade);
+	background: var(--tag-shade);
+	color: var(--tag-text, #fff);
+}
+.tag-chip.include::before {
+	display: none;
+}
+.tag-chip.exclude {
+	border-color: var(--error);
+	background: none;
+	color: var(--text-error-soft);
+	text-decoration: line-through;
+}
+.tag-chip.exclude::before {
+	display: none;
+}

@@ -34,7 +34,7 @@
 	import { chooseCollections, workshopUrl } from '../collections.js';
 	import {
 		COLUMNS, KINDS, KIND_TAGS, TREND_DAYS, activeFilters, browseJob, browseOrigin, browsePager, browseRequest, defaultQuery, downloadItems, installedIds, itemReference,
-		loadSubscribed, normalizeQuery, sortsFor, stopJob, subscribeItems, subscribedIds, unsubscribeItems,
+		loadSubscribed, normalizeQuery, sortsFor, splitRequires, stopJob, subscribeItems, subscribedIds, unsubscribeItems,
 	} from '../browse.js';
 
 	let query = defaultQuery();
@@ -124,10 +124,23 @@
 			openItem(reference);
 			return;
 		}
-		if (searchText.trim() === query.text.trim()) return;
-		const patch = { text: searchText };
-		if (searchText.trim() && !query.text.trim() && query.source === 'everyone' && query.sort === 'popular') patch.sort = 'relevance';
-		update(patch);
+		const { text, ids, invalid } = splitRequires(searchText);
+		if (invalid.length || (ids.length && query.kind === 'collection')) {
+			searchInput.setCustomValidity($_(invalid.length ? 'browse_requires_invalid' : 'browse_requires_collections'));
+			searchInput.reportValidity();
+			return;
+		}
+		const patch = {};
+		if (ids.length) {
+			const known = new Set(query.requires.map(item => item.id));
+			patch.requires = [...query.requires, ...[...new Set(ids)].filter(id => !known.has(id)).map(id => ({ id, title: null }))];
+			searchText = text;
+		}
+		if (text !== query.text.trim()) {
+			patch.text = text;
+			if (text && !query.text.trim() && query.source === 'everyone' && query.sort === 'popular') patch.sort = 'relevance';
+		}
+		if (Object.keys(patch).length) update(patch);
 	}
 
 	function searchKeydown(event) {
@@ -147,7 +160,9 @@
 
 	function onSearchInput() {
 		clearTimeout(searchTimer);
-		searchTimer = setTimeout(applySearch, 400);
+		searchInput.setCustomValidity('');
+		// requires: values are applied on Enter, so a half-typed ID is not searched for.
+		if (!/(^|\s)requires:/i.test(searchText)) searchTimer = setTimeout(applySearch, 400);
 	}
 
 	function setView(value) {
@@ -281,6 +296,12 @@
 		if (!filtersOpen) toggleFilters();
 	}
 
+	function showRequiring(workshop) {
+		stack = [];
+		searchText = '';
+		update({ kind: query.kind === 'collection' ? 'addon' : query.kind, requires: [{ id: String(workshop.id), title: workshop.title }], text: '' });
+	}
+
 	async function onClick(event, workshop) {
 		const item = await workshop;
 		if (item) openItem(String(item.id), item.title);
@@ -396,7 +417,7 @@
 					</select>
 				{/if}
 				<button type="button" class:active={filtersOpen} aria-pressed={filtersOpen} on:click={toggleFilters}>
-					<SlidersHorizontal size="1rem"/>{$_('workshop_filters')}{#if chips.length} ({chips.length}){/if}
+					<SlidersHorizontal size="1rem"/>{$_('workshop_filters')}{#if chips.length}{` (${chips.length})`}{/if}
 				</button>
 				<div class="view" role="group" aria-label={$_('browse_view')}>
 					<button type="button" class="icon" class:active={view === 'grid'} aria-pressed={view === 'grid'} title={$_('browse_view_grid')} aria-label={$_('browse_view_grid')} on:click={() => setView('grid')}><LayoutGrid size="1rem"/></button>
@@ -487,7 +508,7 @@
 		{#if opened}
 			<div class="detail-area">
 				{#key opened.reference + ':' + stack.length}
-					<BrowseDetail reference={opened.reference} onOpen={reference => openItem(reference)} onAuthor={showAuthor} onLoaded={workshop => itemLoaded(stack.length - 1, workshop)}/>
+					<BrowseDetail reference={opened.reference} onOpen={reference => openItem(reference)} onAuthor={showAuthor} onRequiring={showRequiring} onLoaded={workshop => itemLoaded(stack.length - 1, workshop)}/>
 				{/key}
 			</div>
 		{/if}

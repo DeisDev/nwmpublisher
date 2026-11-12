@@ -23,7 +23,7 @@
 	$: numberLocale = $locale === 'kr' ? 'ko' : ($locale ?? 'en');
 	$: types = workshop.tags.filter(tag => ADDON_TYPES.some(type => type.toLowerCase() === tag.toLowerCase()));
 	$: otherTags = workshop.tags.filter(tag => !KIND_TAGS.has(tag.toLowerCase()) && !types.includes(tag));
-	$: kindLabel = workshop.kind === 'addon' && types.length ? types.map(tagLabel).join(', ') : $_('browse_kind_' + (workshop.kind ?? 'addon'));
+	$: typeTags = workshop.kind === 'addon' ? types : [];
 	$: author = $authors.get(workshop.steamid64);
 	$: subscribed = $subscribedIds.has(String(workshop.id));
 </script>
@@ -35,10 +35,10 @@
 		<span class="text select">{workshop.title}</span>
 	</span>
 	{#each columns as column}
-		<span class={column}>
+		<span class={column} title={column === 'tags' ? otherTags.map(tagLabel).join(', ') : column === 'type' ? typeTags.map(tagLabel).join(', ') || null : null}>
 			{#if column === 'author'}{author?.name ?? (author === null ? workshop.steamid64 : '…')}
-			{:else if column === 'type'}{kindLabel}
-			{:else if column === 'tags'}{otherTags.map(tagLabel).join(', ')}
+			{:else if column === 'type'}{#if typeTags.length}{#each typeTags as tag}<span class="tag-chip" data-tag={tag.toLowerCase()}>{tagLabel(tag)}</span>{/each}{:else}{$_('browse_kind_' + (workshop.kind ?? 'addon'))}{/if}
+			{:else if column === 'tags'}{#each otherTags as tag}<span class="tag-chip" data-tag={tag.toLowerCase()}>{tagLabel(tag)}</span>{/each}
 			{:else if column === 'size'}{workshop.fileSize == null ? '' : formatSize(workshop.fileSize, $locale)}
 			{:else if column === 'subscribers'}{workshop.subscriptions.toLocaleString(numberLocale)}
 			{:else if column === 'favorites'}{workshop.favorites?.toLocaleString(numberLocale) ?? ''}
@@ -112,6 +112,19 @@
 	}
 	.author, .tags, .created, .updated {
 		color: var(--text-soft);
+	}
+	/* Chips that do not fit wrap onto a hidden second line, so none is cut in half. */
+	.type, .tags {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: .3rem;
+		height: 1.3rem;
+	}
+	.tag-chip {
+		flex-shrink: 0;
+		padding: .05rem .4rem;
+		font-size: .75rem;
 	}
 	.select-toggle {
 		display: flex;
