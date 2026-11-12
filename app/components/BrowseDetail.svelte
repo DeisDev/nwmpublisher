@@ -1,7 +1,8 @@
 <script>
 	import { _, locale } from 'svelte-i18n';
 	import { invoke } from '@tauri-apps/api/core';
-	import { onDestroy } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
+	import { takesNavigationKey } from '../addon-selection.js';
 	import ThumbsUp from '@lucide/svelte/icons/thumbs-up';
 	import ThumbsDown from '@lucide/svelte/icons/thumbs-down';
 	import Star from '@lucide/svelte/icons/star';
@@ -36,6 +37,20 @@
 	let favoriting = false;
 	let destroyed = false;
 	onDestroy(() => destroyed = true);
+
+	// The page holds focus so the browser's own scrolling keys work; keys pressed outside it are brought back here.
+	let detail;
+	onMount(() => detail.focus({ preventScroll: true }));
+
+	function onKeydown(event) {
+		if (!takesNavigationKey(event, detail)) return;
+		const page = detail.clientHeight * .875;
+		const top = { ArrowUp: -40, ArrowDown: 40, PageUp: -page, PageDown: page, Home: -detail.scrollHeight, End: detail.scrollHeight }[event.key];
+		if (top === undefined) return;
+		event.preventDefault();
+		detail.focus({ preventScroll: true });
+		detail.scrollBy({ top });
+	}
 
 	$: load(reference);
 	$: workshop = details?.workshop;
@@ -109,7 +124,9 @@
 	}
 </script>
 
-<div class="detail scrollbar">
+<svelte:window on:keydown={onKeydown}/>
+
+<div class="detail scrollbar" tabindex="-1" bind:this={detail}>
 	{#if loading}
 		<p class="status" role="status"><Loading inline size="1rem"/> {$_('browse_loading_item')}</p>
 	{:else if error}
@@ -230,6 +247,9 @@
 		height: 100%;
 		overflow-y: auto;
 		padding: 1rem 1.5rem 1.5rem;
+	}
+	.detail:focus {
+		outline: none;
 	}
 	.status {
 		display: flex;

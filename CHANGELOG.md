@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - My Workshop, Installed Addons, and the Addon Size Analyzer keep your place when you switch pages.
 - Success and failure messages now appear in one place at the bottom of the window instead of inside each page. Failure messages stay until you close them.
 - The Collections menu now adds items to and removes them from several collections at once.
+- Arrow keys, Page Up, Page Down, Home, and End now move through My Workshop, Collections, and Installed Addons without clicking an item first.
 
 ## [3.8.1] - 2026-11-10
 

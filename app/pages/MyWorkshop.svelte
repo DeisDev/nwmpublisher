@@ -130,8 +130,10 @@
 		if (event.key !== 'Escape') return;
 		event.preventDefault();
 		if (query) query = '';
-		else searchInput.blur();
+		else scroller?.focusCurrent();
 	}
+
+	let scroller;
 
 	let updatingAddon = writable(null);
 	let preparePublish = writable(false);
@@ -212,7 +214,7 @@
 		</p>
 	{/if}
 	<div class="results">
-		<AddonScroller {next} onClick={editPublishedAddon} onNewAddonClick={togglePreparePublish}/>
+		<AddonScroller bind:this={scroller} {next} onClick={editPublishedAddon} onNewAddonClick={togglePreparePublish} label={$_('my_workshop')}/>
 	</div>
 </section>
 

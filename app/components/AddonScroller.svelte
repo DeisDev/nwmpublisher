@@ -9,7 +9,7 @@
 	import Dead from "./Dead.svelte";
 	import Loading from "./Loading.svelte";
 	import { addonName } from "../addon-removal.js";
-	import { moveIndex } from "../addon-selection.js";
+	import { entryIndex, moveIndex, takesNavigationKey } from "../addon-selection.js";
 
 	export let next;
 	export let onClick = null;
@@ -44,6 +44,13 @@
 	let animateChanges = true;
 
 	const key = addon => addon.installed?.path ?? addon.workshop?.id;
+
+	// The "new addon" card is the first option when shown, so option indexes are addon indexes plus `lead`.
+	const NEW_ADDON = Symbol();
+	$: lead = onNewAddonClick ? 1 : 0;
+	$: count = addons.length + lead;
+	const addonAt = index => addons[index - lead];
+	const keyAt = index => (index < lead ? NEW_ADDON : key(addons[index - lead]));
 
 	$: rowTemplate = `2.5rem minmax(12rem, 3fr) ${columns.map(column => (column === 'tags' || column === 'author' ? 'minmax(7rem, 1.5fr)' : 'minmax(5.5rem, 1fr)')).join(' ')}${quickSubscribe ? ' 1.75rem' : ''}`;
 
@@ -127,7 +134,7 @@
 		const hadFocus = !!listbox?.contains(document.activeElement);
 		const focusedIndex = indexOf(focusKey);
 		const remaining = addons.filter(addon => !gone.has(key(addon)));
-		if (gone.has(focusKey)) focusKey = remaining.length ? key(remaining[Math.min(Math.max(focusedIndex, 0), remaining.length - 1)]) : null;
+		if (gone.has(focusKey)) focusKey = remaining.length ? key(remaining[Math.min(Math.max(focusedIndex - lead, 0), remaining.length - 1)]) : null;
 		total = Math.max(total - (addons.length - remaining.length), 0);
 		replaceAddons(remaining, true);
 		if (hadFocus) restoreFocus(focusedIndex);
@@ -148,15 +155,19 @@
 	let anchorKey = null;
 	let openRequested = false;
 
-	const indexOf = path => (path == null ? -1 : addons.findIndex(addon => key(addon) === path));
-	$: focusIndex = Math.max(addons.findIndex(addon => key(addon) === focusKey), 0);
+	function indexOf(path) {
+		if (path === NEW_ADDON) return lead - 1;
+		const index = path == null ? -1 : addons.findIndex(addon => key(addon) === path);
+		return index < 0 ? -1 : index + lead;
+	}
+	$: focusIndex = (addons, lead, Math.max(indexOf(focusKey), 0));
 	$: selecting = !!$selection?.active;
 	$: selected = $selection?.items;
 	$: if (!selecting) anchorKey = null;
 
 	// Cards fading out stay in the DOM as inert elements until their transition ends.
 	function options() {
-		return listbox ? [...listbox.children].filter(option => !option.inert) : [];
+		return listbox ? [...listbox.children].filter(option => option.getAttribute('role') === 'option' && !option.inert) : [];
 	}
 
 	function optionAt(index) {
@@ -166,27 +177,28 @@
 	function focusOption(index) {
 		const option = optionAt(index);
 		if (!option) return;
-		focusKey = key(addons[index]);
+		focusKey = keyAt(index);
 		option.focus({ preventScroll: true });
 		option.scrollIntoView({ block: 'nearest' });
 	}
 
 	async function restoreFocus(previousIndex) {
 		await tick();
-		if (!addons.length || !listbox || listbox.contains(document.activeElement)) return;
+		if (!count || !listbox || listbox.contains(document.activeElement)) return;
 		const index = indexOf(focusKey);
-		focusOption(index >= 0 ? index : Math.min(Math.max(previousIndex, 0), addons.length - 1));
+		focusOption(index >= 0 ? index : Math.min(Math.max(previousIndex, 0), count - 1));
 	}
 
 	function addRange(fromKey, toIndex) {
 		const fromIndex = indexOf(fromKey);
 		const start = Math.min(fromIndex >= 0 ? fromIndex : toIndex, toIndex);
 		const end = Math.max(fromIndex >= 0 ? fromIndex : toIndex, toIndex);
-		selection.add(addons.slice(start, end + 1).map(addon => [key(addon), addon.installed ?? addon.workshop]));
+		selection.add(addons.slice(Math.max(start - lead, 0), end + 1 - lead).map(addon => [key(addon), addon.installed ?? addon.workshop]));
 	}
 
 	function toggle(index) {
-		const addon = addons[index];
+		const addon = addonAt(index);
+		if (!addon) return;
 		anchorKey = key(addon);
 		selection.toggle(anchorKey, addon.installed ?? addon.workshop);
 	}
@@ -194,14 +206,14 @@
 	function cardClick(event, index, workshop, installed) {
 		if (openRequested || !selection) return onClick?.(event, workshop, installed);
 		if (event.shiftKey) {
-			anchorKey ??= focusKey ?? key(addons[index]);
+			anchorKey ??= focusKey ?? keyAt(index);
 			addRange(anchorKey, index);
 		} else if (selecting || event.ctrlKey || event.metaKey || event.target.closest?.('[data-select-toggle]')) {
 			toggle(index);
 		} else {
 			return onClick?.(event, workshop, installed);
 		}
-		focusKey = key(addons[index]);
+		focusKey = keyAt(index);
 	}
 
 	function cardMousedown(event) {
@@ -227,8 +239,9 @@
 	}
 
 	function onKeydown(event) {
-		if (!addons.length || event.altKey || (event.target !== listbox && event.target.getAttribute('role') !== 'option')) return;
+		if (!count || event.altKey || (event.target !== listbox && event.target.getAttribute('role') !== 'option')) return;
 		const index = focusIndex;
+		const addon = addonAt(index);
 		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
 			event.preventDefault();
 			onSelectAll?.();
@@ -237,8 +250,10 @@
 		switch (event.key) {
 			case ' ':
 				event.preventDefault();
-				if (onQuickLook && !selecting && !event.shiftKey) {
-					if (!event.repeat) onQuickLook(addons[index]);
+				if (onQuickLook && addon && !selecting && !event.shiftKey) {
+					if (!event.repeat) onQuickLook(addon);
+				} else if (!selection || !addon) {
+					if (!event.repeat) openFocused();
 				} else if (event.shiftKey && anchorKey) addRange(anchorKey, index);
 				else toggle(index);
 				return;
@@ -253,24 +268,35 @@
 				return;
 			case 'Delete':
 				event.preventDefault();
-				onDelete?.(addons[index]);
+				if (addon) onDelete?.(addon);
 				return;
 		}
+		move(event, index);
+	}
+
+	// Keys pressed outside the list show the highlight first: arrows on the starting card, other keys one move away from it.
+	function onWindowKeydown(event) {
+		if (!count || !takesNavigationKey(event, listbox)) return;
+		move(event, entryIndex(options(), focusIndex, scroller), event.key.startsWith('Arrow'));
+	}
+
+	function move(event, index, stay = false) {
 		const { columns, pageRows, rtl } = gridMetrics();
-		const target = moveIndex(event.key, index, addons.length, columns, pageRows, rtl);
+		const target = stay ? index : moveIndex(event.key, index, count, columns, pageRows, rtl);
 		if (target === null) return;
 		event.preventDefault();
-		if (event.shiftKey) {
-			anchorKey ??= key(addons[index]);
+		if (event.shiftKey && selection) {
+			anchorKey ??= keyAt(index);
 			addRange(anchorKey, target);
 		}
 		focusOption(target);
-		if (target >= addons.length - columns && hasMore() && !loading) fetchNext();
+		if (target < columns) scroller.scrollTop = 0;
+		if (target >= count - columns && hasMore() && !loading) fetchNext();
 	}
 
 	function onFocusin(event) {
 		const index = options().indexOf(event.target);
-		if (addons[index]) focusKey = key(addons[index]);
+		if (index >= 0 && index < count) focusKey = keyAt(index);
 	}
 
 	export function focusCurrent() {
@@ -287,16 +313,22 @@
 	}
 </script>
 
+<svelte:window on:keydown={onWindowKeydown}/>
+
 <main class="scrollbar" on:scroll={infiniScroll} bind:this={scroller}>
 	{#if more == null && addons.length !== 0 && total !== 0 && addons.length !== total}
 		<p id="amount">{$_('showing_num_addons', { values: { num: addons.length.toLocaleString(), total: total.toLocaleString() }})}</p>
 	{/if}
 
 	{#if onNewAddonClick}
-		<div id="grid">
-			<Addon newAddon={true} onClick={onNewAddonClick}/>
-			{#each addons as addon (key(addon))}
-				<Addon {onClick} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
+		<div id="grid" role="listbox" aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
+			<div class="option" role="option" aria-selected="false" aria-label={$_('publish_new')} tabindex={focusIndex === 0 ? 0 : -1}>
+				<Addon newAddon={true} onClick={onNewAddonClick}/>
+			</div>
+			{#each addons as addon, index (key(addon))}
+				<div class="option" role="option" aria-selected="false" aria-label={addonName(addon.workshop, addon.installed)} tabindex={index + 1 === focusIndex ? 0 : -1} on:contextmenu={keyboardMenu}>
+					<Addon {onClick} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
+				</div>
 			{/each}
 			{#if !loaded}
 				<Loading size="2rem"/>
@@ -317,7 +349,7 @@
 	{:else if addons.length === 0}
 		<Dead size="2rem"/>
 		<div id="error">{emptyMessage ?? $_('ERR_NO_ADDONS_FOUND')}</div>
-	{:else if selection}
+	{:else}
 		{#if view === 'list'}
 			<div class="list-head" style:grid-template-columns={rowTemplate} aria-hidden="true">
 				<span></span><span>{$_('browse_column_title')}</span>
@@ -325,38 +357,19 @@
 				{#if quickSubscribe}<span></span>{/if}
 			</div>
 		{/if}
-		<div id="grid" class:list={view === 'list'} role="listbox" aria-multiselectable="true" aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
+		<div id="grid" class:list={view === 'list'} role="listbox" aria-multiselectable={selection ? 'true' : null} aria-label={label} tabindex="-1" bind:this={listbox} on:keydown={onKeydown} on:focusin={onFocusin}>
 			{#each addons as addon, index (key(addon))}
 				<div class="option" role="option" aria-selected={!!selected?.has(key(addon))} aria-label={addonName(addon.workshop, addon.installed)} aria-setsize={total} aria-posinset={index + 1} tabindex={index === focusIndex ? 0 : -1} on:mousedown={cardMousedown} on:contextmenu={keyboardMenu} animate:flip={{ duration: animateChanges ? 200 : 0 }} out:fade={{ duration: animateChanges ? 150 : 0 }}>
 					{#if view === 'list'}
 						<AddonRow onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} {selecting} selected={!!selected?.has(key(addon))} workshop={addon.workshop} {columns} template={rowTemplate} {quickSubscribe} {...(extra?.(addon) ?? {})}/>
 					{:else}
-						<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={true} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null} {quickSubscribe} {...(extra?.(addon) ?? {})}/>
+						<Addon onClick={(event, workshop, installed) => cardClick(event, index, workshop, installed)} contextItems={contextItems && (() => contextItems(addon))} selectable={!!selection} {selecting} selected={!!selected?.has(key(addon))} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null} {quickSubscribe} {...(extra?.(addon) ?? {})}/>
 					{/if}
 				</div>
 			{/each}
 			{#if placeholders && more && loading}<AddonPlaceholders {view} count={view === 'list' ? 3 : 6} template={rowTemplate}/>{/if}
 		</div>
 		{#if more && loading && !placeholders}<div class="more"><Loading size="1.5rem"/></div>{/if}
-	{:else if view === 'list'}
-		<div class="list-head" style:grid-template-columns={rowTemplate} aria-hidden="true">
-			<span></span><span>{$_('browse_column_title')}</span>
-			{#each columns as column}<span class:end={NUMERIC_COLUMNS.includes(column)}>{columnLabel?.(column) ?? column}</span>{/each}
-		</div>
-		<div id="grid" class="list">
-			{#each addons as addon (key(addon))}
-				<AddonRow {onClick} contextItems={contextItems && (() => contextItems(addon))} workshop={addon.workshop} {columns} template={rowTemplate} {quickSubscribe} {...(extra?.(addon) ?? {})}/>
-			{/each}
-			{#if placeholders && more && loading}<AddonPlaceholders {view} count={view === 'list' ? 3 : 6} template={rowTemplate}/>{/if}
-		</div>
-		{#if more && loading && !placeholders}<div class="more"><Loading size="1.5rem"/></div>{/if}
-	{:else}
-		<div id="grid">
-			{#each addons as addon (key(addon))}
-				<Addon {onClick} workshopData={addon.workshop ? Promise.resolve(addon.workshop) : null} installedData={addon.installed ? Promise.resolve(addon.installed) : null}/>
-			{/each}
-			{#if placeholders && more && loading}<AddonPlaceholders {view} count={view === 'list' ? 3 : 6} template={rowTemplate}/>{/if}
-		</div>
 	{/if}
 </main>
 

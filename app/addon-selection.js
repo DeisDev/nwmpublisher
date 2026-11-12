@@ -28,6 +28,27 @@ export function createSelection() {
 	};
 }
 
+const NAVIGATION_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End']);
+
+/** Whether a navigation key pressed elsewhere on the page belongs to `region`: it is on screen and nothing else uses the key. */
+export function takesNavigationKey(event, region) {
+	if (event.defaultPrevented || event.altKey || !NAVIGATION_KEYS.has(event.key)) return false;
+	if (!region || region.offsetParent === null || region.closest('[inert]') || region.contains(event.target)) return false;
+	return !document.querySelector('modal.active') && !event.target.closest?.('input, select, textarea, [contenteditable], [role="menu"]');
+}
+
+/** Where keys entering a list start: `current` while it is on screen, otherwise the first option that is. */
+export function entryIndex(options, current, scroller) {
+	const bounds = scroller.getBoundingClientRect();
+	const onScreen = option => {
+		const rect = option.getBoundingClientRect();
+		const middle = (rect.top + rect.bottom) / 2;
+		return middle >= bounds.top && middle <= bounds.bottom;
+	};
+	if (options[current] && onScreen(options[current])) return current;
+	return Math.max(options.findIndex(onScreen), 0);
+}
+
 /** The index a navigation key moves to in a grid that fills rows from the start, or null for other keys. */
 export function moveIndex(key, index, count, columns, pageRows, rtl) {
 	const last = count - 1;
