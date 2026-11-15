@@ -7,24 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-11-14
+
 ### Added
 
-- New Browse page to search the whole Garry's Mod Workshop, find items that require a given addon, filter results by colour-coded tags and more, open item details, and subscribe, download, or add items to collections.
-- Workshop links now open in the Browse page. A new setting opens them in your web browser instead, and Ctrl-click or middle-click opens a link the other way.
-- Subscribing offers to subscribe to an item's missing required items too, and unsubscribing warns you when your other addons need the item.
-- New Missing requirements filter in Installed Addons, with a button that subscribes to the missing items.
-- Undo button on the message shown after you subscribe to or unsubscribe from one item.
-- Press Space on a Browse result for a quick look at its images and description.
-- The sidebar shows how many items are in My Workshop, Collections, and Installed Addons.
-- New slider for the card size in addon grids.
+- Browse page to search the whole Workshop, filter by tags, find items that require an addon, and subscribe, download, or add items to collections.
+- Workshop links open in Browse. A setting opens them in your web browser instead.
+- Subscribing offers to add missing required items, unsubscribing warns when other addons need the item, and both can be undone.
+- Missing requirements filter in Installed Addons.
+- Item counts in the sidebar.
+- Card size slider for addon grids.
 
 ### Changed
 
 - My Workshop, Installed Addons, and the Addon Size Analyzer keep your place when you switch pages.
-- Success and failure messages now appear in one place at the bottom of the window instead of inside each page. Failure messages stay until you close them.
-- The Collections menu now adds items to and removes them from several collections at once.
-- Arrow keys, Page Up, Page Down, Home, and End now move through My Workshop, Collections, and Installed Addons without clicking an item first.
-- Refreshed the look of the sidebar, tooltips, and Downloader.
+- Messages now appear at the bottom of the window. Errors stay until you close them.
+- Add items to or remove them from several collections at once.
+- Arrow keys, Page Up, Page Down, Home, and End work in lists without clicking an item first.
+- Refreshed the sidebar, tooltips, and Downloader.
 
 ## [3.8.1] - 2026-11-10
 
