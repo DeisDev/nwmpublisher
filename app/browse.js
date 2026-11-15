@@ -544,14 +544,15 @@ export function showInBrowse(id = null) {
 
 /**
  * Shows a Workshop link in Browse when the setting allows it, and returns whether it did; `invert` flips the setting for one click.
- * Links in a dialog stay external unless the dialog cancels `workshoplink` because it is closing.
+ * Links in a dialog stay external unless the dialog cancels `workshoplink`; it then calls `event.detail` once it has closed.
  */
 export function openInBrowse(href, link, invert = false) {
 	if (!!AppSettings.open_workshop_pages_in_app === invert) return false;
 	const widget = bbcodeWidget(href);
 	if (widget?.type !== 'workshop' && !WORKSHOP_HOME.test(href)) return false;
-	if (link.closest('modal') && link.dispatchEvent(new CustomEvent('workshoplink', { bubbles: true, cancelable: true }))) return false;
-	showInBrowse(widget?.type === 'workshop' ? widget.id : null);
+	const show = () => showInBrowse(widget?.type === 'workshop' ? widget.id : null);
+	if (link.closest('modal')) return !link.dispatchEvent(new CustomEvent('workshoplink', { bubbles: true, cancelable: true, detail: show }));
+	show();
 	return true;
 }
 

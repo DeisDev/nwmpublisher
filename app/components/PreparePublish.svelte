@@ -16,7 +16,7 @@
 	import { tippyFollow, tippy } from '../tippy';
 	import * as dialog from '@tauri-apps/plugin-dialog';
 	import { invoke } from '@tauri-apps/api/core';
-	import { saveSettings } from '../settings.js';
+	import { saveSettings, settings } from '../settings.js';
 	import { playSound } from '../sounds';
 	import FileBrowser from './FileBrowser.svelte';
 	import FilePreview from './FilePreview.svelte';
@@ -64,16 +64,23 @@
 	let translationsInvalid = null;
 
 	async function togglePreparePublish() {
-		if (settingsBusy || changelogSettingsBusy) return;
-		if ($preparePublish && settingsDirty && !await dialog.confirm($_('workshop_discard_confirm'), { title: $_('workshop_settings'), kind: 'warning' })) return;
+		if (settingsBusy || changelogSettingsBusy) return false;
+		if ($preparePublish && settingsDirty && !await dialog.confirm($_('workshop_discard_confirm'), { title: $_('workshop_settings'), kind: 'warning' })) return false;
 		try {
 			await changelogEditor.flush();
 			await translationPicker.flush();
 		} catch (error) {
 			await dialog.message(String(error), { kind: 'error' });
-			return;
+			return false;
 		}
 		$preparePublish = !$preparePublish;
+		return true;
+	}
+
+	async function leaveForBrowse(event) {
+		if ($isPublishing || settingsBusy || changelogSettingsBusy) return;
+		event.preventDefault();
+		if (await togglePreparePublish()) event.detail();
 	}
 
 	function workshopSettingsSaved() {
@@ -725,7 +732,7 @@
 <Modal id="prepare-publish" active={$preparePublish} cancel={togglePreparePublish}>
 	<div id="details-container" class="hide-scroll">
 		{#if $updatingAddon}
-			<div id="ws-link"><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={$updatingAddon.id}" target="_blank">{$_('workshop_page')}<LinkOut class="icon" size=".8rem"/></a></div>
+			<div id="ws-link" on:workshoplink={leaveForBrowse}><a class="color" href="https://steamcommunity.com/sharedfiles/filedetails/?id={$updatingAddon.id}" target="_blank">{$_('workshop_page')}{#if !$settings.open_workshop_pages_in_app || $isPublishing}<LinkOut class="icon" size=".8rem"/>{/if}</a></div>
 		{/if}
 
 		{#if gmaIconBase64}

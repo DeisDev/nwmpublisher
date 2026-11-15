@@ -187,6 +187,7 @@
 	function leaveForBrowse(event) {
 		event.preventDefault();
 		interceptCancel();
+		event.detail();
 	}
 </script>
 
