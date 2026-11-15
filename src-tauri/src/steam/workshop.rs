@@ -14,7 +14,7 @@ use steamworks::{PublishedFileId, QueryResult, QueryResults, SteamError, SteamId
 
 use parking_lot::Mutex;
 
-use super::{users::SteamUser, Steam};
+use super::{collections::ItemKind, users::SteamUser, Steam};
 
 use crate::{webview::Addon, GMOD_APP_ID};
 
@@ -61,7 +61,7 @@ pub struct WorkshopItem {
 	pub score: f32,
 	pub tags: Vec<String>,
 	pub preview_url: Option<String>,
-	pub subscriptions: u64,
+	pub subscriptions: Option<u64>,
 	pub banned: Option<bool>,
 	pub file_size: Option<u64>,
 	pub file_name: Option<String>,
@@ -83,6 +83,8 @@ pub struct WorkshopItem {
 }
 impl From<QueryResult> for WorkshopItem {
 	fn from(result: QueryResult) -> Self {
+		// Steam counts no subscribers for collections, and their file size is the preview image.
+		let collection = matches!(result.file_type, steamworks::FileType::Collection);
 		WorkshopItem {
 			id: result.published_file_id,
 			title: result.title.clone(),
@@ -95,16 +97,16 @@ impl From<QueryResult> for WorkshopItem {
 			score: result.score,
 			tags: result.tags,
 			preview_url: None,
-			subscriptions: 0,
+			subscriptions: None,
 			banned: Some(result.banned),
-			file_size: (result.file_size > 0).then_some(u64::from(result.file_size)),
+			file_size: (!collection && result.file_size > 0).then_some(u64::from(result.file_size)),
 			file_name: original_file_name(&result.file_name),
 			upvotes: Some(result.num_upvotes),
 			downvotes: Some(result.num_downvotes),
 			favorites: None,
 			views: None,
 			comments: None,
-			kind: None,
+			kind: collection.then_some(ItemKind::Collection),
 			num_children: None,
 			local_file: None,
 			//search_title: result.title.to_lowercase(),
@@ -126,7 +128,7 @@ impl From<PublishedFileId> for WorkshopItem {
 			score: 0.,
 			tags: Vec::with_capacity(0),
 			preview_url: None,
-			subscriptions: 0,
+			subscriptions: None,
 			banned: None,
 			file_size: None,
 			file_name: None,
@@ -151,6 +153,9 @@ pub fn original_file_name(stored: &str) -> Option<String> {
 impl WorkshopItem {
 	pub fn read_statistics(&mut self, results: &QueryResults<'_>, index: u32) {
 		use steamworks::UGCStatisticType::*;
+		if self.kind != Some(ItemKind::Collection) {
+			self.subscriptions = results.statistic(index, Subscriptions);
+		}
 		self.favorites = results.statistic(index, Favorites);
 		self.views = results.statistic(index, UniqueWebsiteViews);
 		self.comments = results.statistic(index, Comments);
@@ -242,7 +247,6 @@ impl Steam {
 										let mut item: WorkshopItem = item.into();
 										item.preview_url = results.preview_url(i as u32);
 										item.read_statistics(&results, i as u32);
-										item.subscriptions = results.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions).unwrap_or(0);
 										item
 									} else {
 										WorkshopItem::from(queue[i])
@@ -359,9 +363,7 @@ impl Steam {
 									let mut item: WorkshopItem = result.ok_or_else(|| format!("Missing Workshop item {i} on page {page}"))?.into();
 									item.preview_url = data.preview_url(i as u32);
 									item.read_statistics(&data, i as u32);
-									item.subscriptions = data
-										.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions)
-										.ok_or_else(|| format!("Missing subscriber count for Workshop item {}", item.id.0))?;
+									item.subscriptions.ok_or_else(|| format!("Missing subscriber count for Workshop item {}", item.id.0))?;
 									Ok(item.into())
 								})
 								.collect::<Result<Vec<Addon>, String>>()?;

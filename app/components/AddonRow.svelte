@@ -40,7 +40,7 @@
 			{:else if column === 'type'}{#if typeTags.length}{#each typeTags as tag}<span class="tag-chip" data-tag={tag.toLowerCase()}>{tagLabel(tag)}</span>{/each}{:else}{$_('browse_kind_' + (workshop.kind ?? 'addon'))}{/if}
 			{:else if column === 'tags'}{#each otherTags as tag}<span class="tag-chip" data-tag={tag.toLowerCase()}>{tagLabel(tag)}</span>{/each}
 			{:else if column === 'size'}{workshop.fileSize == null ? '' : formatSize(workshop.fileSize, $locale)}
-			{:else if column === 'subscribers'}{workshop.subscriptions.toLocaleString(numberLocale)}
+			{:else if column === 'subscribers'}{workshop.subscriptions?.toLocaleString(numberLocale) ?? ''}
 			{:else if column === 'favorites'}{workshop.favorites?.toLocaleString(numberLocale) ?? ''}
 			{:else if column === 'rating'}{formatPercent(workshop.score ?? 0, $locale)}
 			{:else if column === 'created'}{workshop.timeCreated ? formatDate(workshop.timeCreated, $locale) : ''}

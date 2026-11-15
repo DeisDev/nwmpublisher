@@ -71,6 +71,7 @@ export function normalizeQuery(query) {
 		next.requires = [];
 		next.sizeMin = '';
 		next.sizeMax = '';
+		next.minSubscribers = '';
 	}
 	return next;
 }
@@ -104,7 +105,6 @@ export function requestFor(query) {
 		status: query.status,
 		created: range(query.created),
 		updated: range(query.updated),
-		minSubscribers: number(query.minSubscribers),
 		minRating: number(query.minRating) == null ? null : Math.min(number(query.minRating), 100) / 100,
 	};
 	if (query.source === 'author') request.author = query.author?.id;
@@ -113,6 +113,7 @@ export function requestFor(query) {
 		request.matchAll = query.matchAll;
 		request.excludedTags = query.excludedTags;
 		request.requires = query.requires.map(item => item.id);
+		request.minSubscribers = number(query.minSubscribers);
 		const sizeMin = number(query.sizeMin);
 		const sizeMax = number(query.sizeMax);
 		request.sizeMin = sizeMin == null ? null : Math.round(sizeMin * MIB);

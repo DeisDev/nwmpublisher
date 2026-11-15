@@ -2,6 +2,7 @@
 	import { _ } from 'svelte-i18n';
 	import CirclePlus from '@lucide/svelte/icons/circle-plus';
 	import Check from '@lucide/svelte/icons/check';
+	import Eye from '@lucide/svelte/icons/eye';
 	import { Steam } from '../steam';
 	import { tippyFollow } from '../tippy';
 	import Loading from './Loading.svelte';
@@ -81,26 +82,30 @@
 				<img use:tippyFollow={'0.00%'} id="score" src="/img/0-star.png"/>
 			{:else}
 				{#await workshop}
-					<span id="subscriptions">
-						<img src="/img/download.png"/>
-						0
-						&nbsp;
-					</span>
-					<img use:tippyFollow={'0.00%'} id="score" src="/img/0-star.png"/>
+					<span id="subscriptions" class="unknown"><img src="/img/download.png"/></span>
+					<img id="score" class="unknown" src="/img/0-star.png"/>
 				{:then workshop}
-					<span id="subscriptions">
-						<img src="/img/download.png"/>
-						{workshop.subscriptions}
-						&nbsp;
-					</span>
-					<img use:tippyFollow={(Math.round((((workshop.score ?? 0) * 100) + Number.EPSILON) * 100) / 100) + '%'} id="score" src="/img/{Math.round(((workshop.score ?? 0) * 10) / 2)}-star.png"/>
+					{#if workshop.subscriptions == null && workshop.views != null}
+						<span id="subscriptions" use:tippyFollow={$_('workshop_stat_views')}>
+							<Eye size="1rem"/>
+							{workshop.views}
+							&nbsp;
+						</span>
+					{:else}
+						<span id="subscriptions" class:unknown={workshop.subscriptions == null}>
+							<img src="/img/download.png"/>
+							{workshop.subscriptions ?? ''}
+							&nbsp;
+						</span>
+					{/if}
+					{#if workshop.dead}
+						<img id="score" class="unknown" src="/img/0-star.png"/>
+					{:else}
+						<img use:tippyFollow={(Math.round((((workshop.score ?? 0) * 100) + Number.EPSILON) * 100) / 100) + '%'} id="score" src="/img/{Math.round(((workshop.score ?? 0) * 10) / 2)}-star.png"/>
+					{/if}
 				{:catch}
-					<span id="subscriptions">
-						<img src="/img/download.png"/>
-						0
-						&nbsp;
-					</span>
-					<img use:tippyFollow={'0.00%'} id="score" src="/img/0-star.png"/>
+					<span id="subscriptions" class="unknown"><img src="/img/download.png"/></span>
+					<img id="score" class="unknown" src="/img/0-star.png"/>
 				{/await}
 			{/if}
 			{#if selectable}
@@ -243,14 +248,24 @@
 	}
 	main #subscriptions {
 		flex: 1;
-		text-align: left;
+		display: flex;
+		align-items: center;
+		gap: .2rem;
 		white-space: nowrap;
 	}
 	main #score {
+		display: block;
 		min-width: 0;
 	}
-	main #subscriptions img {
-		margin-right: .1rem;
+	main #stats .unknown {
+		visibility: hidden;
+	}
+	main #subscriptions img, main #subscriptions :global(svg) {
+		display: block;
+		flex-shrink: 0;
+	}
+	main #subscriptions :global(svg) {
+		color: var(--text-muted);
 	}
 	main #preview {
 		position: relative;

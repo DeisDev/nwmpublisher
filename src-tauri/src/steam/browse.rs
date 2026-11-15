@@ -471,7 +471,7 @@ impl Plan {
 			&& self.updated.is_none_or(|range| range.contains(workshop.time_updated))
 			&& self.size_min.is_none_or(|min| size >= min)
 			&& self.size_max.is_none_or(|max| size <= max)
-			&& self.min_subscribers.is_none_or(|min| workshop.subscriptions >= min)
+			&& self.min_subscribers.is_none_or(|min| workshop.subscriptions.is_some_and(|count| count >= min))
 			&& self.min_rating.is_none_or(|min| workshop.score >= min)
 			&& match self.status {
 				BrowseStatus::Any => true,
@@ -686,9 +686,10 @@ fn read_item(query: &QueryHandle, index: u32, children: bool, previews: bool) ->
 		kind: Some(if collection { ItemKind::Collection } else { ItemKind::of(&tags) }),
 		tags,
 		preview_url,
-		subscriptions: statistic(query, index, k_EItemStatistic_NumSubscriptions).unwrap_or(0),
+		// Steam counts no subscribers for collections, and their file size is the preview image.
+		subscriptions: if collection { None } else { statistic(query, index, k_EItemStatistic_NumSubscriptions) },
 		banned: Some(details.m_bBanned),
-		file_size: (size > 0).then_some(size),
+		file_size: (!collection && size > 0).then_some(size),
 		file_name: original_file_name(&read_text(&details.m_pchFileName)),
 		upvotes: Some(details.m_unVotesUp),
 		downvotes: Some(details.m_unVotesDown),
@@ -1118,7 +1119,7 @@ mod tests {
 		workshop.time_created = 1_000;
 		workshop.time_updated = 2_000;
 		workshop.file_size = Some(5_000);
-		workshop.subscriptions = 300;
+		workshop.subscriptions = Some(300);
 		workshop.score = 0.8;
 		ScannedItem {
 			workshop,

@@ -447,7 +447,8 @@ pub(super) fn read_item(results: &QueryResults<'_>, index: u32, children: bool) 
 	let is_addon = is_gmod_addon(&result);
 	let gmod = result.consumer_app_id == Some(GMOD_APP_ID);
 	let gmod_item = gmod && matches!(result.file_type, FileType::Community);
-	let gmod_collection = gmod && matches!(result.file_type, FileType::Collection);
+	let collection = matches!(result.file_type, FileType::Collection);
+	let gmod_collection = gmod && collection;
 	let owner = result.owner;
 	let children = if children && result.num_children > 0 {
 		results
@@ -458,10 +459,10 @@ pub(super) fn read_item(results: &QueryResults<'_>, index: u32, children: bool) 
 	};
 	let mut item: WorkshopItem = result.into();
 	item.preview_url = results.preview_url(index);
-	item.subscriptions = results
-		.statistic(index, steamworks::UGCStatisticType::Subscriptions)
-		.ok_or_else(|| format!("Could not read subscribers for {}.", item.id.0))?;
 	item.read_statistics(results, index);
+	if !collection {
+		item.subscriptions.ok_or_else(|| format!("Could not read subscribers for {}.", item.id.0))?;
+	}
 	Ok(Some(ItemDetails {
 		item,
 		owner,

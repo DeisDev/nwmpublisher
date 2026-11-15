@@ -121,11 +121,11 @@
 					<input type="number" min="0" step="any" value={query.sizeMax} on:change={event => onChange({ sizeMax: event.currentTarget.value })}/>
 				</label>
 			</div>
+			<label class="field">
+				<span>{$_('browse_min_subscribers')}</span>
+				<input type="number" min="0" step="1" value={query.minSubscribers} on:change={event => onChange({ minSubscribers: event.currentTarget.value })}/>
+			</label>
 		{/if}
-		<label class="field">
-			<span>{$_('browse_min_subscribers')}</span>
-			<input type="number" min="0" step="1" value={query.minSubscribers} on:change={event => onChange({ minSubscribers: event.currentTarget.value })}/>
-		</label>
 		<label class="field">
 			<span>{$_('browse_min_rating')}</span>
 			<input type="number" min="0" max="100" step="1" value={query.minRating} on:change={event => onChange({ minRating: event.currentTarget.value })}/>
