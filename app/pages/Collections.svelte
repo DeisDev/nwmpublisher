@@ -20,6 +20,7 @@
 	import CollectionEditor from '../components/CollectionEditor.svelte';
 	import CollectionCompare from '../components/CollectionCompare.svelte';
 	import { collections, compareTitles, ensureCollections, includeExtras, loadCollections, loadSnapshot, mirrors, planSync, setIncludeExtras, subscriptionSnapshot } from '../collections.js';
+	import { entryIndex, moveIndex, takesNavigationKey } from '../addon-selection.js';
 	import { saveSettings } from '../settings.js';
 	import { playSound } from '../sounds';
 	import { taskError, taskMessage } from '../transactions.js';
@@ -96,7 +97,25 @@
 		if (filtersOpen && event.key === 'Escape') {
 			filtersOpen = false;
 			filterButton.focus();
+			return;
 		}
+		moveRow(event);
+	}
+
+	let list;
+
+	// Follows the addon grids: keys pressed outside the list highlight the first row on screen, or move a page from it.
+	function moveRow(event) {
+		const rows = list ? [...list.querySelectorAll('.row')] : [];
+		const current = rows.indexOf(event.target);
+		if (!rows.length || (current < 0 ? !takesNavigationKey(event, list) : event.defaultPrevented || event.altKey)) return;
+		const start = current < 0 ? entryIndex(rows, -1, list) : current;
+		const rowHeight = rows.length > 1 ? rows[1].getBoundingClientRect().top - rows[0].getBoundingClientRect().top : list.clientHeight;
+		const pageRows = Math.max(Math.floor(list.clientHeight / rowHeight), 1);
+		const target = current < 0 && event.key.startsWith('Arrow') ? start : moveIndex(event.key, start, rows.length, 1, pageRows, getComputedStyle(list).direction === 'rtl');
+		if (target === null) return;
+		event.preventDefault();
+		rows[target].focus();
 	}
 
 	function toggleSelecting() {
@@ -413,7 +432,7 @@
 			</p>
 		{/if}
 
-		<ul class="list scrollbar">
+		<ul class="list scrollbar" bind:this={list}>
 			{#each visible as collection (collection.id)}
 				<li class:selected={selected.has(collection.id)}>
 					{#if selecting}<input type="checkbox" checked={selected.has(collection.id)} on:change={event => toggleSelected(collection.id, event.currentTarget.checked)} aria-label={$_('collections_select_item', { values: { title: collection.fields.title } })}/>{/if}

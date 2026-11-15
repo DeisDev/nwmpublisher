@@ -739,7 +739,11 @@ pub fn publish(request: PublishRequest) -> u32 {
 				if legal_agreement {
 					crate::path::open("https://steamcommunity.com/workshop/workshoplegalagreement");
 				}
-				if app_data!().settings.read().open_workshop_after_publish {
+				let (open_page, in_app) = {
+					let settings = app_data!().settings.read();
+					(settings.open_workshop_after_publish, settings.open_workshop_pages_in_app)
+				};
+				if open_page && !in_app {
 					crate::path::open(format!("https://steamcommunity.com/sharedfiles/filedetails/?id={}", id.0));
 				}
 				let mut result = serde_json::to_value(job.finish(&transaction, "published", warnings)).unwrap();

@@ -283,19 +283,18 @@ pub async fn subscription_snapshot(refresh: bool, on_progress: Channel<Collectio
 	result
 }
 
-/// Steam's local list, read without a network request, to catch subscriptions made since the snapshot.
+/// Steam's local list with this run's changes applied, since Steam is slow to list a new subscription and keeps listing a removed one.
+fn with_session_changes(local: Vec<PublishedFileId>, unsubscribed: &HashSet<PublishedFileId>, subscribed: HashSet<PublishedFileId>) -> HashSet<PublishedFileId> {
+	local.into_iter().chain(subscribed).filter(|id| !unsubscribed.contains(id)).collect()
+}
+
+/// Read without a network request, to catch subscriptions made since the snapshot.
 #[tauri::command]
 pub fn local_subscribed_ids() -> Result<Vec<String>, String> {
 	connected()?;
-	let (unsubscribed, _) = game_addons!().session_subscriptions();
-	Ok(steam!()
-		.client()
-		.ugc()
-		.subscribed_items(true)
-		.into_iter()
-		.filter(|id| !unsubscribed.contains(id))
-		.map(|id| id.0.to_string())
-		.collect())
+	let (unsubscribed, subscribed) = game_addons!().session_subscriptions();
+	let local = steam!().client().ugc().subscribed_items(true);
+	Ok(with_session_changes(local, &unsubscribed, subscribed).into_iter().map(|id| id.0.to_string()).collect())
 }
 
 #[cfg(test)]
@@ -368,6 +367,12 @@ mod tests {
 		without_unsubscribed(&mut entries, &HashSet::from([PublishedFileId(2)]));
 		assert_eq!(entries.iter().map(|entry| entry.id.as_str()).collect::<Vec<_>>(), ["1"]);
 	}
+
+	#[test]
+	fn local_ids_include_new_subscriptions_and_drop_removed_ones() {
+		let ids = with_session_changes(vec![PublishedFileId(1), PublishedFileId(2)], &HashSet::from([PublishedFileId(2)]), HashSet::from([PublishedFileId(1), PublishedFileId(3)]));
+		assert_eq!(ids, HashSet::from([PublishedFileId(1), PublishedFileId(3)]));
+	}
 }
 
 #[tauri::command]
@@ -398,7 +403,6 @@ pub fn browse_subscribed_addons(page: u32) -> Option<(u32, Vec<Addon>)> {
 							let mut item: WorkshopItem = x.unwrap().into();
 							item.preview_url = data.preview_url(i as u32);
 							item.read_statistics(&data, i as u32);
-							item.subscriptions = data.statistic(i as u32, steamworks::UGCStatisticType::Subscriptions).unwrap_or(0);
 							item.into()
 						})
 						.collect::<Vec<Addon>>(),

@@ -11,7 +11,7 @@
 		let pos = 0;
 		let i = 0;
 		while (i < tasks.length) {
-			const [transaction, statusTextFn, elem, failed = false] = tasks[i];
+			const [transaction, statusTextFn, elem, failed = false, action = null] = tasks[i];
 			if (!elem) {
 				update = true;
 				tasks[i][2] = mount(Task, {
@@ -20,7 +20,8 @@
 						pos: pos++,
 						transaction,
 						statusTextFn,
-						failed
+						failed,
+						action
 					}
 				});
 			} else {

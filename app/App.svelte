@@ -10,6 +10,7 @@
 	import PublishRecovery from './components/PublishRecovery.svelte';
 	import DeleteAddon from './components/DeleteAddon.svelte';
 	import AddToCollection from './components/AddToCollection.svelte';
+	import SubscriptionPrompt from './components/SubscriptionPrompt.svelte';
 	import { invoke } from '@tauri-apps/api/core';
 	import { onMount } from 'svelte';
 	import { Transaction } from './transactions.js';
@@ -66,6 +67,8 @@
 	<DeleteAddon/>
 
 	<AddToCollection/>
+
+	<SubscriptionPrompt/>
 
 </main>
 

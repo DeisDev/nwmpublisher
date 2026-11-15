@@ -5,6 +5,7 @@
 	import { createEventDispatcher, onDestroy } from 'svelte';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ExternalLink from '@lucide/svelte/icons/external-link';
+	import Eye from '@lucide/svelte/icons/eye';
 	import BellPlus from '@lucide/svelte/icons/bell-plus';
 	import CloudDownload from '@lucide/svelte/icons/cloud-download';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
@@ -599,7 +600,7 @@
 		{#if !creating}
 			<div class="header-actions">
 				<label class="toggle" title={$_('collections_sync_mirror_help')}><input type="checkbox" checked={mirrored} disabled={mirrorSaving} on:change={event => toggleMirror(event.currentTarget.checked)}/>{$_('collections_sync_mirror')}</label>
-				<a class="button" href={workshopUrl(id)} target="_blank" rel="noreferrer"><ExternalLink size="1rem"/>{$_('steam_workshop')}</a>
+				<a class="button" href={workshopUrl(id)} target="_blank" rel="noreferrer"><svelte:component this={$settings.open_workshop_pages_in_app ? Eye : ExternalLink} size="1rem"/>{$_('steam_workshop')}</a>
 				<button type="button" disabled={!!subscribing || saving || !!reverseRun || !original.items.length} on:click={subscribeAll}>{#if subscribing}<Loading inline size="1rem"/>{:else}<BellPlus size="1rem"/>{/if}{$_('collections_subscribe_all')}</button>
 				<button type="button" disabled={!original.items.length} on:click={downloadAll}><CloudDownload size="1rem"/>{$_('collections_download_all')}</button>
 				<button type="button" class="icon-button" disabled={saving || reloading} on:click={reload} aria-label={$_('collections_reload')} title={$_('collections_reload')}><RefreshCw size="1rem"/></button>

@@ -494,10 +494,9 @@
 	#layout .table {
 		position: relative;
 		flex: 1;
-		background-color: var(--bg-preview);
-		box-shadow: inset 0 0 6px 2px rgb(0 0 0 / 20%);
-		border: 1px solid var(--border-sunken);
-		border-radius: .4rem;
+		background-color: var(--bg-panel);
+		border: 1px solid var(--border);
+		border-radius: 6px;
 		height: 100%;
 		flex-basis: 0;
 	}
@@ -506,23 +505,26 @@
 		text-align: left;
 		transition: background-color .1s;
 		word-break: break-all;
-		box-shadow: inset 0 0 3px #00000087;
 	}
-	#layout .table tbody tr:not(.idle):nth-child(2n-1) {
-		background-color: rgba(0, 0, 0, .24);
+	#layout .table tbody tr:not(.idle) {
+		border-bottom: 1px solid var(--border);
 	}
-	#layout .table tbody tr:not(.idle):nth-child(2n) {
-		background-color: rgb(0, 0, 0, .12);
+	#layout .table tbody tr:not(.idle):hover {
+		background-color: var(--fill);
 	}
 	#layout .table table {
 		width: calc(100% + 0.5px);
 		border-collapse: collapse;
 	}
 	#layout .table table thead tr {
-		background-color: var(--bg-panel);
+		border-bottom: 1px solid var(--border);
+		background-color: var(--bg-raised);
 	}
 	#layout .table th {
 		text-align: center;
+		color: var(--text-muted);
+		font-size: .85em;
+		font-weight: 600;
 	}
 	#layout .table td, #layout .table th {
 		padding: .5rem;
@@ -639,13 +641,12 @@
 	#layout .btn {
 		display: inline-block;
 		padding: .5rem;
-		background-color: var(--bg-panel);
+		background-color: var(--control);
 		padding-left: 1rem;
 		padding-right: 1rem;
-		box-shadow: inset 0 0 3px #0000002e;
-		border-radius: .3rem;
+		border-radius: 4px;
 		margin-top: 1rem;
-		border: 1px solid var(--bg-app);
+		border: 1px solid var(--border-strong);
 		cursor: pointer;
 		text-align: center;
 		font: inherit;
@@ -654,8 +655,8 @@
 	#layout .btn:focus-visible {
 		outline: 2px solid #127cff;
 	}
-	#layout .btn:active {
-		background-color: var(--bg-app-alt);
+	#layout .btn:hover {
+		background-color: var(--control-hover);
 	}
 
 	#layout table.idle {
@@ -675,12 +676,8 @@
 	.buttons .btn {
 		flex: 1;
 		flex-basis: 0;
-		background-color: var(--bg-preview) !important;
 		font-size: .9em;
 		padding: .7rem !important;
-	}
-	.buttons .btn:active {
-		background-color: var(--bg-panel) !important;
 	}
 	.buttons .btn:not(:last-child) {
 		margin-right: 1rem;

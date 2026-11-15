@@ -32,7 +32,7 @@
 	}
 
 	async function confirm() {
-		const { items, unsubscribe, deleteFiles, onDone } = $deleteRequest;
+		const { items, unsubscribe, deleteFiles, onDone, undo } = $deleteRequest;
 		if (bulk) {
 			$deleteRequest = null;
 			const outcomes = await removeAddons(items, unsubscribe, deleteFiles, permanent);
@@ -42,7 +42,7 @@
 		const [{ path, name }] = items;
 		busy = true;
 		if (remember) saveSettings({ addon_delete_mode: permanent ? 'permanent' : 'trash' }).catch(() => {});
-		const result = unsubscribe ? await unsubscribeAddon(path, name, deleteFiles, permanent) : await deleteAddon(path, name, permanent);
+		const result = unsubscribe ? await unsubscribeAddon(path, name, deleteFiles, permanent, undo) : await deleteAddon(path, name, permanent);
 		busy = false;
 		$deleteRequest = null;
 		if (result) onDone?.(result);

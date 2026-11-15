@@ -316,6 +316,38 @@ pub enum InstalledAddonsSort {
 	Type,
 }
 
+/// Minimum width of an addon grid card, in pixels.
+const ADDON_CARD_SIZE_DEFAULT: u16 = 200;
+const ADDON_CARD_SIZE_MIN: u16 = 140;
+const ADDON_CARD_SIZE_MAX: u16 = 300;
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowseView {
+	#[default]
+	Grid,
+	List,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowseColumn {
+	Author,
+	Type,
+	Tags,
+	Size,
+	Subscribers,
+	Favorites,
+	Rating,
+	Created,
+	Updated,
+	Status,
+}
+
+impl BrowseColumn {
+	pub const DEFAULT: [BrowseColumn; 5] = [BrowseColumn::Author, BrowseColumn::Size, BrowseColumn::Subscribers, BrowseColumn::Rating, BrowseColumn::Updated];
+}
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum AddonDeleteMode {
@@ -361,9 +393,14 @@ pub struct Settings {
 	pub collections_mirrors: Vec<String>,
 	pub installed_addons_sort: InstalledAddonsSort,
 	pub installed_addons_types: Vec<AddonType>,
+	pub browse_view: BrowseView,
+	pub browse_columns: Vec<BrowseColumn>,
+	pub browse_filters_open: bool,
+	pub addon_card_size: u16,
 	pub upscale_addon_icon: bool,
 	pub workshop_update_mode: WorkshopUpdateMode,
 	pub open_workshop_after_publish: bool,
+	pub open_workshop_pages_in_app: bool,
 	pub changelogs: ChangelogSettings,
 	pub translations: HashMap<String, Translations>,
 
@@ -445,9 +482,14 @@ impl Default for Settings {
 			collections_mirrors: Vec::new(),
 			installed_addons_sort: InstalledAddonsSort::Modified,
 			installed_addons_types: AddonType::ALL.to_vec(),
+			browse_view: BrowseView::Grid,
+			browse_columns: BrowseColumn::DEFAULT.to_vec(),
+			browse_filters_open: true,
+			addon_card_size: ADDON_CARD_SIZE_DEFAULT,
 			upscale_addon_icon: true,
 			workshop_update_mode: WorkshopUpdateMode::Description,
 			open_workshop_after_publish: true,
+			open_workshop_pages_in_app: true,
 			changelogs: ChangelogSettings::default(),
 			translations: HashMap::new(),
 
@@ -567,6 +609,9 @@ impl Settings {
 		self.my_workshop_local_paths.retain(|_, dir| dir.is_absolute() && dir.is_dir());
 		let mut mirrors = HashSet::new();
 		self.collections_mirrors.retain(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) && mirrors.insert(id.clone()));
+		let mut columns = HashSet::new();
+		self.browse_columns.retain(|column| columns.insert(*column));
+		self.addon_card_size = self.addon_card_size.clamp(ADDON_CARD_SIZE_MIN, ADDON_CARD_SIZE_MAX);
 
 		match &self.extract_destination {
 			ExtractDestination::Directory(path) => {
@@ -1071,7 +1116,7 @@ mod tests {
 		assert!(super::patched_settings(&settings, patch).is_err());
 	}
 	use super::{
-		changelog_key, validate_changelog_key, ChangelogDefaults, ChangelogMode, ChangelogSettings, CollectionsSort, InstalledAddonsSort, Settings, WorkshopSort,
+		changelog_key, validate_changelog_key, BrowseColumn, BrowseView, ChangelogDefaults, ChangelogMode, ChangelogSettings, CollectionsSort, InstalledAddonsSort, Settings, WorkshopSort,
 		WorkshopUpdateMode, WorkshopVisibility,
 	};
 	use crate::gma::AddonType;
@@ -1192,9 +1237,35 @@ mod tests {
 	}
 
 	#[test]
+	fn browse_preferences_default_round_trip_and_reject_invalid_values() {
+		let defaults: Settings = serde_json::from_str(r#"{"sounds":false}"#).unwrap();
+		assert_eq!(defaults.browse_view, BrowseView::Grid);
+		assert_eq!(defaults.browse_columns, BrowseColumn::DEFAULT.to_vec());
+		assert!(defaults.browse_filters_open);
+		assert_eq!(defaults.addon_card_size, 200);
+		let patch = serde_json::json!({"browse_view": "list", "browse_columns": ["tags", "status", "tags"], "browse_filters_open": false, "addon_card_size": 20});
+		let mut settings = super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).unwrap();
+		settings.sanitize();
+		let loaded: Settings = serde_json::from_value(serde_json::to_value(settings).unwrap()).unwrap();
+		assert_eq!(loaded.browse_view, BrowseView::List);
+		assert_eq!(loaded.browse_columns, [BrowseColumn::Tags, BrowseColumn::Status]);
+		assert!(!loaded.browse_filters_open);
+		assert_eq!(loaded.addon_card_size, 140);
+		for patch in [
+			serde_json::json!({"browse_view": "table"}),
+			serde_json::json!({"browse_columns": ["title"]}),
+			serde_json::json!({"browse_filters_open": "yes"}),
+			serde_json::json!({"addon_card_size": "large"}),
+		] {
+			assert!(super::patched_settings(&defaults, serde_json::from_value(patch).unwrap()).is_err());
+		}
+	}
+
+	#[test]
 	fn automatic_open_preferences_preserve_legacy_settings() {
 		let settings: Settings = serde_json::from_str(r#"{"sounds":false,"ignore_globs":["*.bak"],"create_folder_on_extract":false}"#).unwrap();
 		assert!(settings.open_workshop_after_publish);
+		assert!(settings.open_workshop_pages_in_app);
 		assert!(settings.open_folder_after_extract);
 		assert!(!settings.addon_cleaner_permanent_delete);
 		assert!(!settings.sounds);

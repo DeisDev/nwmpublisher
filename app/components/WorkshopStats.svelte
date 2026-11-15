@@ -9,7 +9,8 @@
 	export let estimatedSize = null;
 	let expanded = false;
 	$: numberLocale = $locale === 'kr' ? 'ko' : ($locale ?? 'en');
-	$: metrics = ['subscriptions', 'favorites', 'views', 'comments', 'upvotes', 'downvotes'];
+	$: collection = item?.kind === 'collection';
+	$: metrics = [...(collection ? [] : ['subscriptions']), 'favorites', 'views', 'comments', 'upvotes', 'downvotes'];
 </script>
 
 {#if item}
@@ -28,7 +29,9 @@
 			<div class="expanded">
 				<dl>
 					<div><dt>{$_('workshop_settings_visibility')}</dt><dd>{item.visibility ? $_('workshop_visibility_' + item.visibility) : $_('workshop_unknown')}</dd></div>
-					<div><dt>{$_('workshop_published_size')}</dt><dd>{item.fileSize == null ? $_('workshop_unknown') : formatSize(item.fileSize, $locale)}</dd></div>
+					{#if !collection}
+						<div><dt>{$_('workshop_published_size')}</dt><dd>{item.fileSize == null ? $_('workshop_unknown') : formatSize(item.fileSize, $locale)}</dd></div>
+					{/if}
 					{#if estimatedSize != null}
 						<div title={$_('workshop_estimated_size_help')}><dt>{$_('workshop_estimated_size')}</dt><dd>{formatSize(estimatedSize, $locale)}</dd></div>
 					{/if}

@@ -4,15 +4,26 @@
 		{
 			name: 'my_workshop',
 			component: MyWorkshop,
+			persist: true,
+			created: true,
+			count: myWorkshopCount,
+		},
+		{
+			name: 'browse_workshop',
+			component: Browse,
+			persist: true,
 		},
 		{
 			name: 'collections',
 			component: Collections,
 			persist: true,
+			count: derived(collections, state => (state.loaded ? state.items.length : null)),
 		},
 		{
 			name: 'installed_addons',
 			component: InstalledAddons,
+			persist: true,
+			count: installedAddonsCount,
 		},
 		{
 			name: 'downloader',
@@ -23,6 +34,7 @@
 		{
 			name: 'size_analyzer',
 			component: AddonSizeAnalyzer,
+			persist: true,
 		},
 		{
 			name: 'addon_cleaner',
@@ -47,10 +59,29 @@
 
 	export const activeItem = writable(0);
 
+	const browse = pagesManifest.findIndex(page => page.component === Browse);
+
+	browseRequest.subscribe(request => {
+		if (!request) return;
+		const from = get(activeItem);
+		if (from !== browse) browseOrigin.set({ name: pagesManifest[from].name, back: () => activeItem.set(from) });
+		pages.update(pages => {
+			pages[browse].created = true;
+			return pages;
+		});
+		activeItem.set(browse);
+	});
+
+	activeItem.subscribe(item => {
+		if (item !== browse) browseOrigin.set(null);
+	});
+
+	ensureCollections();
+
 </script>
 
 <script>
-	import { writable } from 'svelte/store';
+	import { derived, get, writable } from 'svelte/store';
 	import { _ } from 'svelte-i18n';
 	import Sidebar from './Sidebar.svelte';
 
@@ -59,11 +90,15 @@
 	import Downloader, { downloaderJobs } from '../pages/Downloader.svelte';
 	import InstalledAddons from '../pages/InstalledAddons.svelte';
 	import MyWorkshop from '../pages/MyWorkshop.svelte';
+	import Browse from '../pages/Browse.svelte';
 	import Collections from '../pages/Collections.svelte';
 	//import ContentGenerator from '../pages/ContentGenerator.svelte';
 	import SidebarItem from './SidebarItem.svelte';
 	import Logo from './Logo.svelte';
 	import ReportProblem from './ReportProblem.svelte';
+	import { browseOrigin, browseRequest } from '../browse.js';
+	import { collections, ensureCollections } from '../collections.js';
+	import { installedAddonsCount, myWorkshopCount } from '../steam';
 
 	function selectPage(page) {
 		$pages[page].created = true;
@@ -72,7 +107,7 @@
 
 <Sidebar id="nav-sidebar">
 	{#each $pages as choice, i}
-		<SidebarItem {activeItem} id={i} click={selectPage} jobs={choice.jobs}>{$_(choice.name)}</SidebarItem>
+		<SidebarItem {activeItem} id={i} click={selectPage} jobs={choice.jobs} count={choice.count}>{$_(choice.name)}</SidebarItem>
 	{/each}
 
 	<div id="credits" slot="footer">

@@ -1,7 +1,8 @@
 import { switchLanguage } from './i18n.js';
 import { applyTheme } from './theme.js';
 import App from './App.svelte';
-import { settings } from './settings.js';
+import { applyCardSize, settings } from './settings.js';
+import { openInBrowse } from './browse.js';
 import { mount } from 'svelte';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -58,6 +59,8 @@ function openExternalLink(e) {
 	const link = e.target.closest?.('a[target="_blank"][href]');
 	if (e.defaultPrevented || !link || !/^https?:/i.test(link.href)) return;
 	e.preventDefault();
+	const invert = e.type === 'auxclick' || e.ctrlKey || e.metaKey;
+	if (!('external' in link.dataset) && openInBrowse(link.href, link, invert)) return;
 	invoke('open_url', { url: link.href }).catch(error => console.error('Failed to open link:', link.href, error));
 }
 document.addEventListener('click', openExternalLink);
@@ -67,6 +70,7 @@ __NWMPUBLISHER__(() => {
 	settings.set(AppSettings);
 	if (AppSettings.language) switchLanguage(AppSettings.language);
 	applyTheme(AppSettings.theme);
+	applyCardSize(AppSettings.addon_card_size);
 
 	updateCustomColor('neutral', AppSettings.color_neutral);
 	updateCustomColor('success', AppSettings.color_success);

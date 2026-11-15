@@ -2,12 +2,15 @@
 	import { _ } from 'svelte-i18n';
 	import CirclePlus from '@lucide/svelte/icons/circle-plus';
 	import Check from '@lucide/svelte/icons/check';
+	import Eye from '@lucide/svelte/icons/eye';
 	import { Steam } from '../steam';
 	import { tippyFollow } from '../tippy';
 	import Loading from './Loading.svelte';
 	import Dead from './Dead.svelte';
+	import QuickSubscribe from './QuickSubscribe.svelte';
 	import { registerContext } from './ContextMenu.svelte';
 	import { onMount } from 'svelte';
+	import { formatDate, formatSize } from '../format.js';
 
 	export let newAddon = false;
 	export let workshopData = null;
@@ -19,6 +22,9 @@
 	export let selecting = false;
 	export let selected = false;
 	export let contextItems = null;
+	export let badge = null;
+	export let details = false;
+	export let quickSubscribe = false;
 
 	let workshop = workshopData;
 	let installed = installedData;
@@ -76,26 +82,30 @@
 				<img use:tippyFollow={'0.00%'} id="score" src="/img/0-star.png"/>
 			{:else}
 				{#await workshop}
-					<span id="subscriptions">
-						<img src="/img/download.png"/>
-						0
-						&nbsp;
-					</span>
-					<img use:tippyFollow={'0.00%'} id="score" src="/img/0-star.png"/>
+					<span id="subscriptions" class="unknown"><img src="/img/download.png"/></span>
+					<img id="score" class="unknown" src="/img/0-star.png"/>
 				{:then workshop}
-					<span id="subscriptions">
-						<img src="/img/download.png"/>
-						{workshop.subscriptions}
-						&nbsp;
-					</span>
-					<img use:tippyFollow={(Math.round((((workshop.score ?? 0) * 100) + Number.EPSILON) * 100) / 100) + '%'} id="score" src="/img/{Math.round(((workshop.score ?? 0) * 10) / 2)}-star.png"/>
+					{#if workshop.subscriptions == null && workshop.views != null}
+						<span id="subscriptions" use:tippyFollow={$_('workshop_stat_views')}>
+							<Eye size="1rem"/>
+							{workshop.views}
+							&nbsp;
+						</span>
+					{:else}
+						<span id="subscriptions" class:unknown={workshop.subscriptions == null}>
+							<img src="/img/download.png"/>
+							{workshop.subscriptions ?? ''}
+							&nbsp;
+						</span>
+					{/if}
+					{#if workshop.dead}
+						<img id="score" class="unknown" src="/img/0-star.png"/>
+					{:else}
+						<img use:tippyFollow={(Math.round((((workshop.score ?? 0) * 100) + Number.EPSILON) * 100) / 100) + '%'} id="score" src="/img/{Math.round(((workshop.score ?? 0) * 10) / 2)}-star.png"/>
+					{/if}
 				{:catch}
-					<span id="subscriptions">
-						<img src="/img/download.png"/>
-						0
-						&nbsp;
-					</span>
-					<img use:tippyFollow={'0.00%'} id="score" src="/img/0-star.png"/>
+					<span id="subscriptions" class="unknown"><img src="/img/download.png"/></span>
+					<img id="score" class="unknown" src="/img/0-star.png"/>
 				{/await}
 			{/if}
 			{#if selectable}
@@ -115,10 +125,15 @@
 				{#if workshop.previewUrl}
 					<div id="preview" class:loading={addonPreviewLoading}>
 						<Loading size="2rem"/>
-						<img src={workshop.previewUrl} alt="Preview" on:load={addonPreviewLoaded}/>
+						<img src={workshop.previewUrl} alt="Preview" loading="lazy" on:load={addonPreviewLoaded}/>
+						{#if badge}<span class="badge">{badge}</span>{/if}
+						{#if quickSubscribe && !selecting}<QuickSubscribe {workshop} overlay/>{/if}
 					</div>
 				{:else}
-					<div id="preview" class="dead"><Dead size="4rem"/></div>
+					<div id="preview" class="dead">
+						<Dead size="4rem"/>
+						{#if quickSubscribe && !selecting}<QuickSubscribe {workshop} overlay/>{/if}
+					</div>
 				{/if}
 			{:catch}
 				<div id="preview" class="dead"><Dead size="4rem"/></div>
@@ -134,6 +149,7 @@
 				{/await}
 			{:then workshop}
 				<div id="title" class="select">{workshop.title}</div>
+				{#if details}<div class="details">{[workshop.fileSize == null ? null : formatSize(workshop.fileSize), workshop.timeUpdated ? formatDate(workshop.timeUpdated) : null].filter(Boolean).join(' · ')}</div>{/if}
 			{:catch}
 				{#await installed}
 					<div id="title" class="select">{fallbackName ?? '¯\\_(ツ)_/¯'}</div>
@@ -169,6 +185,23 @@
 		margin-top: .8rem;
 		flex: 1;
 		text-align: center;
+	}
+	main .details {
+		margin-top: .3rem;
+		text-align: center;
+		color: var(--text-muted);
+		font-size: .8rem;
+	}
+	main .badge {
+		position: absolute;
+		top: .4rem;
+		inset-inline-end: .4rem;
+		padding: .15rem .5rem;
+		border-radius: 3px;
+		background: var(--neutral-dark);
+		color: #fff;
+		font-size: .75rem;
+		box-shadow: 0 0 3px rgb(0 0 0 / 60%);
 	}
 	main #stats {
 		position: relative;
@@ -215,10 +248,24 @@
 	}
 	main #subscriptions {
 		flex: 1;
-		text-align: left;
+		display: flex;
+		align-items: center;
+		gap: .2rem;
+		white-space: nowrap;
 	}
-	main #subscriptions img {
-		margin-right: .1rem;
+	main #score {
+		display: block;
+		min-width: 0;
+	}
+	main #stats .unknown {
+		visibility: hidden;
+	}
+	main #subscriptions img, main #subscriptions :global(svg) {
+		display: block;
+		flex-shrink: 0;
+	}
+	main #subscriptions :global(svg) {
+		color: var(--text-muted);
 	}
 	main #preview {
 		position: relative;
@@ -243,7 +290,7 @@
 	main #preview:not(.dead):not(.loading):not(.new) > :global(svg) {
 		display: none;
 	}
-	main #preview.dead :global(svg), main #preview.loading :global(svg), main #preview.new :global(svg) {
+	main #preview.dead > :global(svg), main #preview.loading > :global(svg), main #preview.new > :global(svg) {
 		position: absolute;
 		margin: auto;
 		left: 0;
@@ -251,14 +298,14 @@
 		right: 0;
 		bottom: 0;
 	}
-	main #preview.dead :global(svg), main #preview.loading :global(svg) {
+	main #preview.dead > :global(svg), main #preview.loading > :global(svg) {
 		color: var(--preview-icon);
 	}
-	main #preview.new :global(svg) {
+	main #preview.new > :global(svg) {
 		color: var(--preview-icon-new);
 		transition: color .1s;
 	}
-	main:hover #preview.new :global(svg) {
+	main:hover #preview.new > :global(svg) {
 		color: var(--text);
 	}
 	main.previewing #card {
