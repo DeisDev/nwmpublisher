@@ -73,6 +73,7 @@ To move them yourself instead, copy `settings.json` from the old `gmpublisher` f
 * Reuse changelog templates or your last draft, with app-wide and per-addon defaults
 * Update descriptions without reuploading addon files
 * Filter & sort your Workshop items, with your choices saved between sessions
+* Browse the whole Workshop: filter by type and tags, find items that require an addon, and subscribe, download or add items to collections
 * Change addon visibility and manage required addons without reuploading files
 * View Workshop dates, sizes, subscribers, favourites, page views, comments, votes and ban status
 * Drag addon folders into the publishing file browser
@@ -203,6 +204,8 @@ Windows is the primary development and testing platform.
 ## Media
 
 ![My Workshop](public/screenshots/My%20workshop.webp)
+
+![Browse the Workshop](public/screenshots/Browse.webp)
 
 ![Publish a new addon](public/screenshots/Publish%20New.webp)
 

@@ -15,6 +15,7 @@
 	import collections from '../public/screenshots/Collection Editor.webp';
 	import collectionCompare from '../public/screenshots/Collection Compare.webp';
 	import installed from '../public/screenshots/Installed Addons Selection.webp';
+	import browse from '../public/screenshots/Browse.webp';
 	import { detectPlatform, getLatestRelease, getNightlyRelease, nightlyUrl, repositoryUrl, releasesUrl } from './downloads.js';
 	import { applyTheme, nextTheme, saveTheme, savedTheme } from './theme.js';
 
@@ -29,6 +30,7 @@
 		{ id: 'publish', image: editing, screen: 'edit' },
 		{ id: 'manage', image: addonSettings, screen: 'addon_settings' },
 		{ id: 'collections', image: collectionCompare, screen: 'collection_compare' },
+		{ id: 'browse', image: browse, screen: 'browse' },
 		{ id: 'clean', image: extraction, screen: 'extract' }
 	];
 	const platforms = [
