@@ -169,7 +169,7 @@
 
 		<WixVariable Id='WixUILicenseRtf' Value='..\..\..\..\msi\License.rtf'/>
 
-		<WixVariable Id='WixUIBannerBmp' Value='..\..\..\..\msi\msi-banner.bmp'/>
+		<WixVariable Id='WixUIBannerBmp' Value='{{banner_path}}'/>
 
 		<WixVariable Id='WixUIDialogBmp' Value='..\..\..\..\msi\msi.bmp'/>
 

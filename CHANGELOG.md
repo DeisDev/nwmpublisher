@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Nightly builds have their own logo, app icon, and installer banner.
+
 ## [3.9.0] - 2026-11-14
 
 ### Added
