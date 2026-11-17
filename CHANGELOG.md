@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Setting to play animated previews only when you point at them.
+
 ### Changed
 
 - Nightly builds have their own logo, app icon, and installer banner.
+
+### Fixed
+
+- High CPU and graphics use while the app is idle or minimized.
 
 ## [3.9.0] - 2026-11-14
 

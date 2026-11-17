@@ -119,6 +119,9 @@ fn main() -> std::process::ExitCode {
 				window.maximize().ok();
 			}
 
+			#[cfg(windows)]
+			hide_webview_while_minimized(&window);
+
 			webview!().init(window);
 
 			Ok(())
@@ -137,4 +140,27 @@ fn main() -> std::process::ExitCode {
 		});
 
 	std::process::ExitCode::SUCCESS
+}
+
+// WebView2 keeps rendering while its window is minimized unless the host hides it.
+#[cfg(windows)]
+fn hide_webview_while_minimized(window: &tauri::WebviewWindow) {
+	let handle = window.clone();
+	window.on_window_event(move |event| {
+		if !matches!(event, tauri::WindowEvent::Resized(_)) {
+			return;
+		}
+		let visible = match handle.is_minimized() {
+			Ok(minimized) => !minimized,
+			Err(error) => return eprintln!("Couldn't read the window state: {error}"),
+		};
+		let result = handle.with_webview(move |webview| {
+			if let Err(error) = unsafe { webview.controller().SetIsVisible(visible) } {
+				eprintln!("Couldn't change the webview visibility: {error}");
+			}
+		});
+		if let Err(error) = result {
+			eprintln!("Couldn't reach the webview: {error}");
+		}
+	});
 }

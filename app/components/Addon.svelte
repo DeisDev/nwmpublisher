@@ -6,6 +6,7 @@
 	import { Steam } from '../steam';
 	import { tippyFollow } from '../tippy';
 	import Loading from './Loading.svelte';
+	import PreviewImage from './PreviewImage.svelte';
 	import Dead from './Dead.svelte';
 	import QuickSubscribe from './QuickSubscribe.svelte';
 	import { registerContext } from './ContextMenu.svelte';
@@ -65,12 +66,10 @@
 	}
 
 	let addonPreviewLoading = true;
-	function addonPreviewLoaded() {
-		addonPreviewLoading = false;
-	}
+	let addonPreviewFailed = false;
 </script>
 
-<main class="addon" class:previewing={previewing} class:selecting class:selected on:click={e => onClick?.(e, workshop, installed)} bind:this={addonElement}>
+<main class="addon" class:previewing={previewing} class:selecting class:selected on:click={e => onClick?.(e, workshop, installed)} bind:this={addonElement} data-preview-host>
 	<div id="card">
 		<div id="stats">
 			{#if newAddon}
@@ -122,10 +121,10 @@
 			{#await workshop}
 				<div id="preview" class="dead"><Loading size="2rem"/></div>
 			{:then workshop}
-				{#if workshop.previewUrl}
+				{#if workshop.previewUrl && !addonPreviewFailed}
 					<div id="preview" class:loading={addonPreviewLoading}>
-						<Loading size="2rem"/>
-						<img src={workshop.previewUrl} alt="Preview" loading="lazy" on:load={addonPreviewLoaded}/>
+						{#if addonPreviewLoading}<Loading size="2rem"/>{/if}
+						<PreviewImage src={workshop.previewUrl} alt="Preview" fit="contain" onLoad={() => addonPreviewLoading = false} onError={() => addonPreviewFailed = true}/>
 						{#if badge}<span class="badge">{badge}</span>{/if}
 						{#if quickSubscribe && !selecting}<QuickSubscribe {workshop} overlay/>{/if}
 					</div>
@@ -277,18 +276,9 @@
 		aspect-ratio: 1;
 		overflow: hidden;
 	}
-	main #preview > img {
-		width: 100%;
-		height: 100%;
-		object-fit: contain;
-		display: block;
-	}
-	main #preview.loading > img {
+	main #preview.loading > :global(.preview-image) {
 		position: absolute;
 		opacity: 0;
-	}
-	main #preview:not(.dead):not(.loading):not(.new) > :global(svg) {
-		display: none;
 	}
 	main #preview.dead > :global(svg), main #preview.loading > :global(svg), main #preview.new > :global(svg) {
 		position: absolute;

@@ -4,6 +4,7 @@
 	import { formatSize } from '../format.js';
 	import { workshopUrl } from '../collections.js';
 	import { settings } from '../settings.js';
+	import PreviewImage from './PreviewImage.svelte';
 
 	export let id;
 	export let entry = null;
@@ -12,9 +13,9 @@
 	export let note = '';
 </script>
 
-<li class:pending>
+<li class:pending data-preview-host>
 	<slot name="start"></slot>
-	{#if entry?.previewUrl}<img src={entry.previewUrl} alt="" loading="lazy"/>{:else}<div class="image-placeholder" aria-hidden="true">?</div>{/if}
+	{#if entry?.previewUrl}<span class="thumbnail"><PreviewImage src={entry.previewUrl}/></span>{:else}<div class="image-placeholder" aria-hidden="true">?</div>{/if}
 	<div class="text">
 		<a href={workshopUrl(id)} target="_blank" rel="noreferrer">{entry?.title ?? (entry ? $_('collections_unavailable_item') : id)}{#if !$settings.open_workshop_pages_in_app}<ExternalLink size=".75rem"/>{/if}</a>
 		<small>{id}{#if entry?.fileSize}{' · '}{formatSize(entry.fileSize)}{/if}{#if entry && entry.status !== 'available'}{' · '}<span class="status">{$_('collections_status_' + entry.status)}</span>{/if}{#if note}{' · '}{note}{/if}{#if pending}{' · '}<span class="pending-label">{$_('workshop_pending_addition')}</span>{/if}{#if willSubscribe}{' · '}<span class="pending-label">{$_('collections_will_subscribe')}</span>{/if}</small>
@@ -26,7 +27,7 @@
 <style>
 	li { display: flex; align-items: center; gap: .75rem; padding: .6rem .75rem; border-inline-start: 3px solid transparent; background: var(--bg-preview); border-radius: 4px; margin-bottom: .5rem; }
 	li.pending { border-inline-start-color: var(--neutral); }
-	img, .image-placeholder { width: 2.6rem; height: 2.6rem; border-radius: 4px; flex-shrink: 0; object-fit: cover; background: var(--control); }
+	.thumbnail, .image-placeholder { width: 2.6rem; height: 2.6rem; border-radius: 4px; flex-shrink: 0; overflow: hidden; background: var(--control); }
 	.image-placeholder { display: grid; place-items: center; color: var(--text-muted); }
 	.text { min-width: 0; flex: 1; }
 	a { display: inline-flex; align-items: center; gap: .3rem; color: var(--link); overflow-wrap: anywhere; font-size: .9em; text-decoration: none; }

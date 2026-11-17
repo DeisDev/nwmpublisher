@@ -4,6 +4,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import { registerContext } from './ContextMenu.svelte';
 	import QuickSubscribe from './QuickSubscribe.svelte';
+	import PreviewImage from './PreviewImage.svelte';
 	import { formatDate, formatPercent, formatSize } from '../format.js';
 	import { ADDON_TYPES, KIND_TAGS, authors, subscribedIds, tagLabel } from '../browse.js';
 
@@ -28,10 +29,10 @@
 	$: subscribed = $subscribedIds.has(String(workshop.id));
 </script>
 
-<div class="addon-row" class:selected class:selecting style:grid-template-columns={template} bind:this={row} on:click={event => onClick?.(event, Promise.resolve(workshop), Promise.resolve(null))} role="presentation">
+<div class="addon-row" class:selected class:selecting style:grid-template-columns={template} bind:this={row} on:click={event => onClick?.(event, Promise.resolve(workshop), Promise.resolve(null))} role="presentation" data-preview-host>
 	<span class="select-toggle" data-select-toggle aria-hidden="true"><Check size=".8rem" strokeWidth={3}/></span>
 	<span class="title">
-		{#if workshop.previewUrl}<img src={workshop.previewUrl} alt="" loading="lazy"/>{:else}<span class="image-placeholder"></span>{/if}
+		{#if workshop.previewUrl}<span class="thumbnail"><PreviewImage src={workshop.previewUrl}/></span>{:else}<span class="image-placeholder"></span>{/if}
 		<span class="text select">{workshop.title}</span>
 	</span>
 	{#each columns as column}
@@ -98,12 +99,12 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	img, .image-placeholder {
+	.thumbnail, .image-placeholder {
 		width: 2rem;
 		height: 2rem;
 		flex-shrink: 0;
+		overflow: hidden;
 		border-radius: 3px;
-		object-fit: cover;
 		background: var(--bg-sunken-2);
 	}
 	.subscribers, .favorites, .rating, .size {

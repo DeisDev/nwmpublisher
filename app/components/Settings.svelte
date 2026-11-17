@@ -71,6 +71,7 @@
 		} else {
 			AppSettings[this.id] = this.value;
 		}
+		settings.set(AppSettings);
 		saveSettings({ [this.id]: AppSettings[this.id] }).catch(() => {});
 	}
 
@@ -162,6 +163,7 @@
 					{#if discordConfigured === false}<p class="discord-unavailable">{$_('discord.not_configured')}</p>{/if}
 					<Setting {afterChange} id="open_workshop_pages_in_app" type="bool" value={AppSettings.open_workshop_pages_in_app} tooltip={$_('settings.general.open_workshop_pages_in_app_tooltip')}>{$_('settings.general.open_workshop_pages_in_app')}</Setting>
 					<Setting {afterChange} id="open_workshop_after_publish" type="bool" value={AppSettings.open_workshop_after_publish}>{$_('settings.general.open_workshop_after_publish')}</Setting>
+					<Setting {afterChange} id="animate_previews_on_hover" type="bool" value={AppSettings.animate_previews_on_hover} tooltip={$_('settings.general.animate_previews_on_hover_tooltip')}>{$_('settings.general.animate_previews_on_hover')}</Setting>
 				</div>
 				<div>{$_('open_count', { values: { count: AppData.open_count } })}</div>
 			</div>

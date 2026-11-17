@@ -109,7 +109,7 @@
 
 	:global(#steam-connection.error) {
 		color: red;
-		animation: steam-connection-error 1.5s infinite alternate;
+		animation: steam-connection-error 1.5s 5 alternate;
 		opacity: 1 !important;
 	}
 

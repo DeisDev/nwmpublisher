@@ -82,7 +82,7 @@
 		text-align: center !important;
 	}
 	:global(#update-icon) {
-		animation: update-available 1.5s infinite alternate;
+		animation: update-available 1.5s 6 alternate forwards;
 		opacity: 1 !important;
 	}
 
