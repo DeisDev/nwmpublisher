@@ -247,6 +247,7 @@ impl Steam {
 										let mut item: WorkshopItem = item.into();
 										item.preview_url = results.preview_url(i as u32);
 										item.read_statistics(&results, i as u32);
+										steam!().workshop_titles.write().insert(item.id, item.title.clone());
 										item
 									} else {
 										WorkshopItem::from(queue[i])
@@ -277,6 +278,10 @@ impl Steam {
 				sleep_ms!(50);
 			}
 		}
+	}
+
+	pub fn workshop_titles(&self) -> parking_lot::RwLockReadGuard<'_, HashMap<PublishedFileId, String>> {
+		self.workshop_titles.read()
 	}
 
 	pub fn fetch_workshop_items(&'static self, ids: Vec<PublishedFileId>) {
@@ -404,4 +409,5 @@ pub fn workshop_item_channel() -> u32 {
 pub fn free_caches() {
 	*steam!().users.write_sync() = HashMap::new();
 	*steam!().workshop.write_sync() = (HashSet::new(), Vec::new());
+	steam!().workshop_titles.write().clear();
 }

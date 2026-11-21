@@ -551,7 +551,7 @@ export function openInBrowse(href, link, invert = false) {
 	const widget = bbcodeWidget(href);
 	if (widget?.type !== 'workshop' && !WORKSHOP_HOME.test(href)) return false;
 	const show = () => showInBrowse(widget?.type === 'workshop' ? widget.id : null);
-	if (link.closest('modal')) return !link.dispatchEvent(new CustomEvent('workshoplink', { bubbles: true, cancelable: true, detail: show }));
+	if (link.closest('dialog')) return !link.dispatchEvent(new CustomEvent('workshoplink', { bubbles: true, cancelable: true, detail: show }));
 	show();
 	return true;
 }

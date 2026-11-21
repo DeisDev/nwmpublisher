@@ -34,7 +34,7 @@ const NAVIGATION_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDow
 export function takesNavigationKey(event, region) {
 	if (event.defaultPrevented || event.altKey || !NAVIGATION_KEYS.has(event.key)) return false;
 	if (!region || region.offsetParent === null || region.closest('[inert]') || region.contains(event.target)) return false;
-	return !document.querySelector('modal.active') && !event.target.closest?.('input, select, textarea, [contenteditable], [role="menu"]');
+	return !document.querySelector('dialog:modal') &&!event.target.closest?.('input, select, textarea, [contenteditable], [role="menu"]');
 }
 
 /** Where keys entering a list start: `current` while it is on screen, otherwise the first option that is. */

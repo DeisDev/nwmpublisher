@@ -168,6 +168,56 @@ impl GameAddons {
 		Some(gmod.as_ref().parent()?.parent()?.join("workshop/content/4000"))
 	}
 
+	fn workshop_item_gma(mut read_dir: std::fs::ReadDir) -> Option<PathBuf> {
+		read_dir.find_map(|entry| {
+			let entry = entry.ok()?;
+			(entry.file_type().ok()?.is_file() && entry.path().extension().and_then(|x| x.to_str())? == "gma").then(|| entry.path())
+		})
+	}
+
+	fn modified(path: &Path) -> Option<u64> {
+		let modified = path.metadata().and_then(|metadata| metadata.modified()).ok()?;
+		Some(modified.duration_since(SystemTime::UNIX_EPOCH).map(|dur| dur.as_secs()).unwrap_or(0))
+	}
+
+	/// Adds or replaces an item Steam finished installing, without rescanning the game folders.
+	pub fn item_installed(&'static self, id: PublishedFileId) {
+		if matches!(Discovered::from(self.discovered.load(Ordering::Acquire)), Discovered::No) {
+			return;
+		}
+		// Not on the discovery pool: waiting there for a scan in progress would take the threads that scan needs.
+		std::thread::spawn(move || {
+			self.discover_addons();
+			let Some(folder) = app_data!().gmod_dir().and_then(GameAddons::get_workshop_content_dir).map(|dir| dir.join(id.0.to_string())) else { return };
+			let Some(path) = folder.read_dir().ok().and_then(GameAddons::workshop_item_gma) else { return };
+			let mut gma = match GMAFile::open(&path) {
+				Ok(gma) => gma,
+				Err(error) => {
+					eprintln!("Could not read installed Workshop item {}: {}", id.0, error);
+					return;
+				}
+			};
+			gma.set_ws_id(id);
+			ignore! { gma.metadata() };
+			gma.modified = GameAddons::modified(&path);
+			let addon: Arc<Addon> = Arc::new(gma.into());
+			{
+				let mut pages = self.pages.write();
+				let mut paths = self.paths.write();
+				if !matches!(Discovered::from(self.discovered.load(Ordering::Acquire)), Discovered::Yes) {
+					return;
+				}
+				pages.retain(|existing| existing.installed().path != path);
+				let index = pages.partition_point(|existing| *existing <= addon);
+				pages.insert(index, addon.clone());
+				paths.insert(path, addon);
+			}
+			println!("Added installed Workshop item {}", id.0);
+			steam!().fetch_workshop_items(vec![id]);
+			webview_emit!("InstalledAddonsRefreshed");
+		});
+	}
+
 	pub fn refresh(&self) {
 		self.discovered.store(Discovered::Discovering.into(), Ordering::Release);
 		let generation = self.generation.load(Ordering::Acquire);
@@ -200,7 +250,7 @@ impl GameAddons {
 					Err(_) => return,
 				};
 
-				for (id, mut read_dir) in addons.filter_map(|entry| {
+				for (id, read_dir) in addons.filter_map(|entry| {
 					entry.ok().and_then(|entry| {
 						if entry.file_type().ok()?.is_dir() {
 							let read_dir = entry.path().read_dir().ok()?;
@@ -211,17 +261,7 @@ impl GameAddons {
 						}
 					})
 				}) {
-					if let Some(gma_path) = {
-						read_dir.find_map(|entry| {
-							entry.ok().and_then(|entry| {
-								if entry.file_type().ok()?.is_file() && entry.path().extension().and_then(|x| x.to_str())? == "gma" {
-									Some(entry.path().to_path_buf())
-								} else {
-									None
-								}
-							})
-						})
-					} {
+					if let Some(gma_path) = GameAddons::workshop_item_gma(read_dir) {
 						tx_workshop_content_metadata
 							.send((gma_path, if id == 0 { None } else { Some(PublishedFileId(id)) }))
 							.unwrap();
@@ -293,16 +333,7 @@ impl GameAddons {
 			let mut pages_heap = BinaryHeap::new();
 
 			while let Ok(mut gma) = rx.recv() {
-				let modified = gma
-					.path
-					.metadata()
-					.and_then(|metadata| {
-						metadata
-							.modified()
-							.map(|x| Some(x.duration_since(SystemTime::UNIX_EPOCH).map(|dur| dur.as_secs()).unwrap_or(0)))
-					})
-					.unwrap_or(None);
-				gma.modified = modified;
+				gma.modified = GameAddons::modified(&gma.path);
 
 				if let Some(id) = gma.id {
 					ids.push(id);
@@ -379,8 +410,8 @@ impl GameAddons {
 	}
 }
 
-/// Every word of the query must appear in the title, extracted name, file name, or Workshop ID.
-fn matches_query(gma: &GMAFile, words: &[String]) -> bool {
+/// Every word of the query must appear in the archive or Workshop title, extracted name, file name, or Workshop ID.
+fn matches_query(gma: &GMAFile, workshop_titles: &HashMap<PublishedFileId, String>, words: &[String]) -> bool {
 	if words.is_empty() {
 		return true;
 	}
@@ -397,6 +428,10 @@ fn matches_query(gma: &GMAFile, words: &[String]) -> bool {
 	if let Some(id) = gma.id {
 		haystack.push('\n');
 		haystack.push_str(&id.0.to_string());
+		if let Some(title) = workshop_titles.get(&id) {
+			haystack.push('\n');
+			haystack.push_str(title);
+		}
 	}
 	let haystack = haystack.to_lowercase();
 	words.iter().all(|word| haystack.contains(word.as_str()))
@@ -413,6 +448,7 @@ fn select_installed_addons(
 	sort: InstalledAddonsSort,
 	types: &[AddonType],
 	unsubscribed: &HashSet<PublishedFileId>,
+	workshop_titles: &HashMap<PublishedFileId, String>,
 	query: &str,
 	only: Option<&HashSet<PublishedFileId>>,
 ) -> Vec<Arc<Addon>> {
@@ -420,7 +456,7 @@ fn select_installed_addons(
 	let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
 	let mut selected: Vec<_> = addons
 		.iter()
-		.filter(|addon| types.contains(&addon_type(addon)) && !pending_removal(addon, unsubscribed) && matches_query(addon.installed(), &words))
+		.filter(|addon| types.contains(&addon_type(addon)) && !pending_removal(addon, unsubscribed) && matches_query(addon.installed(), workshop_titles, &words))
 		.filter(|addon| only.is_none_or(|only| addon.installed().id.is_some_and(|id| only.contains(&id))))
 		.cloned()
 		.collect();
@@ -439,7 +475,7 @@ fn parse_ids(ids: &[String]) -> HashSet<PublishedFileId> {
 pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<AddonType>, query: String, only_ids: Option<Vec<String>>) -> (usize, Vec<Arc<Addon>>) {
 	let unsubscribed = game_addons!().unsubscribed.read().clone();
 	let only = only_ids.as_deref().map(parse_ids);
-	let selected = select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &query, only.as_ref());
+	let selected = select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &steam!().workshop_titles(), &query, only.as_ref());
 	let start = ((page.max(1) - 1) as usize) * crate::steam::RESULTS_PER_PAGE;
 	let page: Vec<_> = selected.iter().skip(start).take(crate::steam::RESULTS_PER_PAGE).cloned().collect();
 	steam!().fetch_workshop_items(page.iter().filter_map(|addon| addon.installed().id).collect());
@@ -450,7 +486,7 @@ pub fn browse_installed_addons(page: u32, sort: InstalledAddonsSort, types: Vec<
 pub fn browse_all_installed_addons(sort: InstalledAddonsSort, types: Vec<AddonType>, query: String, only_ids: Option<Vec<String>>) -> Vec<Arc<Addon>> {
 	let unsubscribed = game_addons!().unsubscribed.read().clone();
 	let only = only_ids.as_deref().map(parse_ids);
-	select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &query, only.as_ref())
+	select_installed_addons(&game_addons!().get_addons(), sort, &types, &unsubscribed, &steam!().workshop_titles(), &query, only.as_ref())
 }
 
 // Async so that waiting for discovery at startup does not hold up the thread that runs sync commands.
@@ -1111,22 +1147,22 @@ mod tests {
 		let addons = [addon("weapon1", Some("weapon")), addon("map1", Some("map")), addon("legacy", None), addon("weapon2", Some("Weapon")), addon("map2", Some("map"))];
 		let names = |selected: Vec<Arc<Addon>>| selected.iter().map(|addon| addon.installed().extracted_name.clone()).collect::<Vec<_>>();
 		let none = HashSet::new();
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, "", None)), ["weapon1", "map1", "legacy", "weapon2", "map2"]);
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &AddonType::ALL, &none, "", None)), ["map1", "map2", "weapon1", "weapon2", "legacy"]);
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &[AddonType::Other, AddonType::Weapon], &none, "", None)), ["weapon1", "weapon2", "legacy"]);
-		assert!(select_installed_addons(&addons, InstalledAddonsSort::Modified, &[], &none, "", None).is_empty());
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, &HashMap::new(), "", None)), ["weapon1", "map1", "legacy", "weapon2", "map2"]);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &AddonType::ALL, &none, &HashMap::new(), "", None)), ["map1", "map2", "weapon1", "weapon2", "legacy"]);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Type, &[AddonType::Other, AddonType::Weapon], &none, &HashMap::new(), "", None)), ["weapon1", "weapon2", "legacy"]);
+		assert!(select_installed_addons(&addons, InstalledAddonsSort::Modified, &[], &none, &HashMap::new(), "", None).is_empty());
 
 		let steam_copy = "steamapps/workshop/content/4000/10/item.gma";
 		let addons = [addon(steam_copy, Some("map")), addon("garrysmod/cache/workshop/10.gma", Some("map")), addon("steamapps/workshop/content/4000/20/item.gma", Some("map"))];
-		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, "", None)).len(), 3);
+		assert_eq!(names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &none, &HashMap::new(), "", None)).len(), 3);
 		assert_eq!(
-			names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::from([PublishedFileId(10)]), "", None)),
+			names(select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::from([PublishedFileId(10)]), &HashMap::new(), "", None)),
 			["garrysmod/cache/workshop/10.gma", "steamapps/workshop/content/4000/20/item.gma"]
 		);
 	}
 
 	#[test]
-	fn installed_addons_search_matches_every_word_against_names_and_ids() {
+	fn installed_addons_search_matches_every_word_against_names_titles_and_ids() {
 		let addon = |title: &str, path: &str, id: Option<u64>| -> Arc<Addon> {
 			Arc::new(Addon::Installed(GMAFile {
 				path: PathBuf::from(path),
@@ -1143,8 +1179,9 @@ mod tests {
 			}))
 		};
 		let addons = [addon("Gm Construct Flatgrass", "addons/gm_construct_flatgrass_123.gma", Some(123)), addon("Ünicode Map", "workshop/content/4000/456/ünicode.gma", Some(456)), addon("Legacy", "addons/legacy.gma", None)];
+		let workshop_titles = HashMap::from([(PublishedFileId(456), "Renamed On Steam".to_owned())]);
 		let titles = |query: &str| {
-			select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::new(), query, None)
+			select_installed_addons(&addons, InstalledAddonsSort::Modified, &AddonType::ALL, &HashSet::new(), &workshop_titles, query, None)
 				.iter()
 				.map(|addon| addon.installed().metadata.as_ref().unwrap().title().to_owned())
 				.collect::<Vec<_>>()
@@ -1154,6 +1191,7 @@ mod tests {
 		assert_eq!(titles("  FLATGRASS construct "), ["Gm Construct Flatgrass"]);
 		assert_eq!(titles("ünicode"), ["Ünicode Map"]);
 		assert_eq!(titles("456"), ["Ünicode Map"]);
+		assert_eq!(titles("renamed steam"), ["Ünicode Map"]);
 		assert_eq!(titles("legacy.gma"), ["Legacy"]);
 		assert!(titles("construct legacy").is_empty());
 	}

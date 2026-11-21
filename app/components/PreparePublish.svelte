@@ -918,7 +918,7 @@
 </Modal>
 
 <style>
-	:global(#prepare-publish > div) {
+	:global(#prepare-publish > .hide-scroll) {
 		display: flex;
 		width: 90rem;
 		min-height: 0;

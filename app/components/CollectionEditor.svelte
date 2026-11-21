@@ -904,8 +904,8 @@
 </section>
 
 {#if reverse}
-	<Modal active={true} cancel={() => reverse = null} padding="1.5rem">
-		<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="reverse-sync-title">
+	<Modal active={true} cancel={() => reverse = null} padding="1.5rem" labelledby="reverse-sync-title">
+		<div class="dialog">
 			<h2 id="reverse-sync-title">{$_('collections_sync_reverse_confirm_title')}</h2>
 			{#if reverse.loading}
 				<p class="message status" role="status"><Loading inline size="1rem"/> {$_('collections_sync_loading')}</p>

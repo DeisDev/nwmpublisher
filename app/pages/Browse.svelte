@@ -189,7 +189,7 @@
 	function onKeydown(event) {
 		if (event.defaultPrevented || !visible() || quickLook) return;
 		if (event.altKey && event.key === 'ArrowLeft') {
-			if (!event.target.closest?.('modal')) {
+			if (!event.target.closest?.('dialog')) {
 				event.preventDefault();
 				goBack();
 			}
@@ -200,7 +200,7 @@
 			return;
 		}
 		if (opened) {
-			if (event.key === 'Escape' && !event.target.closest?.('input, select, textarea, [role="dialog"]')) {
+			if (event.key === 'Escape' && !event.target.closest?.('input, select, textarea, dialog, [role="dialog"]')) {
 				event.preventDefault();
 				back();
 			}
@@ -273,7 +273,7 @@
 		if (event.button !== 3 || !visible()) return;
 		event.preventDefault();
 		if (quickLook) closeQuickLook();
-		else if (!event.target.closest?.('modal')) goBack();
+		else if (!event.target.closest?.('dialog')) goBack();
 	}
 
 	async function closeQuickLook() {

@@ -38,8 +38,8 @@
 
 <svelte:window on:keydown={onKeydown}/>
 
-<Modal active={true} cancel={onClose} padding="1.5rem">
-	<div class="quick-look" role="dialog" aria-modal="true" aria-labelledby="quick-look-title">
+<Modal active={true} cancel={onClose} padding="1.5rem" labelledby="quick-look-title">
+	<div class="quick-look">
 		<h2 id="quick-look-title" class="select">{item.title}</h2>
 		<BrowseGallery {media}/>
 		<div class="description scrollbar">

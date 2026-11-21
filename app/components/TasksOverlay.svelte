@@ -2,6 +2,7 @@
 	import { mount, unmount } from 'svelte';
 	import { taskHeight, tasksMax, tasks as tasksStore, tasksNum } from '../transactions.js';
 	import Task from './Task.svelte';
+	import { followDialogs } from '../modals.js';
 
 	let tasksContainer;
 
@@ -48,7 +49,7 @@
 
 </script>
 
-<div bind:this={tasksContainer} id="tasks" style="height: {height}px"></div>
+<div bind:this={tasksContainer} use:followDialogs id="tasks" style="height: {height}px"></div>
 
 <style>
 	#tasks {

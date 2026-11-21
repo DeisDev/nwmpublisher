@@ -451,8 +451,8 @@
 {/if}
 
 {#if deleting}
-	<Modal active={true} cancel={() => { if (!deleting.busy) deleting = null; }} padding="1.5rem">
-		<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="delete-collections-title">
+	<Modal active={true} cancel={() => { if (!deleting.busy) deleting = null; }} padding="1.5rem" labelledby="delete-collections-title">
+		<div class="dialog">
 			<h2 id="delete-collections-title">{$_('collections_delete_title', { values: { count: deleting.ids.length } })}</h2>
 			<ul class="names">
 				{#each deleting.ids as id (id)}<li>{byId.get(id)?.fields.title ?? id}</li>{/each}
@@ -467,8 +467,8 @@
 {/if}
 
 {#if removing}
-	<Modal active={true} cancel={cancelRemove} padding="1.5rem">
-		<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="remove-everywhere-title">
+	<Modal active={true} cancel={cancelRemove} padding="1.5rem" labelledby="remove-everywhere-title">
+		<div class="dialog">
 			<h2 id="remove-everywhere-title">{$_('collections_remove_everywhere_title')}</h2>
 			<p>{$_('collections_remove_everywhere_help')}</p>
 			<form class="find" on:submit|preventDefault={findRemoval}>
@@ -499,8 +499,8 @@
 {/if}
 
 {#if pruning}
-	<Modal active={true} cancel={cancelPrune} padding="1.5rem">
-		<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="prune-title">
+	<Modal active={true} cancel={cancelPrune} padding="1.5rem" labelledby="prune-title">
+		<div class="dialog">
 			<h2 id="prune-title">{$_('collections_sync_prune_title')}</h2>
 			<p>{$_('collections_sync_prune_help')}</p>
 			<label class="option"><input type="checkbox" checked={$includeExtras} disabled={pruning.busy} on:change={event => setIncludeExtras(event.currentTarget.checked).catch(error => pruning = pruning && { ...pruning, error: String(error) })}/>{$_('collections_sync_include_extras')}</label>

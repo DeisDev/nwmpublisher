@@ -1,6 +1,7 @@
 <script>
 	import { mount } from 'svelte';
 	import ContextMenu, { currentContext } from './ContextMenu.svelte';
+	import { followDialogs } from '../modals.js';
 
 	let container;
 	currentContext.subscribe(context => {
@@ -13,7 +14,7 @@
 	});
 </script>
 
-<main bind:this={container}></main>
+<main bind:this={container} use:followDialogs></main>
 
 <style>
 	main {

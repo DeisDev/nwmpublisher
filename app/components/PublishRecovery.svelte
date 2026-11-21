@@ -4,6 +4,7 @@
 	import { invoke } from '@tauri-apps/api/core';
 	import { confirm } from '@tauri-apps/plugin-dialog';
 	import { translateError } from '../i18n';
+	import { followDialogs } from '../modals.js';
 	let operations = [];
 	let error = null;
 	let evidence = {};
@@ -33,7 +34,7 @@
 </script>
 
 {#if operations.some(operation => !operation.reviewed) || error}
-	<details class="publish-recovery">
+	<details class="publish-recovery" use:followDialogs>
 		<summary>{$_('publish_recovery_title')}</summary>
 		{#if error}<p role="alert">{error}</p>{/if}
 		{#each operations.filter(operation => !operation.reviewed) as operation (operation.key)}

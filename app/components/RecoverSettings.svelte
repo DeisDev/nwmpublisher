@@ -24,7 +24,7 @@
 </Modal>
 
 <style>
-	:global(#recover-settings > div) { padding: 1.5rem; max-width: 36rem; }
+	:global(#recover-settings > .hide-scroll) { padding: 1.5rem; max-width: 36rem; }
 	p { overflow-wrap: anywhere; }
 	button { margin: .5rem; padding: .75rem; }
 </style>

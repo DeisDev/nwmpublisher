@@ -372,10 +372,10 @@
 		height: 100%;
 		box-shadow: rgba(0, 0, 0, .24) 0px 3px 8px;
 	}
-	:global(#gma-preview > div > .dead), :global(#gma-preview > div > .loading) {
+	:global(#gma-preview > .hide-scroll > .dead), :global(#gma-preview > .hide-scroll > .loading) {
 		position: absolute;
 	}
-	:global(#gma-preview > div) {
+	:global(#gma-preview > .hide-scroll) {
 		border-top-left-radius: 0 !important;
 	}
 

@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - High CPU and graphics use while the app is idle or minimized.
 - The star link in the sidebar opened a GitHub page that may no longer load.
+- Escape now closes dialogs from any control inside them, and Tab stays inside an open dialog.
+- Installed Addons search now finds addons by their Workshop title.
+- Newly subscribed addons now appear in Installed Addons once Steam installs them, without restarting the app.
 
 ## [3.9.0] - 2026-11-14
 

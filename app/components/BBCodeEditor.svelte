@@ -16,6 +16,7 @@
 	import { createEventDispatcher, onDestroy, tick, afterUpdate } from 'svelte';
 	import { canLinkSelection, closingTag, linkText, listBreak, unwrapTag, highlightBBCode, tagCompletions, completeTag, indentLines } from '../bbcode';
 	import { syncBBCodeScroll } from '../bbcodeScroll';
+	import { closeDialog, openDialog } from '../modals.js';
 	import SyntaxText from './SyntaxText.svelte';
 	import BBCode from './BBCode.svelte';
 
@@ -260,6 +261,7 @@
 
 	onDestroy(() => {
 		if (fullscreenDialog?.open) fullscreenDialog.close();
+		if (fullscreenDialog) closeDialog(fullscreenDialog);
 		if (splitTimer) saveSplit();
 	});
 
@@ -274,6 +276,7 @@
 		// Keep the same textarea when entering or leaving fullscreen.
 		fullscreenDialog.append(editor);
 		fullscreenDialog.showModal();
+		openDialog(fullscreenDialog);
 		fullscreen = true;
 		(disabled ? fullscreenButton : input).focus({ preventScroll: true });
 		input.setSelectionRange(...selection);
@@ -284,6 +287,7 @@
 		const selection = [input.selectionStart, input.selectionEnd, input.selectionDirection];
 		const scrollTop = input.scrollTop;
 		fullscreenDialog.close();
+		closeDialog(fullscreenDialog);
 		host.append(editor);
 		fullscreen = false;
 		if (restoreFocus) fullscreenButton.focus({ preventScroll: true });

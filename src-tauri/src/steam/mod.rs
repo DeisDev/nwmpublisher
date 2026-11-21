@@ -51,6 +51,23 @@ where
 	serialize.serialize_str(&steamid.raw().to_string())
 }
 
+/// Steam sends this to every running app when a Workshop item finishes installing or updating; steamworks-rs does not wrap it.
+struct ItemInstalled {
+	app_id: steamworks::AppId,
+	id: PublishedFileId,
+}
+unsafe impl Callback for ItemInstalled {
+	const ID: i32 = steamworks::sys::ItemInstalled_t_k_iCallback as i32;
+
+	unsafe fn from_raw(raw: *mut std::ffi::c_void) -> Self {
+		let installed = raw.cast::<steamworks::sys::ItemInstalled_t>().read_unaligned();
+		ItemInstalled {
+			app_id: steamworks::AppId(installed.m_unAppID),
+			id: PublishedFileId(installed.m_nPublishedFileId),
+		}
+	}
+}
+
 pub struct Interface {
 	client: Client,
 	pub steam_id: SteamId,
@@ -83,6 +100,7 @@ pub struct Steam {
 	users: PromiseHashCache<SteamId, SteamUser>,
 
 	workshop: RelaxedRwLock<(HashSet<PublishedFileId>, Vec<PublishedFileId>)>,
+	workshop_titles: parking_lot::RwLock<HashMap<PublishedFileId, String>>,
 	workshop_channel: Transaction,
 }
 
@@ -99,6 +117,7 @@ impl Steam {
 			users: PromiseCache::new(HashMap::new()),
 
 			workshop: RelaxedRwLock::new((HashSet::new(), Vec::new())),
+			workshop_titles: parking_lot::RwLock::new(HashMap::new()),
 			workshop_channel: transaction!(),
 		}
 	}
@@ -139,6 +158,11 @@ impl Steam {
 		}
 		publish_jobs::janitor();
 		std::thread::spawn(Steam::workshop_fetcher);
+		std::mem::forget(steam!().register_callback(|installed: ItemInstalled| {
+			if installed.app_id == crate::GMOD_APP_ID {
+				game_addons!().item_installed(installed.id);
+			}
+		}));
 
 		std::sync::LazyLock::force(&DOWNLOADS);
 		std::thread::spawn(Downloads::watchdog);

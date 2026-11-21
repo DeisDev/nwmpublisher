@@ -1,6 +1,9 @@
 import { default as tippyJS, followCursor } from 'tippy.js';
 import 'tippy.js/dist/tippy.css';
 
+// Tooltips outside an open modal dialog would render under it.
+tippyJS.setDefaultProps({ appendTo: reference => reference.closest('dialog') ?? document.body });
+
 function updateTippy(node, content, follow) {
 	if (!node) return;
 	if (node._tippy) node._tippy.destroy();

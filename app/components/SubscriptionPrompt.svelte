@@ -12,8 +12,8 @@
 </script>
 
 {#if prompt}
-	<Modal active={true} cancel={() => prompt.answer(false)} padding="1.5rem">
-		<div class="confirmation" role="dialog" aria-modal="true" aria-labelledby="subscription-prompt-title">
+	<Modal active={true} cancel={() => prompt.answer(false)} padding="1.5rem" labelledby="subscription-prompt-title">
+		<div class="confirmation">
 			<h2 id="subscription-prompt-title">{title}</h2>
 			{#if !required}<p class="warning">{$_('browse_needed_by_note')}</p>{/if}
 			<ul class="names">

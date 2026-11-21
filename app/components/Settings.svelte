@@ -281,7 +281,7 @@
 		background-color: var(--bg-panel);
 		border-inline-end: 1px solid var(--border);
 	}
-	:global(#settings > div) {
+	:global(#settings > .hide-scroll) {
 		display: flex;
 		flex-direction: row;
 		width: 56rem;

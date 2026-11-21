@@ -50,8 +50,8 @@
 </script>
 
 {#if request}
-	<Modal active={true} {cancel} padding="1.5rem">
-		<div class="confirmation" role="dialog" aria-modal="true" aria-labelledby="delete-addon-title">
+	<Modal active={true} {cancel} padding="1.5rem" labelledby="delete-addon-title">
+		<div class="confirmation">
 			<h2 id="delete-addon-title">{title}</h2>
 			{#if request.unsubscribe && request.deleteFiles}<p>{$_('addon_unsubscribe_delete_note')}</p>{/if}
 			{#if bulk}

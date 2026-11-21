@@ -94,8 +94,8 @@
 </script>
 
 {#if request}
-	<Modal active={true} {cancel} padding="1.5rem">
-		<div class="picker" role="dialog" aria-modal="true" aria-labelledby="collection-picker-title">
+	<Modal active={true} {cancel} padding="1.5rem" labelledby="collection-picker-title">
+		<div class="picker">
 			<h2 id="collection-picker-title">{$_('collections_picker_title', { values: { count: items.length } })}</h2>
 			{#if !$collections.loaded && !$collections.error}
 				<p class="status" role="status"><Loading inline size="1rem"/> {$_('collections_loading')}</p>

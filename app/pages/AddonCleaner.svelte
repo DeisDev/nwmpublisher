@@ -249,8 +249,8 @@
 </section>
 
 {#if confirming}
-	<Modal active={true} cancel={() => confirming = false} padding="1.5rem">
-		<div class="confirmation" role="dialog" aria-modal="true" aria-labelledby="cleaner-confirm-title">
+	<Modal active={true} cancel={() => confirming = false} padding="1.5rem" labelledby="cleaner-confirm-title">
+		<div class="confirmation">
 			<h2 id="cleaner-confirm-title">{$_(permanent ? 'cleaner_permanent' : 'cleaner_trash')}</h2>
 			<p>{$_(permanent ? 'cleaner_confirm_delete' : 'cleaner_confirm_trash', { values: { count: selected.length, size: formatSize(selectedSize, $locale) } })}</p>
 			<div class="actions">
