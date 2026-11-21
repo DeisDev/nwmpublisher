@@ -40,6 +40,15 @@ jobs:
     - name: Install NPM dependencies
       run: npm install --global npm@12.0.2 && npm ci
 
+    - name: Install Rust toolchain
+      working-directory: src-tauri
+      run: rustup toolchain install
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: src-tauri -> target
+        save-if: ${{ github.ref == 'refs/heads/master' }}
+
     - name: Run Rust tests
       run: |
         node src-tauri/copySharedLibs.js
