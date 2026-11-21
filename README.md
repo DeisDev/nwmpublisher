@@ -1,100 +1,196 @@
 <p align="center">
-  <img src="public/img/logo.svg" alt="nwmpublisher logo" width="128" height="128">
+  <img src="public/img/logo.svg" alt="" width="112" height="112">
 </p>
 
-# ⚙️ nwmpublisher (no watermark publisher)
+<h1 align="center">nwmpublisher</h1>
 
-A fork of [gmpublisher](https://github.com/WilliamVenner/gmpublisher).
-At it's core, it's still the same feature-packed workshop publisher for Garry's Mod, but now with some improvements made in various areas such as quality of life and stability.
+<p align="center">
+  A free app for uploading your Garry's Mod addons to the Steam Workshop,<br>
+  and for downloading and opening other people's addons. No command line needed.
+</p>
 
-The main difference is that there is no more gmpublisher advertising/branding such as the "Uploaded with gmpublisher" links in your description when you first upload an addon. You get to control the name of the .gma file (no longer gmpublisher.gma), the icon, description and changelog all from the first publish.
+<p align="center">
+  <a href="https://github.com/DeisDev/nwmpublisher/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/DeisDev/nwmpublisher?label=release"></a>
+  <a href="https://github.com/DeisDev/nwmpublisher/releases/tag/nightly"><img alt="Nightly build" src="https://img.shields.io/github/actions/workflow/status/DeisDev/nwmpublisher/nightly.yml?label=nightly"></a>
+  <a href="https://github.com/DeisDev/nwmpublisher/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/DeisDev/nwmpublisher/total"></a>
+  <a href="https://github.com/DeisDev/nwmpublisher/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/DeisDev/nwmpublisher?style=flat"></a>
+  <a href="https://github.com/DeisDev/nwmpublisher/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/DeisDev/nwmpublisher"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/DeisDev/nwmpublisher"></a>
+</p>
 
-Aside from this, there is also an assortment of bug fixes, technical changes and overall improvements to the user experience that might make you want to switch over to nwmpublisher.
+<p align="center">
+  <a href="https://github.com/DeisDev/nwmpublisher/releases/latest"><b>Download</b></a> ·
+  <a href="https://nwmpublisher.deis.me/">Website</a> ·
+  <a href="#installation">Install guide</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
-Maintained by [DeisDev](https://github.com/DeisDev) ("CatSniffer").
+<p align="center">
+  <img src="public/screenshots/Browse.webp" alt="Browsing the Workshop in nwmpublisher">
+</p>
 
-Built on the work of [William Venner](https://github.com/WilliamVenner) and the
-[gmpublisher contributors](https://github.com/WilliamVenner/gmpublisher/graphs/contributors).
+## How it works
 
-## 📦 Installation
+Keep Steam open and signed in while you use it.
+
+### Uploading your own addon
+
+1. Click **Publish New** and choose your addon's folder.
+2. Check the list of files that will go in. nwmpublisher tells you if Garry's Mod won't accept one.
+3. Add a title, description and icon, then click **Publish**. Updating it later works the same way.
+
+### Getting other people's addons
+
+1. Search the Workshop in **Browse**, or paste Workshop links into the **Downloader**.
+2. Subscribe to use an addon in game, or download it to keep its files.
+3. Open any addon to see what's inside, and copy its models, sounds and code into a normal folder.
+
+## Features
+
+### Publishing
+
+* Pick the addon's file name and icon yourself (GIFs work)
+* Format descriptions and changelogs with Steam's formatting tags (BBCode), and see how they'll look on Steam as you type
+* Save changelog templates, or import your addon's `README.md` or `CHANGELOG.md`
+* Translate the title and description into other Steam languages
+* Change visibility, required addons or the description without uploading the files again
+
+### Workshop
+
+* Search the whole Workshop, filter by tag, and subscribe to or download many items at once
+* Make, edit and compare collections, and check them against your subscriptions
+* See subscribers, favourites, views, comments and votes for your own addons
+
+### Addons on your PC
+
+* Open any installed addon or `.gma` file (the file type Garry's Mod uses for addons), preview its images, textures,
+  sounds, videos and code, and extract it to a folder
+* Download and extract Workshop items and whole collections
+* Extract, unsubscribe or delete many installed addons at once
+* See which addons take up the most disk space
+* Find and delete files left behind by addons you've unsubscribed from
+
+### Other
+
+* Doesn't need Garry's Mod's gmad.exe or gmpublish.exe, and opens old `.gma` files
+* Command line for packing, extracting and publishing
+* Light and dark themes, Discord status and 12 languages
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="public/screenshots/My%20workshop.webp" alt="My Workshop"></td>
+    <td><img src="public/screenshots/Publish%20New.webp" alt="Publish a new addon"></td>
+  </tr>
+  <tr>
+    <td><img src="public/screenshots/Edit.webp" alt="Edit an addon's description"></td>
+    <td><img src="public/screenshots/Installed%20Addons%20Selection.webp" alt="Select installed addons"></td>
+  </tr>
+</table>
+
+<details>
+<summary><b>More screenshots</b></summary>
+
+<table>
+  <tr>
+    <td><img src="public/screenshots/Collections.webp" alt="Collections"></td>
+    <td><img src="public/screenshots/Collection%20Editor.webp" alt="Edit a collection"></td>
+  </tr>
+  <tr>
+    <td><img src="public/screenshots/Collection%20Compare.webp" alt="Compare collections"></td>
+    <td><img src="public/screenshots/Addon%20Settings.webp" alt="Addon settings"></td>
+  </tr>
+  <tr>
+    <td><img src="public/screenshots/Installed%20Addons.webp" alt="Installed addons"></td>
+    <td><img src="public/screenshots/Addon%20Details.webp" alt="Addon details"></td>
+  </tr>
+  <tr>
+    <td><img src="public/screenshots/Addon%20Extract.webp" alt="Extract an addon"></td>
+    <td><img src="public/screenshots/Downloader.webp" alt="Downloader"></td>
+  </tr>
+  <tr>
+    <td><img src="public/screenshots/Addon%20Size%20Analyzer.webp" alt="Addon size analyzer"></td>
+    <td><img src="public/screenshots/Addon%20Cleaner.webp" alt="Addon cleaner"></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="public/screenshots/Settings.webp" alt="Settings"></td>
+  </tr>
+</table>
+
+</details>
+
+## Coming from gmpublisher?
+
+nwmpublisher started as a copy of [gmpublisher](https://github.com/WilliamVenner/gmpublisher) and still does everything
+it does. It installs next to gmpublisher, so you can keep both, and the first time it runs it can import your
+gmpublisher settings.
+
+| | gmpublisher | nwmpublisher |
+| --- | --- | --- |
+| Adds "Uploaded with gmpublisher" to new addons | Yes | No |
+| Uploaded file name | Always `gmpublisher.gma` | You pick it |
+| Default icon | gmpublisher logo | Your Steam avatar |
+| Description and changelog | Changelog text box only | BBCode editor with preview |
+| Search the whole Workshop | No | Yes |
+| Edit and compare collections | No | Yes |
+| Clean up old Workshop files | No | Yes |
+| Command line | Extract only | Extract, pack, list, info, publish |
+
+## Installation
 
 Download the latest release from the [releases page](https://github.com/DeisDev/nwmpublisher/releases).
+Keep Steam running and signed in when using Workshop features.
 
 | Platform | Download | Install |
 | --- | --- | --- |
-| Windows | `.msi` | Open the installer. |
+| Windows 10/11 | `.msi` | Open the installer. |
 | Windows, portable | `x64_portable.zip` | Extract the whole ZIP, then run `nwmpublisher.exe` from the extracted folder. |
-| macOS 13.3+, Intel or Apple Silicon | Universal `.dmg` | Open the disk image, drag nwmpublisher into Applications, then launch it from Applications. |
-| Ubuntu / Debian | `amd64.deb` | Open a terminal in your download folder and run `sudo apt install ./nwmpublisher_*.deb`. This also installs required system libraries. |
-| Fedora | `x86_64.rpm` | Run `sudo dnf install ./nwmpublisher-*.rpm` in your download folder. |
-| Arch Linux | [`PKGBUILD`](PKGBUILD) from this repository | Save it in an empty folder and run `makepkg -si` there. This also installs required system libraries. |
-| Other Linux distributions / Steam Deck | `amd64.AppImage` | In the file's properties, allow it to run as a program, then open it. On Steam Deck, use Desktop Mode. |
+| macOS 13.3+, Intel or Apple Silicon | Universal `.dmg` | Open the disk image, drag nwmpublisher into Applications, then launch it from there. |
+| Ubuntu 22.04+ / Debian 12+ | `amd64.deb` | In your download folder, run `sudo apt install ./nwmpublisher_*.deb`. |
+| Fedora | `x86_64.rpm` | In your download folder, run `sudo dnf install ./nwmpublisher-*.rpm`. |
+| Arch Linux | [`PKGBUILD`](PKGBUILD) | Save it in an empty folder and run `makepkg -si` there. |
+| Other Linux / Steam Deck | `amd64.AppImage` | In the file's properties, allow it to run as a program, then open it. On Steam Deck, use Desktop Mode. |
 
-The portable Windows build shares settings with the installed app in `%APPDATA%\nwmpublisher`.
-It does not add shortcuts or `.gma` file associations.
-It requires [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section),
-which is already present on most Windows PCs.
+The portable Windows build shares settings with the installed app in `%APPDATA%\nwmpublisher`, but does not add
+shortcuts or `.gma` file associations. It needs [Microsoft WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section),
+which most Windows PCs already have. Windows is the main development and testing platform.
 
-On Linux, the AppImage uses your system's WebKitGTK when it is installed. Set `NWMPUBLISHER_BUNDLED_WEBKIT=1` to use
-the copy inside the AppImage instead. If the window stays blank, install the package for your distribution instead of the AppImage.
-If the window looks wrong on Wayland, start nwmpublisher with `GDK_BACKEND=x11`, for example
-`GDK_BACKEND=x11 nwmpublisher`. If the window is blank or parts of it do not draw, which mostly happens with
-the proprietary NVIDIA driver, start it with `WEBKIT_DISABLE_DMABUF_RENDERER=1`. If that does not help, start it
-with `WEBKIT_DISABLE_COMPOSITING_MODE=1` to turn off accelerated rendering.
+<details>
+<summary><b>Linux: blank or broken window?</b></summary>
+
+* The AppImage uses your system's WebKitGTK when it is installed. Set `NWMPUBLISHER_BUNDLED_WEBKIT=1` to use the copy
+  inside the AppImage instead. If the window stays blank, install the package for your distribution instead.
+* If the window looks wrong on Wayland, start it with `GDK_BACKEND=x11`, for example `GDK_BACKEND=x11 nwmpublisher`.
+* If the window is blank or parts of it do not draw, which mostly happens with the proprietary NVIDIA driver, start it
+  with `WEBKIT_DISABLE_DMABUF_RENDERER=1`. If that does not help, use `WEBKIT_DISABLE_COMPOSITING_MODE=1` to turn off
+  accelerated rendering.
+
+</details>
+
+### Upgrading from gmpublisher
+
+On Windows, nwmpublisher installs separately and leaves gmpublisher installed, so you can use both.
+
+On first launch, nwmpublisher finds your gmpublisher settings and offers to import them (destinations, local addon
+paths and preferences), then restarts with them applied.
+
+To move them yourself instead, copy `settings.json` from the old `gmpublisher` folder into the `nwmpublisher` folder
+in your config directory (`%APPDATA%` on Windows, `~/.config` on Linux, `~/Library/Application Support` on macOS).
 
 ### Nightly builds
 
 [Nightly builds](https://github.com/DeisDev/nwmpublisher/releases/tag/nightly) are built each night from the newest
-changes, when there are any. They may have bugs. A nightly build is a separate app, nwmpublisher-nightly: it installs
+changes, when there are any, and may have bugs. A nightly build is a separate app, nwmpublisher-nightly: it installs
 alongside the stable app, keeps its own settings, and tells you when a newer nightly is out.
 
 Nightly downloads are a Windows `.msi` or portable `.zip`, a universal macOS `.dmg`, and a Linux `.AppImage`.
 Choose **Nightly** when you report a problem.
 
-### Upgrading from gmpublisher
-
-On Windows, nwmpublisher installs separately and leaves gmpublisher installed, so you can use both.
-Versions 3.1.3 and earlier replaced gmpublisher; after updating, you can install gmpublisher again.
-
-Your settings are left where they are. On first launch nwmpublisher finds them and offers to import
-them — destinations, local addon paths and preferences — then restarts with them applied.
-
-To move them yourself instead, copy `settings.json` from the old `gmpublisher` folder into the
-`nwmpublisher` folder in your config directory (`%APPDATA%` on Windows, `~/.config` on Linux,
-`~/Library/Application Support` on macOS).
-
-
-## Features
-
-* Doesn't depend on gmad.exe or gmpublish.exe
-* Publish & update your Workshop items without added branding
-* Choose your GMA filenames and use your Steam avatar as the default icon
-* Edit descriptions & changelogs with BBCode, live previews, fullscreen editing and undo/redo
-* Reuse changelog templates or your last draft, with app-wide and per-addon defaults
-* Update descriptions without reuploading addon files
-* Filter & sort your Workshop items, with your choices saved between sessions
-* Browse the whole Workshop: filter by type and tags, find items that require an addon, and subscribe, download or add items to collections
-* Change addon visibility and manage required addons without reuploading files
-* View Workshop dates, sizes, subscribers, favourites, page views, comments, votes and ban status
-* Drag addon folders into the publishing file browser
-* Extract, search and browse GMA files and installed addons
-* View file counts and sizes for entire folders
-* Bulk download & extract Workshop items and collections
-* Upload animated GIFs as your Workshop item's icon
-* Analyze which addons are taking up the most disk space using the addon size analyzer treemap
-* Find unsubscribed Workshop GMA files and choose which to move to Trash or permanently delete
-* Supports legacy SteamPipe addons and old GMA versions
-* Browse and extract local GMA files offline
-* Choose whether to open Workshop pages after publishing and folders after extraction
-* Copy diagnostics from failed jobs
-* Command line for packing, extracting, listing, and publishing addons
-* (Windows) .GMA file type association for quick extraction
-* Import settings from gmpublisher on first launch
-
 ## Command line
 
-Run `nwmpublisher` without arguments to launch the GUI. The CLI can extract, pack, list,
-inspect, and publish addons:
+Run `nwmpublisher` without arguments to launch the app. With arguments, it can extract, pack, list, inspect, and
+publish addons:
 
 ```sh
 nwmpublisher --help
@@ -108,6 +204,9 @@ nwmpublisher --info "addon.gma"
 nwmpublisher --publish "my_addon" --icon "icon.jpg" --description-file "description.txt"
 nwmpublisher --publish "my_addon" --update 123456789 --changes "Fixed a bug"
 ```
+
+<details>
+<summary><b>Full command line reference</b></summary>
 
 ### Extracting
 
@@ -164,75 +263,16 @@ $cliProcess = Start-Process -FilePath .\nwmpublisher.exe -ArgumentList '--extrac
 $cliProcess.ExitCode
 ```
 
+</details>
+
 ## Languages
 
-![](https://user-images.githubusercontent.com/14863743/115954244-ce459780-a4e7-11eb-9237-92eab7d17814.png) English
+English, Chinese, Dutch, French, German, Korean, Polish, Portuguese (Brazil), Russian, Spanish, Turkish and Ukrainian.
+[Want to translate nwmpublisher into your language?](i18n)
 
-![](https://user-images.githubusercontent.com/14863743/115954306-195faa80-a4e8-11eb-8489-07ceca216211.png) French
+## Credits
 
-![](https://user-images.githubusercontent.com/14863743/115954290-03ea8080-a4e8-11eb-86df-9001929981a7.png) German
-
-![](https://user-images.githubusercontent.com/14863743/115957563-18844400-a4fb-11eb-9828-cf76b15c6a48.png) Russian
-
-![](https://user-images.githubusercontent.com/14863743/116080210-ad6c7600-a690-11eb-8c26-33de913e7ad0.png) Polish
-
-![](https://user-images.githubusercontent.com/14863743/115975014-223c9480-a559-11eb-81c4-6a0bfc0fdb9d.png) Turkish
-
-![](https://user-images.githubusercontent.com/14863743/116463612-cfb5ed80-a862-11eb-81f1-fb453cf77da5.png) Portuguese (Brazil)
-
-![](https://user-images.githubusercontent.com/14863743/115976530-d7297e00-a566-11eb-9fe0-113c59ce49ce.png) Spanish
-
-![](https://user-images.githubusercontent.com/14863743/123729167-754e0300-d88c-11eb-9dae-6fb82e0ca0ce.png) Chinese
-
-![](https://user-images.githubusercontent.com/14863743/123729280-9dd5fd00-d88c-11eb-8aee-0360615d4d57.png) Dutch
-
-![](https://github.com/WilliamVenner/gmpublisher/assets/14863743/31a1a199-1427-483c-bf6c-140116e3f445) Korean
-
-![](https://github.com/Blueberryy/gmpublisher/assets/36592509/319e7681-46c4-4a79-9fdc-99db49bd2ccb) Ukrainian
-
-
-[Want to translate nwmpublisher to your language?](i18n)
-
-## Supported Platforms
-
-* Windows 10/11
-* macOS 13.3 or newer
-* Linux x86_64: Ubuntu 22.04, Debian 12 or a newer distribution
-
-Windows is the primary development and testing platform.
-
-## Media
-
-![My Workshop](public/screenshots/My%20workshop.webp)
-
-![Browse the Workshop](public/screenshots/Browse.webp)
-
-![Publish a new addon](public/screenshots/Publish%20New.webp)
-
-![Edit an addon's description](public/screenshots/Edit.webp)
-
-![Addon settings](public/screenshots/Addon%20Settings.webp)
-
-![Collections](public/screenshots/Collections.webp)
-
-![Edit a collection](public/screenshots/Collection%20Editor.webp)
-
-![Compare collections](public/screenshots/Collection%20Compare.webp)
-
-![Installed addons](public/screenshots/Installed%20Addons.webp)
-
-![Select installed addons](public/screenshots/Installed%20Addons%20Selection.webp)
-
-![Addon details](public/screenshots/Addon%20Details.webp)
-
-![Extract an addon](public/screenshots/Addon%20Extract.webp)
-
-![Downloader](public/screenshots/Downloader.webp)
-
-![Addon size analyzer](public/screenshots/Addon%20Size%20Analyzer.webp)
-
-![Addon cleaner](public/screenshots/Addon%20Cleaner.webp)
-
-![Settings](public/screenshots/Settings.webp)
-
-<p align="center"><img src="https://i.imgur.com/Un4akZe.gif"/></p>
+Maintained by [DeisDev](https://github.com/DeisDev) ("CatSniffer"). Built on the work of
+[William Venner](https://github.com/WilliamVenner) and the
+[gmpublisher contributors](https://github.com/WilliamVenner/gmpublisher/graphs/contributors).
+Licensed under the [GPL-3.0](LICENSE).

@@ -33,6 +33,20 @@
 		{ id: 'browse', image: browse, screen: 'browse' },
 		{ id: 'clean', image: extraction, screen: 'extract' }
 	];
+	const guides = [
+		{ id: 'publish', steps: [1, 2, 3] },
+		{ id: 'download', steps: [1, 2, 3] }
+	];
+	const comparison = [
+		{ id: 'watermark', old: 'yes', current: 'no' },
+		{ id: 'filename', old: 'filename_old', current: 'filename_new' },
+		{ id: 'icon', old: 'icon_old', current: 'icon_new' },
+		{ id: 'editor', old: 'editor_old', current: 'editor_new' },
+		{ id: 'browse', old: 'no', current: 'yes' },
+		{ id: 'collections', old: 'no', current: 'yes' },
+		{ id: 'cleaner', old: 'no', current: 'yes' },
+		{ id: 'cli', old: 'cli_old', current: 'cli_new' }
+	];
 	const platforms = [
 		{ id: 'windows', icon: windows, packages: ['windows', 'windows_portable'] },
 		{ id: 'macos', icon: apple, packages: ['macos'] },
@@ -136,6 +150,25 @@
 		</figure>
 	</section>
 
+	<section id="how" class="how" aria-labelledby="how-title">
+		<div class="section-heading">
+			<h2 id="how-title">{$_('website.how_heading')}</h2>
+			<p>{$_('website.how_intro')}</p>
+		</div>
+		<div class="how-grid">
+			{#each guides as guide}
+				<article>
+					<h3>{$_(`website.how_${guide.id}_title`)}</h3>
+					<ol>
+						{#each guide.steps as step}
+							<li>{$_(`website.how_${guide.id}_${step}`)}</li>
+						{/each}
+					</ol>
+				</article>
+			{/each}
+		</div>
+	</section>
+
 	<section id="features" class="features" aria-labelledby="features-title">
 		<div class="section-heading">
 			<h2 id="features-title">{$_('website.features_heading')}</h2>
@@ -155,6 +188,33 @@
 					</figure>
 				</article>
 			{/each}
+		</div>
+	</section>
+
+	<section id="compare" class="compare" aria-labelledby="compare-title">
+		<div class="section-heading compare-copy">
+			<h2 id="compare-title">{$_('website.compare_heading')}</h2>
+			<p>{$_('website.compare_intro')}</p>
+		</div>
+		<div class="compare-table" role="region" aria-labelledby="compare-title" tabindex="0">
+			<table>
+				<thead>
+					<tr>
+						<td></td>
+						<th scope="col">gmpublisher</th>
+						<th scope="col">nwmpublisher</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each comparison as row}
+						<tr>
+							<th scope="row">{$_(`website.compare_${row.id}`)}</th>
+							<td data-label="gmpublisher">{$_(`website.compare_${row.old}`)}</td>
+							<td data-label="nwmpublisher">{$_(`website.compare_${row.current}`)}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
 		</div>
 	</section>
 

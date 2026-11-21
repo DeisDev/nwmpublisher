@@ -61,6 +61,6 @@ jobs:
           - **Fedora:** download the `.rpm` and install it with `sudo dnf install ./nwmpublisher-*.rpm`.
           - **Other Linux distributions / Steam Deck:** download the `.AppImage`, mark it executable in its file properties, and open it. Linux packages are x86_64 and built on Ubuntu 22.04.
 
-          Keep Steam running and signed in when using Workshop features. See the [installation instructions](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/README.md#-installation) for details. `SHA256SUMS` contains checksums for every download.
+          Keep Steam running and signed in when using Workshop features. See the [installation instructions](${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/README.md#installation) for details. `SHA256SUMS` contains checksums for every download.
         files: release/*
         fail_on_unmatched_files: true
