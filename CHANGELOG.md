@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - High CPU and graphics use while the app is idle or minimized.
+- The star link in the sidebar opened a GitHub page that may no longer load.
 
 ## [3.9.0] - 2026-11-14
 
